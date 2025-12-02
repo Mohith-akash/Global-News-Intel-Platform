@@ -106,46 +106,33 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [RUTHLESS HEADLINE CLEANER]
-def format_headline(url, actor):
-    if not url: return f"Report: {actor}"
+# [HEADLINE CLEANER]
+def format_headline(url):
+    if not url: return "Global Event Update"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # If slug is bad (too short, digits, index.html), use previous segment
-        if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
+        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
-        # 1. Basic Separation
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        
-        # 2. Remove File Extensions
         text = re.sub(r'\.html?$', '', text)
         
-        # 3. KILL TRAILING IDs (The 30-digit junk)
-        # Removes sequences of 5+ digits or mixed alphanumerics at end of string
-        text = re.sub(r'\s[a-zA-Z0-9]{5,}$', '', text)
-        text = re.sub(r'\s\d+$', '', text)
+        # Kill Dates & Codes
+        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
+        text = re.sub(r'\b\d{8}\b', '', text) 
+        text = re.sub(r'\b\d{6}\b', '', text)
+        
+        # Kill Start Words
+        text = re.sub(r'^(article|story|news|report)\s*', '', text, flags=re.IGNORECASE)
 
-        # 4. KILL DATES (YYYYMMDD)
-        text = re.sub(r'\b20\d{2}\d{2}\d{2}\b', '', text) 
-        text = re.sub(r'\b20\d{2}[\s-]\d{1,2}[\s-]\d{1,2}\b', '', text) 
-
-        # 5. Remove prefixes
-        text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
-
-        # 6. Final Cleanup
         headline = " ".join(text.split()).title()
         
-        # 7. GARBAGE CHECK: If title is mostly numbers or too short
-        digit_count = sum(c.isdigit() for c in headline)
-        if len(headline) < 5 or digit_count > (len(headline) * 0.4):
-            return f"Latest Update: {actor}"
-            
+        if len(headline) < 4: return "Geopolitical Event Report"
         return headline
     except:
-        return f"Intelligence Brief: {actor}"
+        return "Intelligence Report"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -170,7 +157,7 @@ def get_query_engine(_engine):
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL` for rankings.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
             "4. **Response:** Return SQL in metadata."
         )
@@ -307,7 +294,7 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [TAB 2: TRENDING NEWS (LEADERBOARD)]
+    # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
         sql = """
             SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
@@ -320,7 +307,7 @@ def render_visuals(engine):
         
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
-            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
             df = df.drop_duplicates(subset=['Headline']).head(20)
             
             st.dataframe(
@@ -337,13 +324,12 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (TIMELINE - CLEANED)]
+    # [TAB 3: GLOBAL FEED (FIXED)]
     with t_feed:
         base_sql = """
             SELECT 
                 DATE, 
                 NEWS_LINK, 
-                MAX(MAIN_ACTOR) as MAIN_ACTOR,
                 AVG(IMPACT_SCORE) as IMPACT_SCORE 
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL
@@ -357,15 +343,15 @@ def render_visuals(engine):
             df.columns = [c.upper() for c in df.columns] 
             
             # 1. Clean Headlines
-            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
             
-            # 2. Format Date (02 Dec)
+            # 2. Format Date
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except:
                 df['Date'] = df['DATE']
 
-            # 3. Create "Type" (Impact Words)
+            # 3. Type (Impact Words)
             def get_type(score):
                 if score < -3: return "🔥 Conflict"
                 if score > 3: return "🤝 Diplomacy"
@@ -373,7 +359,7 @@ def render_visuals(engine):
             
             df['Type'] = df['IMPACT_SCORE'].apply(get_type)
 
-            # 4. Display Clean 4 Columns
+            # 4. Display 4 Clean Columns
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
                 use_container_width=True, 
@@ -392,8 +378,12 @@ def main():
     style_app()
     engine = get_db_engine()
     
+    # [CRITICAL FIX: SESSION STATE INIT]
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
+        
+    if "messages" not in st.session_state:
+        st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to the live GDELT stream. Ask me anything."}]
 
     render_sidebar(engine)
     st.title("Global Intelligence Command Center")
