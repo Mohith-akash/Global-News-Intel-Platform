@@ -1,38 +1,41 @@
-name: Hourly GDELT Update
+name: Hourly GDELT Refresh
 
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '0 * * * *'  # Runs every hour
+  workflow_dispatch:      # Allows you to click "Run Now" manually
 
 jobs:
-  update-data:
+  refresh-data:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+    # 1. Check out your code
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9' # Ensure this version is compatible with the libraries
+    # 2. Install Python
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-      # CRITICAL STEP: Installation
-      - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
-          # Re-installing for robustness, especially if the primary install fails to resolve paths
-          pip install dagster  
+    # 3. INSTALL SOFTWARE (This fixes the ModuleNotFoundError)
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install dagster dagster-webserver pandas requests snowflake-connector-python python-dotenv
 
-      - name: Run Pipeline Script
-        env:
-          # Your secrets are passed here
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-          SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
-        run: |
-          
+    # 4. Run the Pipeline
+    - name: Run Pipeline
+      env:
+        SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+        SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      run: |
+        # We use the Dagster CLI to run the job defined in your pipeline.py
+        dagster job execute -f pipeline.py -j gdelt_ingestion_job
