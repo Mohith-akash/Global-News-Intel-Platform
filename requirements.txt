@@ -1,0 +1,10 @@
+streamlit
+pandas
+altair
+plotly
+python-dotenv
+llama-index
+google-generativeai
+snowflake-connector-python
+sqlalchemy
+pycountry

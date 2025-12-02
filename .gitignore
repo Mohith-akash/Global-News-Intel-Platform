@@ -1,0 +1,15 @@
+# Ignore the Virtual Environment (The 35k files)
+venv/
+env/
+.venv/
+
+# Ignore Secrets (CRITICAL)
+.env
+.env.local
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore OS files
+.DS_Store
