@@ -106,28 +106,20 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [NEW] CLEANER HEADLINES
+# SMART HEADLINE PARSER
 def format_headline(url):
     if not url: return "Global Event Update"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # If slug is useless (like 'index.html' or digits), try previous part
         if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
-        # 1. Replace separators
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        
-        # 2. Remove file extensions
         text = re.sub(r'\.html?$', '', text)
-        
-        # 3. Remove leading dates (e.g., "2025 11 19 Something")
-        text = re.sub(r'^\d{4}\s+\d{2}\s+\d{2}\s*', '', text)
-        text = re.sub(r'^\d{8}\s*', '', text)
-        
-        # 4. Remove generic words at start
+        text = re.sub(r'^\d{4}\s+\d{2}\s+\d{2}\s*', '', text) # Remove YYYY MM DD
+        text = re.sub(r'^\d{8}\s*', '', text) # Remove YYYYMMDD
         text = re.sub(r'^(article|story|news)\s*', '', text, flags=re.IGNORECASE)
 
         headline = text.title().strip()
@@ -309,19 +301,10 @@ def render_visuals(engine):
         df = safe_read_sql(engine, sql)
         
         if not df.empty:
-            # 1. CRASH PREVENTION: Force Uppercase Columns
             df.columns = [c.upper() for c in df.columns]
-            
-            # 2. Generate Clean Headlines
             df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            df = df.drop_duplicates(subset=['Headline']).head(20)
             
-            # 3. DEDUPLICATE based on Headline (Keeps highest volume one)
-            df = df.drop_duplicates(subset=['Headline'])
-            
-            # 4. Limit to Top 20 after cleaning
-            df = df.head(20)
-            
-            # 5. Format & Display
             st.dataframe(
                 df[['Headline', 'ARTICLE_COUNT', 'NEWS_LINK']],
                 use_container_width=True,
@@ -335,13 +318,14 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
+    # [FIXED FEED SECTION - CRITICAL FIX]
     with t_feed:
         countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY 1")
         opts = ["Global Stream"] + countries.iloc[:,0].tolist() if not countries.empty else ["Global Stream"]
         sel = st.selectbox("Target Selector:", opts)
         
         base_sql = """
-            SELECT DATE as "Date", ACTOR_COUNTRY_CODE as "Region", CAST(SENTIMENT_SCORE as FLOAT) as "Sentiment", NEWS_LINK as "Source"
+            SELECT DATE as "DATE", ACTOR_COUNTRY_CODE as "REGION", CAST(SENTIMENT_SCORE as FLOAT) as "SENTIMENT", NEWS_LINK as "SOURCE"
             FROM EVENTS_DAGSTER 
             WHERE ACTOR_COUNTRY_CODE IS NOT NULL
         """
@@ -353,15 +337,24 @@ def render_visuals(engine):
         
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
-            # Safe headline parsing for feed
-            df.columns = [c.upper() for c in df.columns]
+            # 1. Force UPPERCASE to match SQL aliases exactly
+            df.columns = [c.upper() for c in df.columns] 
+            
+            # 2. Add Topic
             df['Topic'] = df['SOURCE'].apply(format_headline)
             
-            st.dataframe(df[['Date', 'Topic', 'Sentiment', 'Source']], use_container_width=True, hide_index=True, column_config={
-                "Date": st.column_config.TextColumn("Date"),
-                "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                "Source": st.column_config.LinkColumn("Link", display_text="🔗 Read")
-            })
+            # 3. Select UPPERCASE columns but map to Pretty names
+            # Logic: Select data -> configure display
+            st.dataframe(
+                df[['DATE', 'Topic', 'SENTIMENT', 'SOURCE']], 
+                use_container_width=True, 
+                hide_index=True, 
+                column_config={
+                    "DATE": st.column_config.TextColumn("Date"),
+                    "SENTIMENT": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
+                    "SOURCE": st.column_config.LinkColumn("Link", display_text="🔗 Read")
+                }
+            )
         else: st.info("No feed data.")
 
 # --- 6. MAIN ---
@@ -385,7 +378,6 @@ def main():
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
                 st.caption("Sources:")
                 try:
-                    # Robust display for sources
                     src_df = st.session_state['report_sources']
                     src_df.columns = [c.upper() for c in src_df.columns]
                     st.dataframe(
@@ -424,9 +416,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        if "messages" not in st.session_state: st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to the live GDELT stream. Ask me anything."}]
-        for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
-        
         if prompt := (st.chat_input("Directive...") or p):
             if st.session_state['llm_locked']:
                 st.warning("⚠️ Processing previous request...")
@@ -438,7 +427,6 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
@@ -457,7 +445,6 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)
@@ -473,7 +460,7 @@ def main():
                                                     st.caption("Contextual Data:")
                                                     st.dataframe(
                                                         df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
                                                         hide_index=True
                                                     )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
