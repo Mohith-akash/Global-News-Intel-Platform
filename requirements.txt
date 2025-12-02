@@ -7,8 +7,8 @@ llama-index
 llama-index-core
 llama-index-llms-gemini
 llama-index-embeddings-gemini
-# Pinning these to stable versions to fix the PY2/Driver crash
-snowflake-connector-python>=3.10.0,<4.0.0
-snowflake-sqlalchemy>=1.5.0
-sqlalchemy>=1.4.0
+snowflake-connector-python
+snowflake-sqlalchemy
+sqlalchemy
 pycountry
+dagster
