@@ -2,20 +2,20 @@ name: Hourly GDELT Backfill
 
 on:
   schedule:
-    - cron: '0 * * * *'  # hourly
+    - cron: '0 * * * *'    # hourly
   workflow_dispatch:
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -25,44 +25,43 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies (using same python interpreter)
+      - name: Install dependencies (same interpreter)
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements.txt
 
-      - name: (Optional) Install extras not in requirements
-        # remove this step if all packages are in requirements.txt
+      - name: Optional extras (if not in requirements.txt)
         run: |
+          # Only if needed; safe to keep but prefer putting these into requirements.txt
           python -m pip install snowflake-connector-python pandas requests python-dotenv
 
-      - name: Verify critical imports
+      - name: Debug: show repository top-level & python path
+        run: |
+          echo "Working dir: $(pwd)"
+          ls -la
+          python -c "import sys; print('python executable:', sys.executable); print('sys.path[:3]:', sys.path[:3])"
+
+      - name: Verify pipeline.py and imports
         run: |
           python - <<'PY'
           import importlib, sys
-          needed = ['pandas','requests','snowflake.connector','dotenv']
           missing = []
-          for mod in needed:
+          modules = ['pipeline','dagster','pandas','requests','snowflake.connector','dotenv']
+          for m in modules:
               try:
-                  importlib.import_module(mod)
+                  importlib.import_module(m)
+                  print("OK:", m)
               except Exception as e:
-                  missing.append((mod,str(e)))
+                  print("MISSING/ERROR:", m, "->", e)
+                  missing.append(m)
           if missing:
-              print("Missing modules or import errors:")
-              for m,e in missing:
-                  print(m, "->", e)
+              print("Missing modules or import errors detected:", missing)
               sys.exit(2)
-          else:
-              print("All critical imports OK")
           PY
 
-      - name: Show installed packages (debug)
-        run: |
-          python -m pip show pandas requests snowflake-connector-python python-dotenv || true
-          python -m pip list --format=columns | sed -n '1,120p'
-
-      - name: Run backfill.py
+      - name: Run pipeline wrapper
         env:
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
@@ -72,5 +71,4 @@ jobs:
           SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
-          # ensure the same interpreter runs the script
-          python backfill.py
+          python run_pipeline.py
