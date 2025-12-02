@@ -106,28 +106,40 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# SMART HEADLINE PARSER
+# [IMPROVED] SMART HEADLINE PARSER
 def format_headline(url):
-    if not url: return "Global Event Update"
+    if not url: return "Global Update"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
+        # If slug is bad, try previous segment
+        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
+        # 1. Replace separators
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        text = re.sub(r'\.html?$', '', text)
-        text = re.sub(r'^\d{4}\s+\d{2}\s+\d{2}\s*', '', text) # Remove YYYY MM DD
-        text = re.sub(r'^\d{8}\s*', '', text) # Remove YYYYMMDD
-        text = re.sub(r'^(article|story|news)\s*', '', text, flags=re.IGNORECASE)
-
-        headline = text.title().strip()
         
-        if len(headline) < 5: return "Breaking News Report"
+        # 2. Remove Extensions
+        text = re.sub(r'\.html?$', '', text)
+        
+        # 3. AGGRESSIVE DATE REMOVAL (Fixes "2025 11 19")
+        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) # Remove dates like 2025/11/19
+        text = re.sub(r'\b\d{8}\b', '', text) # Remove dates like 20251119
+        text = re.sub(r'\b\d{6}\b', '', text) # Remove IDs like 159065
+        
+        # 4. Remove generic start words
+        text = re.sub(r'^(article|story|news|report)\s*', '', text, flags=re.IGNORECASE)
+
+        # 5. Clean up extra spaces
+        headline = " ".join(text.split()).title()
+        
+        # 6. Fallback if empty after cleaning
+        if len(headline) < 4: return "Geopolitical Event Report"
+        
         return headline
     except:
-        return "Global Intelligence Brief"
+        return "Intelligence Report"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -278,7 +290,7 @@ def render_ticker(engine):
     components.html(html, height=55)
 
 def render_visuals(engine):
-    t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
+    t_map, t_trending = st.tabs(["🌐 3D MAP", "🔥 TRENDING FEED"])
     
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
@@ -289,73 +301,43 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [FIXED VIRAL NEWS TABLE]
+    # [FIXED & POLISHED FEED]
     with t_trending:
+        # Get Data, Group by URL to remove duplicates, Sort by Mention Count (Virality)
         sql = """
-            SELECT NEWS_LINK, ARTICLE_COUNT
+            SELECT 
+                NEWS_LINK, 
+                MAX(ACTOR_COUNTRY_CODE) as COUNTRY, 
+                COUNT(*) as REPORTS
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL 
-            ORDER BY ARTICLE_COUNT DESC 
-            LIMIT 70
+            GROUP BY 1 
+            ORDER BY 3 DESC
+            LIMIT 50
         """
         df = safe_read_sql(engine, sql)
         
         if not df.empty:
+            # 1. FORCE UPPERCASE COLUMNS
             df.columns = [c.upper() for c in df.columns]
-            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
-            df = df.drop_duplicates(subset=['Headline']).head(20)
             
+            # 2. Clean Headlines using Improved Logic
+            df['Topic'] = df['NEWS_LINK'].apply(format_headline)
+            
+            # 3. Create Final Display Table (Topic | Country | Reports | Link)
             st.dataframe(
-                df[['Headline', 'ARTICLE_COUNT', 'NEWS_LINK']],
+                df[['Topic', 'COUNTRY', 'REPORTS', 'NEWS_LINK']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
-                    "ARTICLE_COUNT": st.column_config.NumberColumn("Reports", format="%d 📉"),
+                    "Topic": st.column_config.TextColumn("Trending Topic", width="large"),
+                    "COUNTRY": st.column_config.TextColumn("Country", width="small"),
+                    "REPORTS": st.column_config.NumberColumn("Reports", format="%d 📉"),
                     "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")
                 }
             )
         else:
             st.info("No trending data available yet.")
-
-    # [FIXED FEED SECTION - CRITICAL FIX]
-    with t_feed:
-        countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY 1")
-        opts = ["Global Stream"] + countries.iloc[:,0].tolist() if not countries.empty else ["Global Stream"]
-        sel = st.selectbox("Target Selector:", opts)
-        
-        base_sql = """
-            SELECT DATE as "DATE", ACTOR_COUNTRY_CODE as "REGION", CAST(SENTIMENT_SCORE as FLOAT) as "SENTIMENT", NEWS_LINK as "SOURCE"
-            FROM EVENTS_DAGSTER 
-            WHERE ACTOR_COUNTRY_CODE IS NOT NULL
-        """
-        params = {}
-        if sel != "Global Stream":
-            base_sql += " AND ACTOR_COUNTRY_CODE = :c"
-            params = {"c": sel}
-        base_sql += " ORDER BY DATE DESC LIMIT 50"
-        
-        df = safe_read_sql(engine, base_sql, params)
-        if not df.empty:
-            # 1. Force UPPERCASE to match SQL aliases exactly
-            df.columns = [c.upper() for c in df.columns] 
-            
-            # 2. Add Topic
-            df['Topic'] = df['SOURCE'].apply(format_headline)
-            
-            # 3. Select UPPERCASE columns but map to Pretty names
-            # Logic: Select data -> configure display
-            st.dataframe(
-                df[['DATE', 'Topic', 'SENTIMENT', 'SOURCE']], 
-                use_container_width=True, 
-                hide_index=True, 
-                column_config={
-                    "DATE": st.column_config.TextColumn("Date"),
-                    "SENTIMENT": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                    "SOURCE": st.column_config.LinkColumn("Link", display_text="🔗 Read")
-                }
-            )
-        else: st.info("No feed data.")
 
 # --- 6. MAIN ---
 def main():
@@ -427,6 +409,7 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
+                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
@@ -445,6 +428,7 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
+                                # 2. AI Fallback
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)
