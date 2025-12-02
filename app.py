@@ -106,41 +106,46 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [HEAVILY IMPROVED HEADLINE CLEANER]
+# [RUTHLESS HEADLINE CLEANER]
 def format_headline(url, actor):
-    if not url: return f"Update on {actor}"
+    if not url: return f"Report: {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # 1. Clean the slug text
+        # If slug is bad (too short, digits, index.html), use previous segment
+        if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
+            slug = path.rstrip('/').split('/')[-2]
+
+        # 1. Basic Separation
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
+        
+        # 2. Remove File Extensions
         text = re.sub(r'\.html?$', '', text)
         
-        # 2. Filter out Junk (Pure numbers, hashes, or generic file names)
-        # Regex checks for "mostly digits" or "hex strings"
-        if re.match(r'^[\d\s]+$', text) or (len(text) > 10 and not ' ' in text):
-            # Fallback to previous path segment if current one is junk
-            prev_slug = path.rstrip('/').split('/')[-2]
-            if len(prev_slug) > 4 and not re.match(r'^[\d]+$', prev_slug):
-                text = prev_slug.replace('-', ' ')
-            else:
-                return f"Latest Report: {actor}" # Final fallback
+        # 3. KILL TRAILING IDs (The 30-digit junk)
+        # Removes sequences of 5+ digits or mixed alphanumerics at end of string
+        text = re.sub(r'\s[a-zA-Z0-9]{5,}$', '', text)
+        text = re.sub(r'\s\d+$', '', text)
 
-        # 3. Aggressive Date Removal
-        text = re.sub(r'\b20\d{2}[\s]?\d{1,2}[\s]?\d{1,2}\b', '', text) # 2025 11 19
-        text = re.sub(r'\b\d{8}\b', '', text) # 20251119
-        
-        # 4. Remove Clickbait Prefixes
-        text = re.sub(r'^(article|story|news|report|index|default)\s*', '', text, flags=re.IGNORECASE)
+        # 4. KILL DATES (YYYYMMDD)
+        text = re.sub(r'\b20\d{2}\d{2}\d{2}\b', '', text) 
+        text = re.sub(r'\b20\d{2}[\s-]\d{1,2}[\s-]\d{1,2}\b', '', text) 
 
+        # 5. Remove prefixes
+        text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
+
+        # 6. Final Cleanup
         headline = " ".join(text.split()).title()
         
-        if len(headline) < 5: return f"Update on {actor}"
-        
+        # 7. GARBAGE CHECK: If title is mostly numbers or too short
+        digit_count = sum(c.isdigit() for c in headline)
+        if len(headline) < 5 or digit_count > (len(headline) * 0.4):
+            return f"Latest Update: {actor}"
+            
         return headline
     except:
-        return f"Update on {actor}"
+        return f"Intelligence Brief: {actor}"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -165,7 +170,7 @@ def get_query_engine(_engine):
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL` for rankings.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
             "4. **Response:** Return SQL in metadata."
         )
@@ -332,9 +337,8 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (TIMELINE - FIXED)]
+    # [TAB 3: GLOBAL FEED (TIMELINE - CLEANED)]
     with t_feed:
-        # Group by Link to deduplicate
         base_sql = """
             SELECT 
                 DATE, 
@@ -352,7 +356,7 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             
-            # 1. Clean Headlines (Using smart cleaner + fallback actor name)
+            # 1. Clean Headlines
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             
             # 2. Format Date (02 Dec)
@@ -361,7 +365,7 @@ def render_visuals(engine):
             except:
                 df['Date'] = df['DATE']
 
-            # 3. Create "Type" Column (Impact Words)
+            # 3. Create "Type" (Impact Words)
             def get_type(score):
                 if score < -3: return "🔥 Conflict"
                 if score > 3: return "🤝 Diplomacy"
@@ -369,7 +373,7 @@ def render_visuals(engine):
             
             df['Type'] = df['IMPACT_SCORE'].apply(get_type)
 
-            # 4. Display 4 Clean Columns
+            # 4. Display Clean 4 Columns
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
                 use_container_width=True, 
