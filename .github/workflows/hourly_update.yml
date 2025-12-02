@@ -1,35 +1,33 @@
-name: Hourly GDELT Pipeline
+name: Hourly GDELT Update
 
-# Trigger: Run every hour at minute 0
 on:
   schedule:
     - cron: '0 * * * *'
-  # Allow manual run button (for testing)
   workflow_dispatch:
 
 jobs:
-  run-pipeline:
+  update-data:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Check out your code
-      - name: Checkout Code
+      - name: Check out code
         uses: actions/checkout@v3
 
-      # 2. Install Python
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.9' # Ensure this version is compatible with the libraries
 
-      # 3. Install your libraries
+      # CRITICAL STEP: Installation
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
+          # Re-installing for robustness, especially if the primary install fails to resolve paths
+          pip install dagster  
 
-      # 4. Run the script with your Secrets
-      - name: Run Pipeline
+      - name: Run Pipeline Script
         env:
+          # Your secrets are passed here
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -37,4 +35,4 @@ jobs:
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
         run: |
-          python run_pipeline.py
+          
