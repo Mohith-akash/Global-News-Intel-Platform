@@ -106,20 +106,36 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# SMART HEADLINE PARSER
-def format_headline(url, actor):
-    if not url: return f"Update on {actor}"
+# [NEW] CLEANER HEADLINES
+def format_headline(url):
+    if not url: return "Global Event Update"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
-        if len(slug) < 5 or slug.isdigit():
+        
+        # If slug is useless (like 'index.html' or digits), try previous part
+        if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
-        headline = slug.replace('-', ' ').replace('_', ' ').replace('.html', '').replace('.htm', '').title()
-        if len(headline) < 5 or "Index" in headline or "Default" in headline:
-            return f"Latest Report: {actor}"
+
+        # 1. Replace separators
+        text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
+        
+        # 2. Remove file extensions
+        text = re.sub(r'\.html?$', '', text)
+        
+        # 3. Remove leading dates (e.g., "2025 11 19 Something")
+        text = re.sub(r'^\d{4}\s+\d{2}\s+\d{2}\s*', '', text)
+        text = re.sub(r'^\d{8}\s*', '', text)
+        
+        # 4. Remove generic words at start
+        text = re.sub(r'^(article|story|news)\s*', '', text, flags=re.IGNORECASE)
+
+        headline = text.title().strip()
+        
+        if len(headline) < 5: return "Breaking News Report"
         return headline
     except:
-        return f"Intelligence Report: {actor}"
+        return "Global Intelligence Brief"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -142,17 +158,11 @@ def get_query_engine(_engine):
         
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
-            "**DATA DICTIONARY:**\n"
-            "- `ACTOR_COUNTRY_CODE`: Country Code (e.g., 'US'=USA, 'CH'=China).\n"
-            "- `IMPACT_SCORE`: Scale -10 (Violent/Conflict) to 10 (Peace/Cooperation).\n"
-            "- `NEWS_LINK`: URL to the source article.\n"
-            "\n"
-            "**CRITICAL RULES:**\n"
-            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column in your SQL so users can read the news.\n"
-            "2. **DEFINING VIOLENCE:** 'Most violent' means the LOWEST Impact Score (e.g. -10). Sort ASCENDING.\n"
-            "3. **NO NULLS:** When looking for extremes, add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
-            "4. **NULLS LAST:** Always append `NULLS LAST` to ORDER BY.\n"
-            "5. **Response:** Return SQL in metadata."
+            "**RULES:**\n"
+            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL` for rankings.\n"
+            "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
+            "4. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
@@ -164,9 +174,9 @@ def run_manual_override(prompt, engine):
     p = prompt.lower()
     
     definitions = {
-        "conflict index": "### 🛡️ Conflict Index Definition\nThis measures the **intensity** of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests and threats.\n- **8-10:** Military assault and war.",
-        "stability": "### ⚖️ Stability Score\nRepresents the overall **tone/sentiment** of news coverage.\n- **< 40:** High Instability (Crisis/War).\n- **> 60:** High Stability (Peace/Trade).",
-        "impact score": "### 💥 Impact Score\nMeasures the significance of an event (-10 to 10).\n- **Negative:** Conflict (Riots, War).\n- **Positive:** Cooperation (Aid, Treaties)."
+        "conflict index": "### 🛡️ Conflict Index Definition\nIntensity of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests/Threats.\n- **8-10:** Military assault/War.",
+        "stability": "### ⚖️ Stability Score\nOverall tone of coverage.\n- **< 40:** High Instability.\n- **> 60:** High Stability.",
+        "impact score": "### 💥 Impact Score\nSignificance (-10 to 10).\n- **Negative:** Conflict.\n- **Positive:** Cooperation."
     }
     for key, explanation in definitions.items():
         if key in p:
@@ -200,7 +210,7 @@ def generate_briefing(engine):
     if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-    brief = model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Use country names:\n{data}").text
+    brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
 
 # --- 5. UI COMPONENTS ---
@@ -222,9 +232,6 @@ def render_sidebar(engine):
         count = count_df.iloc[0,0] if not count_df.empty else 0
         st.metric("Total Events", f"{count:,}")
         
-        if count == 0:
-            st.error("⚠️ No Data. Check Pipeline.")
-        
         try:
             with engine.connect() as conn:
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
@@ -233,8 +240,7 @@ def render_sidebar(engine):
                         d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
                         d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
                         st.info(f"📅 **Window:**\n{d_min} to {d_max}")
-                    except:
-                        st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
+                    except: st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
         except: pass
             
         st.markdown("<br>", unsafe_allow_html=True)
@@ -257,12 +263,7 @@ def render_hud(engine):
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Signal Volume", f"{vol:,}", delta="Real-time")
     with c2:
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number", 
-            value=sent, 
-            title={'text':"Stability Score"}, 
-            gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}
-        ))
+        fig = go.Figure(go.Indicator(mode="gauge+number", value=sent, title={'text':"Stability Score"}, gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}))
         fig.update_layout(height=180, margin=dict(t=50,b=10,l=20,r=20), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
         st.plotly_chart(fig, use_container_width=True)
     with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
@@ -276,16 +277,11 @@ def render_ticker(engine):
         text_content = " &nbsp; | &nbsp; ".join(items)
         
     html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
+    <!DOCTYPE html><html><head><style>
         .ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }}
         .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }}
         @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
-    </style>
-    </head>
-    <body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>
+    </style></head><body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>
     """
     components.html(html, height=55)
 
@@ -301,42 +297,39 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [VIRAL NEWS TABLE]
+    # [FIXED VIRAL NEWS TABLE]
     with t_trending:
         sql = """
-            SELECT 
-                MAIN_ACTOR, 
-                NEWS_LINK, 
-                ARTICLE_COUNT,
-                DATE
+            SELECT NEWS_LINK, ARTICLE_COUNT
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL 
             ORDER BY ARTICLE_COUNT DESC 
-            LIMIT 50
+            LIMIT 70
         """
         df = safe_read_sql(engine, sql)
         
         if not df.empty:
-            # 1. FORCE UPPERCASE COLUMNS (Fixes KeyError: 'NEWS_LINK')
+            # 1. CRASH PREVENTION: Force Uppercase Columns
             df.columns = [c.upper() for c in df.columns]
             
-            # 2. Generate Smart Headlines
-            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            # 2. Generate Clean Headlines
+            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
             
-            # 3. Rename Volume
-            df['Reports'] = df['ARTICLE_COUNT']
+            # 3. DEDUPLICATE based on Headline (Keeps highest volume one)
+            df = df.drop_duplicates(subset=['Headline'])
             
-            # 4. Create Clean Table (Headline -> Reports -> Link)
-            display_df = df[['Headline', 'Reports', 'NEWS_LINK']]
+            # 4. Limit to Top 20 after cleaning
+            df = df.head(20)
             
+            # 5. Format & Display
             st.dataframe(
-                display_df,
+                df[['Headline', 'ARTICLE_COUNT', 'NEWS_LINK']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
-                    "Reports": st.column_config.NumberColumn("Reports", format="%d 📉"),
-                    "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Now")
+                    "ARTICLE_COUNT": st.column_config.NumberColumn("Reports", format="%d 📉"),
+                    "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")
                 }
             )
         else:
@@ -348,15 +341,7 @@ def render_visuals(engine):
         sel = st.selectbox("Target Selector:", opts)
         
         base_sql = """
-            SELECT 
-                DATE as "Date", ACTOR_COUNTRY_CODE as "Region", MAIN_ACTOR as "Actor",
-                CAST(SENTIMENT_SCORE as FLOAT) as "Sentiment",
-                CASE 
-                    WHEN IMPACT_SCORE < -5 THEN '🔥 Conflict'
-                    WHEN IMPACT_SCORE BETWEEN -5 AND 2 THEN '😐 Neutral'
-                    WHEN IMPACT_SCORE > 2 THEN '🤝 Diplomacy'
-                END as "Type",
-                NEWS_LINK as "Source"
+            SELECT DATE as "Date", ACTOR_COUNTRY_CODE as "Region", CAST(SENTIMENT_SCORE as FLOAT) as "Sentiment", NEWS_LINK as "Source"
             FROM EVENTS_DAGSTER 
             WHERE ACTOR_COUNTRY_CODE IS NOT NULL
         """
@@ -368,10 +353,14 @@ def render_visuals(engine):
         
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
-            st.dataframe(df, use_container_width=True, hide_index=True, column_config={
+            # Safe headline parsing for feed
+            df.columns = [c.upper() for c in df.columns]
+            df['Topic'] = df['SOURCE'].apply(format_headline)
+            
+            st.dataframe(df[['Date', 'Topic', 'Sentiment', 'Source']], use_container_width=True, hide_index=True, column_config={
                 "Date": st.column_config.TextColumn("Date"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                "Source": st.column_config.LinkColumn("Source", display_text="🔗 Read")
+                "Source": st.column_config.LinkColumn("Link", display_text="🔗 Read")
             })
         else: st.info("No feed data.")
 
@@ -394,12 +383,17 @@ def main():
             st.markdown(st.session_state['generated_report'])
             
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
-                st.caption("Sources used for this briefing:")
-                st.dataframe(
-                    st.session_state['report_sources'],
-                    column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
-                    hide_index=True
-                )
+                st.caption("Sources:")
+                try:
+                    # Robust display for sources
+                    src_df = st.session_state['report_sources']
+                    src_df.columns = [c.upper() for c in src_df.columns]
+                    st.dataframe(
+                        src_df[['NEWS_LINK']],
+                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                        hide_index=True
+                    )
+                except: pass
 
             if st.button("Close"): 
                 del st.session_state['generated_report']
@@ -415,11 +409,10 @@ def main():
     with c_chat:
         st.subheader("💬 AI Analyst")
         
-        b1, b2, b3 = st.columns(3)
+        b1, b2 = st.columns(2)
         p = None
-        if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
-        # REMOVED TRENDS BUTTON
+        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
         st.markdown("""
         <div class="example-box">
@@ -450,6 +443,7 @@ def main():
                             if matched:
                                 st.markdown(m_txt)
                                 if m_df is not None and not m_df.empty: 
+                                    m_df.columns = [c.upper() for c in m_df.columns]
                                     if 'NEWS_LINK' in m_df.columns:
                                         st.caption("Top Trending Sources:")
                                         st.dataframe(
@@ -474,13 +468,12 @@ def main():
                                         if is_safe_sql(sql):
                                             df_context = safe_read_sql(engine, sql)
                                             if not df_context.empty:
-                                                # Force Uppercase to fix KeyError
                                                 df_context.columns = [c.upper() for c in df_context.columns]
                                                 if 'NEWS_LINK' in df_context.columns:
                                                     st.caption("Contextual Data:")
                                                     st.dataframe(
                                                         df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
                                                         hide_index=True
                                                     )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
