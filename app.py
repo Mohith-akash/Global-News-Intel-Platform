@@ -138,18 +138,19 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # [SMART BOT BRAIN]
+        # [SMART BOT BRAIN 3.0]
+        # Includes specific fixes for sorting, links, and NULL values
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**DATA DICTIONARY:**\n"
             "- `ACTOR_COUNTRY_CODE`: Country Code (e.g., 'US'=USA, 'CH'=China).\n"
             "- `IMPACT_SCORE`: Scale -10 (Violent/Conflict) to 10 (Peace/Cooperation).\n"
-            "- `NEWS_LINK`: The URL to the source article.\n"
+            "- `NEWS_LINK`: URL to the source article.\n"
             "\n"
             "**CRITICAL RULES:**\n"
-            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column in your SQL query so users can verify sources.\n"
+            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column in your SQL so users can read the news.\n"
             "2. **DEFINING VIOLENCE:** 'Most violent' means the LOWEST Impact Score (e.g. -10). Sort ASCENDING.\n"
-            "3. **NO NULLS:** When looking for extremes, add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "3. **NO NULLS:** When looking for extremes (highest/lowest), you MUST add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "4. **NULLS LAST:** Always append `NULLS LAST` to ORDER BY.\n"
             "5. **Response:** Return SQL in metadata."
         )
@@ -197,13 +198,14 @@ def generate_briefing(engine):
     sql = """
         SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
-        ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 15
+        ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 10
     """
     df = safe_read_sql(engine, sql)
-    if df.empty: return "Insufficient data."
+    if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Format the output with Markdown links for sources like [Source](URL). Data:\n{data}").text
+    brief = model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Use country names:\n{data}").text
+    return brief, df
 
 # --- 5. UI COMPONENTS ---
 
@@ -213,7 +215,9 @@ def render_sidebar(engine):
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
-                st.session_state['generated_report'] = generate_briefing(engine)
+                report, source_df = generate_briefing(engine)
+                st.session_state['generated_report'] = report
+                st.session_state['report_sources'] = source_df
                 st.success("Report Ready!")
         
         st.markdown("<br>", unsafe_allow_html=True)
@@ -225,7 +229,6 @@ def render_sidebar(engine):
         if count == 0:
             st.error("⚠️ No Data. Check Pipeline.")
         
-        # [FIX] DATE FORMATTING
         try:
             with engine.connect() as conn:
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
@@ -368,7 +371,20 @@ def main():
             st.markdown("<div class='report-box'>", unsafe_allow_html=True)
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
-            if st.button("Close"): del st.session_state['generated_report']; st.rerun()
+            
+            # [NEW] Source Table for Briefing
+            if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
+                st.caption("Sources used for this briefing:")
+                st.dataframe(
+                    st.session_state['report_sources'],
+                    column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                    hide_index=True
+                )
+
+            if st.button("Close"): 
+                del st.session_state['generated_report']
+                if 'report_sources' in st.session_state: del st.session_state['report_sources']
+                st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
     render_hud(engine)
@@ -409,6 +425,7 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
+                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
@@ -417,21 +434,23 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
+                                # 2. AI Fallback
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)
                                     st.markdown(resp.response)
                                     
-                                    # [NEW] SMART DATA VISUALIZER
-                                    # If the AI generated SQL, run it again to get the table with links
+                                    # [NEW] SMART LINK INJECTOR
+                                    # If the AI generated SQL, we run it again to get the table with LINKS
                                     if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
                                         sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
+                                            # We run the query to get the dataframe for display
                                             df_context = safe_read_sql(engine, sql)
                                             if not df_context.empty:
-                                                # Show table with "Read" buttons
-                                                cols_to_show = [c for c in df_context.columns if c != 'NEWS_LINK']
+                                                # If NEWS_LINK is present, we show the table with buttons
                                                 if 'NEWS_LINK' in df_context.columns:
+                                                    st.caption("Contextual Data:")
                                                     st.dataframe(
                                                         df_context, 
                                                         column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
