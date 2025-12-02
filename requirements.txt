@@ -1,6 +1,16 @@
-# requirements.txt
+streamlit
 pandas
-requests
+altair
+plotly
 python-dotenv
+llama-index
+llama-index-core
+llama-index-llms-gemini
+llama-index-embeddings-gemini
 snowflake-connector-python
+snowflake-sqlalchemy
+sqlalchemy
+pycountry
+# --- Dagster components ---
 dagster
+requests

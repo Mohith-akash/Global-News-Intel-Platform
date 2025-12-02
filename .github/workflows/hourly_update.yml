@@ -2,27 +2,33 @@ name: Hourly GDELT Refresh
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Runs at minute 0 of every hour
-  workflow_dispatch:      # Allows you to click "Run Now" button manually
+    - cron: '0 * * * *'  # Runs at the start of every hour (UTC)
+  workflow_dispatch:      # Allows manual trigger
 
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Get the code from your repo
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2. Install Python 3.10
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    # 3. Install Dependencies & Run Pipeline (Combined to prevent path issues)
-    - name: Install & Run
+    # 1. CRITICAL STEP: Robust Installation
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install ALL packages including Dagster
+        pip install -r requirements.txt
+        
+    # 2. EXECUTION: Run the Dagster Job
+    - name: Execute Dagster Job
       env:
+        # Securely pass all secrets to the environment
         SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
         SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -31,19 +37,10 @@ jobs:
         SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       run: |
-        # Upgrade pip
-        python -m pip install --upgrade pip
+        echo "🚀 Starting Dagster Job Execution..."
         
-        # Install requirements
-        pip install -r requirements.txt
-        
-        # Explicitly install Dagster just to be 100% safe
-        pip install dagster dagster-webserver pandas requests snowflake-connector-python
-        
-        # Debug: Check if dagster is installed
-        echo "✅ Verifying Dagster Installation..."
-        pip list | grep dagster
-        
-        # Run the Pipeline
-        echo "🚀 Starting Hourly Ingestion..."
+        # This command directly executes the job definition inside pipeline.py
+        # Job name is 'gdelt_ingestion_job'
         dagster job execute -f pipeline.py -j gdelt_ingestion_job
+        
+        echo "✅ Pipeline Command Sent."
