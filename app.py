@@ -138,13 +138,13 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # [SMART BOT BRAIN 3.0]
-        # Includes specific fixes for sorting, links, and NULL values
+        # [SMART BOT BRAIN]
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**DATA DICTIONARY:**\n"
             "- `ACTOR_COUNTRY_CODE`: Country Code (e.g., 'US'=USA, 'CH'=China).\n"
             "- `IMPACT_SCORE`: Scale -10 (Violent/Conflict) to 10 (Peace/Cooperation).\n"
+            "- `ARTICLE_COUNT`: Number of mentions (higher = more trending).\n"
             "- `NEWS_LINK`: URL to the source article.\n"
             "\n"
             "**CRITICAL RULES:**\n"
@@ -174,7 +174,32 @@ def run_manual_override(prompt, engine):
         if key in p:
             return True, None, explanation, "-- Knowledge Base Retrieval"
 
-    # [SQL OVERRIDE] USA vs China
+    # [OVERRIDE: TOP 5 TRENDS WITH LINKS]
+    if "top 5 trending" in p:
+        sql = """
+            SELECT 
+                MAIN_ACTOR, 
+                ACTOR_COUNTRY_CODE, 
+                ARTICLE_COUNT, 
+                NEWS_LINK,
+                DATE
+            FROM EVENTS_DAGSTER 
+            WHERE NEWS_LINK IS NOT NULL 
+            ORDER BY ARTICLE_COUNT DESC NULLS LAST 
+            LIMIT 5
+        """
+        df = safe_read_sql(engine, sql)
+        if not df.empty:
+            # Generate AI Summary of these specific events
+            model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
+            data_str = df.drop(columns=['NEWS_LINK']).to_string(index=False)
+            summary = model.complete(f"Here are the top 5 viral geopolitical events by article volume. Explain briefly what is happening for each one based on the actor and country. Data:\n{data_str}").text
+            
+            return True, df, summary, sql
+        else:
+            return True, None, "No trending data available right now.", sql
+
+    # [OVERRIDE: USA vs China]
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
@@ -194,7 +219,6 @@ def run_manual_override(prompt, engine):
     return False, None, None, None
 
 def generate_briefing(engine):
-    # [FIX] Added NEWS_LINK selection
     sql = """
         SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
@@ -306,19 +330,22 @@ def render_visuals(engine):
         else: st.info("No Map Data")
 
     with t_trends:
+        # [FIX] BAR GRAPH for Trends
         sql_trend = """
-            SELECT DATE, COUNT(*) as V 
+            SELECT DATE, COUNT(*) as "Event Volume"
             FROM EVENTS_DAGSTER 
             GROUP BY 1 ORDER BY 1 ASC
         """
         df = safe_read_sql(engine, sql_trend)
         if not df.empty:
-            df.columns = ["Date", "Volume"]
-            try:
-                df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d')
-            except: pass
-            
-            st.altair_chart(alt.Chart(df).mark_area(line={'color':'#3b82f6'}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='rgba(59, 130, 246, 0.5)', offset=0), alt.GradientStop(color='rgba(59, 130, 246, 0.0)', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(x='Date', y='Volume').properties(height=350), use_container_width=True)
+            df['Date'] = pd.to_datetime(df['DATE'], format='%Y%m%d')
+            # Using Bar Chart as requested
+            chart = alt.Chart(df).mark_bar(color='#3b82f6').encode(
+                x=alt.X('Date', axis=alt.Axis(format='%b %d')),
+                y='Event Volume',
+                tooltip=['Date', 'Event Volume']
+            ).properties(height=350)
+            st.altair_chart(chart, use_container_width=True)
         else: st.info("No trend data available.")
 
     with t_feed:
@@ -347,10 +374,11 @@ def render_visuals(engine):
         
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
+            # [FIX] Read Button for Feed
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
                 "Date": st.column_config.TextColumn("Date"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                "Source": st.column_config.LinkColumn("Source", display_text="🔗 Read")
+                "Source": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")
             })
         else: st.info("No feed data.")
 
@@ -372,7 +400,6 @@ def main():
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
             
-            # [NEW] Source Table for Briefing
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
                 st.caption("Sources used for this briefing:")
                 st.dataframe(
@@ -399,7 +426,8 @@ def main():
         p = None
         if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
-        if b3.button("📈 Trends"): p = "Analyze the top 3 countries by event volume and summarize their geopolitical significance."
+        # [FIX] Button sends Specific Trigger
+        if b3.button("📈 Trends"): p = "Show me the top 5 trending events by article volume."
         
         st.markdown("""
         <div class="example-box">
@@ -429,7 +457,17 @@ def main():
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
-                                if m_df is not None and not m_df.empty: st.dataframe(m_df)
+                                if m_df is not None and not m_df.empty: 
+                                    # [FIX] Smart Link Injector for Trends
+                                    if 'NEWS_LINK' in m_df.columns:
+                                        st.caption("Top Trending Sources:")
+                                        st.dataframe(
+                                            m_df,
+                                            column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                                            hide_index=True
+                                        )
+                                    else:
+                                        st.dataframe(m_df)
                                 if m_sql and "-- Knowledge" not in m_sql:
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
@@ -440,20 +478,17 @@ def main():
                                     resp = qe.query(prompt)
                                     st.markdown(resp.response)
                                     
-                                    # [NEW] SMART LINK INJECTOR
-                                    # If the AI generated SQL, we run it again to get the table with LINKS
+                                    # [FIX] Smart Link Injector for AI
                                     if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
                                         sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
-                                            # We run the query to get the dataframe for display
                                             df_context = safe_read_sql(engine, sql)
                                             if not df_context.empty:
-                                                # If NEWS_LINK is present, we show the table with buttons
                                                 if 'NEWS_LINK' in df_context.columns:
                                                     st.caption("Contextual Data:")
                                                     st.dataframe(
                                                         df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
                                                         hide_index=True
                                                     )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
