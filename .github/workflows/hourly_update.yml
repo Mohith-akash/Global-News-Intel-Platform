@@ -34,9 +34,9 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements.txt
 
-      - name: (Optional) Install extras not in requirements
+      - name: Install extras (optional)
+        # Optional: remove this entire step if you list extras in requirements.txt
         run: |
-          # Only if you truly need extras not listed in requirements.txt
           python -m pip install snowflake-connector-python pandas requests python-dotenv
 
       - name: Debug: show repository top-level & python path
