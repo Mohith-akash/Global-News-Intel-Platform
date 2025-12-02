@@ -3,42 +3,58 @@ name: Hourly GDELT Refresh
 on:
   schedule:
     - cron: '0 * * * *'  # Runs every hour
-  workflow_dispatch:      # Allows you to click "Run Now" button manually
+  workflow_dispatch:
 
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: 🛑 FORCE INSTALL & RUN (All in one step)
-      env:
-        SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-      run: |
-        # 1. Upgrade pip to avoid weird errors
-        python -m pip install --upgrade pip
-        
-        # 2. Force install libraries (The "Other Way")
-        pip install -r requirements.txt
-        pip install dagster dagster-webserver pandas requests snowflake-connector-python python-dotenv
-        
-        # 3. DEBUG: Prove it is installed
-        echo "✅ Checking installed packages..."
-        pip list | grep dagster
-        
-        # 4. Run the pipeline immediately in the same block
-        echo "🚀 Starting Pipeline..."
-        python backfill.py
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies (uses same python interpreter)
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements.txt
+
+      - name: Install extra packages (if you need them)
+        run: |
+          # Optional: only if not already in requirements.txt
+          python -m pip install dagster dagster-webserver snowflake-connector-python python-dotenv
+
+      - name: Verify dagster is importable from python
+        run: |
+          python -c "import importlib, sys; importlib.import_module('dagster'); print('dagster import OK:', __import__('dagster').__version__)"
+
+      - name: Show installed packages (debug)
+        run: |
+          python -m pip show dagster || echo "dagster not found in pip show"
+          python -m pip list --format=columns | sed -n '1,80p'
+
+      - name: Run pipeline (use the correct script)
+        env:
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          # <-- Make sure this file name is the one you intend to run on CI.
+          python backfill.py
