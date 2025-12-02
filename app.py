@@ -14,6 +14,7 @@ import datetime
 import pycountry
 import logging
 import streamlit.components.v1 as components
+import re
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(
@@ -54,28 +55,23 @@ SNOWFLAKE_CONFIG = {
     "role": "ACCOUNTADMIN"
 }
 
-# --- 2. STYLING ---
+# --- 2. STYLING (Stealth + High Contrast) ---
 def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
         
-        /* [FIX] Proper Padding for Main Content */
-        .block-container { 
-            padding-top: 2rem; 
-            padding-bottom: 2rem; 
-            padding-left: 3rem; 
-            padding-right: 3rem; 
-        }
+        /* HIDE PROFILE & FOOTER (Stealth Mode) */
+        header {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none;}
         
-        /* Sidebar Padding */
-        section[data-testid="stSidebar"] .block-container { 
-            padding-top: 2rem; 
-            padding-left: 1rem; 
-            padding-right: 1rem; 
-        }
+        /* Layout Padding */
+        section[data-testid="stSidebar"] .block-container { padding-top: 2rem; }
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; }
         
-        /* Cards */
+        /* Metrics */
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
@@ -92,11 +88,6 @@ def style_app():
             background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
         }
         .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
-        
-        /* Hiding Footer */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -144,7 +135,7 @@ def get_query_engine(_engine):
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "STG_GDELT_EVENTS"
+        target_table = "EVENTS_DAGSTER" # [FIX] Updated Table Name
         matched = next((t for t in combined_names if t.upper() == target_table), None)
         
         if not matched: return None
@@ -153,10 +144,10 @@ def get_query_engine(_engine):
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
         update_str = (
-            "You are a Geopolitical Intelligence AI. Querying 'STG_GDELT_EVENTS'.\n"
+            "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
-            "1. **Exact Capitalized Names**: Countries should be written in their abbreviated forms, such as 'USA' will be United States, 'UK' will be United Kingdom, and so on.\n"
-            "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_NAME IS NOT NULL`.\n"
+            "1. **Exact Names:** 'USA' -> 'United States'. 'UK' -> 'United Kingdom'.\n"
+            "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_CODE IS NOT NULL`.\n" # Changed to CODE as per your pipeline
             "3. **Dates:** Use COUNT(*) grouped by date, NOT math.\n"
             "4. **Response:** Return SQL in metadata."
         )
@@ -169,10 +160,11 @@ def get_query_engine(_engine):
 def run_manual_override(prompt, engine):
     p = prompt.lower()
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
+        # [FIX] Updated Table Name
         sql = """
-            SELECT ACTOR_COUNTRY_NAME, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
-            FROM STG_GDELT_EVENTS 
-            WHERE ACTOR_COUNTRY_NAME IN ('United States', 'China')
+            SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
+            FROM EVENTS_DAGSTER 
+            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') -- Using codes for robustness
             GROUP BY 1 ORDER BY 2 DESC
         """
         df = safe_read_sql(engine, sql)
@@ -180,16 +172,17 @@ def run_manual_override(prompt, engine):
         summary = "### 🇨🇳 vs 🇺🇸 Direct Comparison\n"
         if not df.empty:
             for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_NAME']}**: {row['ARTICLE_COUNT']:,} articles (Sent: {row['AVG_SENTIMENT']:.2f})\n"
+                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} articles (Sent: {row['AVG_SENTIMENT']:.2f})\n"
         else: summary += "No data found."
         return True, df, summary, sql
     return False, None, None, None
 
 def generate_briefing(engine):
+    # [FIX] Updated Table Name
     sql = """
-        SELECT ACTOR_COUNTRY_NAME, ACTOR_NAME, IMPACT_SCORE 
-        FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL 
-        ORDER BY EVENT_DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 20
+        SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE 
+        FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
+        ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 20
     """
     df = safe_read_sql(engine, sql)
     if df.empty: return "Insufficient data."
@@ -210,17 +203,19 @@ def render_sidebar(engine):
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
-        count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM STG_GDELT_EVENTS")
+        # [FIX] Updated Table Name
+        count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
         count = count_df.iloc[0,0] if not count_df.empty else 0
         st.metric("Total Events", f"{count:,}")
         
         # Connection Status Check
         if count == 0:
-            st.error("⚠️ Database Disconnected. Check Secrets.")
+            st.error("⚠️ No Data Found. Check Pipeline.")
         
         try:
             with engine.connect() as conn:
-                res = conn.execute(text("SELECT MIN(EVENT_DATE), MAX(EVENT_DATE) FROM STG_GDELT_EVENTS")).fetchone()
+                # [FIX] Updated Table Name
+                res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
                 if res and res[0]:
                     st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
         except: pass
@@ -235,7 +230,8 @@ def render_sidebar(engine):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
-    metrics = safe_read_sql(engine, "SELECT COUNT(*) as T, AVG(SENTIMENT_SCORE) as S, AVG(CASE WHEN IMPACT_SCORE<0 THEN IMPACT_SCORE END) as C FROM STG_GDELT_EVENTS")
+    # [FIX] Updated Table Name
+    metrics = safe_read_sql(engine, "SELECT COUNT(*) as T, AVG(SENTIMENT_SCORE) as S, AVG(CASE WHEN IMPACT_SCORE<0 THEN IMPACT_SCORE END) as C FROM EVENTS_DAGSTER")
     if metrics.empty: return
     
     vol = metrics.iloc[0,0]
@@ -251,80 +247,95 @@ def render_hud(engine):
     with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
 
 def render_ticker(engine):
-    df = safe_read_sql(engine, "SELECT ACTOR_NAME, ACTOR_COUNTRY_NAME, IMPACT_SCORE FROM STG_GDELT_EVENTS WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY EVENT_DATE DESC LIMIT 7")
+    # [FIX] Updated Table Name & High Contrast CSS
+    df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
     
-    # [FIX] Default content if DB fails so ticker isn't "struck"
-    text_content = "⚠️ SYSTEM OFFLINE: CHECK DATABASE CONNECTION"
+    text_content = "⚠️ SYSTEM INITIALIZING... SCANNING GLOBAL FEEDS..."
     
     if not df.empty:
         df.columns = [c.upper() for c in df.columns]
-        items = [f"⚠️ {r['ACTOR_NAME']} ({r['ACTOR_COUNTRY_NAME']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
+        items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
         
-    # [FIX] Self-contained CSS for Iframe
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
     <style>
-        .ticker-container {{
-            width: 100%; overflow: hidden; background-color: #450a0a; color: #fecaca;
-            padding: 10px; border-left: 5px solid #ef4444; margin-bottom: 0px;
-            white-space: nowrap; box-sizing: border-box; font-family: monospace; font-weight: bold; font-size: 14px;
+        .ticker-wrap {{
+            width: 100%;
+            overflow: hidden;
+            background-color: #7f1d1d;
+            border-left: 5px solid #ef4444;
+            padding: 10px 0;
+            margin-bottom: 10px;
+            box-sizing: border-box;
         }}
-        .ticker-content {{
-            display: inline-block; padding-left: 100%;
-            animation: ticker-anim 30s linear infinite;
+        .ticker {{
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee 35s linear infinite;
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 16px;
+            color: #ffffff;
         }}
-        @keyframes ticker-anim {{
-            0% {{ transform: translate3d(0, 0, 0); }}
-            100% {{ transform: translate3d(-100%, 0, 0); }}
+        @keyframes marquee {{
+            0% {{ transform: translateX(100%); }}
+            100% {{ transform: translateX(-100%); }}
         }}
     </style>
     </head>
     <body style="margin:0;">
-        <div class="ticker-container">
-            <div class="ticker-content">{text_content}</div>
+        <div class="ticker-wrap">
+            <div class="ticker">{text_content}</div>
         </div>
     </body>
     </html>
     """
-    components.html(html, height=50)
+    components.html(html, height=55)
 
 def render_visuals(engine):
     t_map, t_trends, t_feed = st.tabs(["🌐 3D MAP", "📈 TRENDS", "📋 FEED"])
     
     with t_map:
-        df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_NAME as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL GROUP BY 1")
+        # [FIX] Updated Table Name
+        df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
-            fig = px.choropleth(df, locations="Country", locationmode='country names', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
+            # Assuming Country Code is ISO-3 or 2, Plotly handles it well
+            fig = px.choropleth(df, locations="Country", locationmode='ISO-3', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("No Map Data - Check Database Connection")
+        else: st.info("No Map Data")
 
     with t_trends:
+        # [FIX] Updated Table Name & Time Window Logic
         sql_trend = """
-            SELECT EVENT_DATE, COUNT(*) as V 
-            FROM STG_GDELT_EVENTS 
-            WHERE EVENT_DATE >= DATEADD(day, -30, CURRENT_DATE()) 
-            GROUP BY 1 ORDER BY 1
+            SELECT DATE, COUNT(*) as V 
+            FROM EVENTS_DAGSTER 
+            GROUP BY 1 ORDER BY 1 DESC LIMIT 30
         """
         df = safe_read_sql(engine, sql_trend)
         if not df.empty:
             df.columns = ["Date", "Volume"]
-            df['Date'] = pd.to_datetime(df['Date'])
+            # Convert YYYYMMDD string to datetime for chart
+            try:
+                df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d')
+            except: pass
+            
             st.altair_chart(alt.Chart(df).mark_area(line={'color':'#3b82f6'}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='rgba(59, 130, 246, 0.5)', offset=0), alt.GradientStop(color='rgba(59, 130, 246, 0.0)', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(x='Date', y='Volume').properties(height=350), use_container_width=True)
         else: st.info("No trend data available.")
 
     with t_feed:
-        countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_NAME FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY 1")
+        # [FIX] Updated Table Name
+        countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY 1")
         opts = ["Global Stream"] + countries.iloc[:,0].tolist() if not countries.empty else ["Global Stream"]
         sel = st.selectbox("Target Selector:", opts)
         
         base_sql = """
             SELECT 
-                EVENT_DATE as "Date", ACTOR_COUNTRY_NAME as "Region", ACTOR_NAME as "Actor",
+                DATE as "Date", ACTOR_COUNTRY_CODE as "Region", MAIN_ACTOR as "Actor",
                 CAST(SENTIMENT_SCORE as FLOAT) as "Sentiment",
                 CASE 
                     WHEN IMPACT_SCORE < -5 THEN '🔥 Conflict'
@@ -332,19 +343,19 @@ def render_visuals(engine):
                     WHEN IMPACT_SCORE > 2 THEN '🤝 Diplomacy'
                 END as "Type",
                 NEWS_LINK as "Source"
-            FROM STG_GDELT_EVENTS 
-            WHERE ACTOR_COUNTRY_NAME IS NOT NULL
+            FROM EVENTS_DAGSTER 
+            WHERE ACTOR_COUNTRY_CODE IS NOT NULL
         """
         params = {}
         if sel != "Global Stream":
-            base_sql += " AND LOWER(REGEXP_REPLACE(ACTOR_COUNTRY_NAME, '[_-]', ' ')) = :c"
-            params = {"c": clean_key(sel)}
-        base_sql += " ORDER BY EVENT_DATE DESC LIMIT 50"
+            base_sql += " AND ACTOR_COUNTRY_CODE = :c"
+            params = {"c": sel}
+        base_sql += " ORDER BY DATE DESC LIMIT 50"
         
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
-                "Date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
+                "Date": st.column_config.TextColumn("Date"), # Kept as text since format varies
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
                 "Source": st.column_config.LinkColumn("Source", display_text="Read Report")
             })
@@ -380,8 +391,8 @@ def main():
         
         b1, b2, b3 = st.columns(3)
         p = None
-        if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_NAME IS NOT NULL."
-        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_NAME = 'United Nations'."
+        if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'." # Example
         if b3.button("📈 Trends"): p = "Which country (no nulls) has highest event count?"
         
         st.markdown("""
