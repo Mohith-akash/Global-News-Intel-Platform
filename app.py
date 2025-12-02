@@ -106,33 +106,43 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [HEADLINE CLEANER]
-def format_headline(url):
-    if not url: return "Global Event Update"
+# [HEAVILY IMPROVED HEADLINE CLEANER]
+def format_headline(url, actor):
+    if not url: return f"Update on {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
+        # If slug is bad (too short, digits, index.html), use previous segment
+        if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         text = re.sub(r'\.html?$', '', text)
         
-        # Kill Dates & Codes
+        # 1. REMOVE DATES (Aggressive)
         text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
         text = re.sub(r'\b\d{8}\b', '', text) 
-        text = re.sub(r'\b\d{6}\b', '', text)
         
-        # Kill Start Words
-        text = re.sub(r'^(article|story|news|report)\s*', '', text, flags=re.IGNORECASE)
+        # 2. REMOVE JUNK SUFFIXES (Long numbers at end)
+        text = re.sub(r'\s[a-zA-Z0-9]{5,}$', '', text)
+        text = re.sub(r'\s\d+$', '', text)
+        
+        # 3. GARBAGE DETECTOR (If mostly numbers/hex code)
+        digit_count = sum(c.isdigit() for c in text)
+        if len(text) > 0 and (digit_count / len(text) > 0.3):
+            return f"Latest Intelligence: {actor}"
+
+        # 4. Remove Prefixes
+        text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
 
         headline = " ".join(text.split()).title()
         
-        if len(headline) < 4: return "Geopolitical Event Report"
+        if len(headline) < 5: return f"Update on {actor}"
+        
         return headline
     except:
-        return "Intelligence Report"
+        return f"Intelligence Brief: {actor}"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -157,7 +167,7 @@ def get_query_engine(_engine):
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL` for rankings.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
             "4. **Response:** Return SQL in metadata."
         )
@@ -234,6 +244,7 @@ def render_sidebar(engine):
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
                 if res and res[0]:
                     try:
+                        # [FIXED DATE FORMATTING]
                         d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
                         d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
                         st.info(f"📅 **Window:**\n{d_min} to {d_max}")
@@ -249,34 +260,36 @@ def render_sidebar(engine):
         if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
-# [UPDATED METRICS HUD]
+# [NEW & IMPROVED METRICS]
 def render_hud(engine):
     # 1. Volume
     sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
-    # 2. Hotspot (Most active country)
-    sql_hotspot = "SELECT ACTOR_COUNTRY_CODE, COUNT(*) FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 1"
-    # 3. Critical Alerts (High Impact)
-    sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) >= 6"
+    
+    # 2. Hotspot (Most active country code)
+    sql_hotspot = "SELECT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
+    
+    # 3. Critical Alerts (Events with Extreme Impact)
+    sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
 
     # Defaults
     vol, hotspot, crit = 0, "Scanning...", 0
 
     try:
-        # Volume
+        # Get Volume
         df_vol = safe_read_sql(engine, sql_vol)
         if not df_vol.empty: vol = df_vol.iloc[0,0]
 
-        # Hotspot
+        # Get Hotspot (Convert Code to Name if possible)
         df_hot = safe_read_sql(engine, sql_hotspot)
         if not df_hot.empty: 
             code = df_hot.iloc[0,0]
             try:
-                # Convert "US" -> "United States"
                 c = pycountry.countries.get(alpha_2=code)
+                # Fallback to alpha_3 if 2 fails, or just use code
                 hotspot = c.name if c else code
             except: hotspot = code
 
-        # Critical
+        # Get Critical Count
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
 
@@ -284,9 +297,9 @@ def render_hud(engine):
         hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total analyzed events.")
-    with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Country with the most news right now.")
-    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="High Impact", delta_color="inverse", help="Events with extreme Impact Score.")
+    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
+    with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Country with highest event volume right now.")
+    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Number of high-intensity conflict/diplomacy events.")
 
 def render_ticker(engine):
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
@@ -330,7 +343,7 @@ def render_visuals(engine):
         
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
-            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             df = df.drop_duplicates(subset=['Headline']).head(20)
             
             st.dataframe(
@@ -347,12 +360,13 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (FIXED)]
+    # [TAB 3: GLOBAL FEED (CLEAN)]
     with t_feed:
         base_sql = """
             SELECT 
                 DATE, 
                 NEWS_LINK, 
+                MAX(MAIN_ACTOR) as MAIN_ACTOR,
                 AVG(IMPACT_SCORE) as IMPACT_SCORE 
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL
@@ -366,9 +380,9 @@ def render_visuals(engine):
             df.columns = [c.upper() for c in df.columns] 
             
             # 1. Clean Headlines
-            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             
-            # 2. Format Date
+            # 2. Format Date (02 Dec)
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except:
