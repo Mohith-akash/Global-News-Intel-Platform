@@ -4,7 +4,9 @@ altair
 plotly
 python-dotenv
 llama-index
-google-generativeai
+llama-index-core
+llama-index-llms-gemini
+llama-index-embeddings-gemini
 snowflake-connector-python
 sqlalchemy
 pycountry
