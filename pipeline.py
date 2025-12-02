@@ -25,22 +25,22 @@ SNOWFLAKE_CONFIG = {
 
 TARGET_TABLE = "EVENTS_DAGSTER"
 
-# --- HELPER: Get Latest GDELT URL ---
+# --- HELPER: Smart GDELT URL (20-min lookback) ---
 def get_gdelt_url():
     """
-    Constructs the URL for the previous 15-minute interval to ensure file exists.
+    Finds the most recent 'safe' 15-minute interval.
+    Looking back 20 minutes ensures the file is fully uploaded by GDELT.
     """
-    # Go back 15 minutes to be safe (GDELT takes time to upload)
-    now = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+    now = datetime.datetime.utcnow() - datetime.timedelta(minutes=20)
     
-    # Round down to nearest 15 minutes
+    # Round down to nearest 15 minutes (00, 15, 30, 45)
     rounded_minute = (now.minute // 15) * 15
     rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
     
     timestamp = rounded_time.strftime("%Y%m%d%H%M00")
     url = f"http://data.gdeltproject.org/gdeltv2/{timestamp}.export.CSV.zip"
     
-    print(f"🕒 Generated Timestamp: {timestamp}")
+    print(f"🕒 Targeted GDELT Timestamp: {timestamp}")
     print(f"🔗 Target URL: {url}")
     return url
 
@@ -48,15 +48,15 @@ def get_gdelt_url():
 
 @asset
 def gdelt_raw_data() -> pd.DataFrame:
-    print(f"--- Starting Hourly Extraction ---")
+    print(f"--- Starting Extraction Pipeline ---")
     
     url = get_gdelt_url()
     
     try:
-        r = requests.get(url, timeout=15)
+        r = requests.get(url, timeout=30) # Increased timeout for safety
         if r.status_code != 200:
             print(f"⚠️ File not found (Status {r.status_code}). Skipping this run.")
-            return pd.DataFrame() # Return empty DF, don't crash
+            return pd.DataFrame() 
             
         z = zipfile.ZipFile(io.BytesIO(r.content))
         csv_filename = z.namelist()[0]
@@ -111,7 +111,7 @@ def gdelt_snowflake_table(gdelt_raw_data: pd.DataFrame) -> Output:
         
     except Exception as e:
         print(f"❌ Load Error: {e}")
-        raise e # Fail the run so we know
+        raise e 
         
     finally:
         conn.close()
@@ -121,9 +121,10 @@ def gdelt_snowflake_table(gdelt_raw_data: pd.DataFrame) -> Output:
 # --- JOB DEFINITIONS ---
 gdelt_job = define_asset_job(name="gdelt_ingestion_job", selection="*")
 
+# Updated Schedule to match GitHub Actions (30 mins)
 gdelt_schedule = ScheduleDefinition(
     job=gdelt_job,
-    cron_schedule="0 * * * *", 
+    cron_schedule="*/30 * * * *", 
     execution_timezone="UTC"
 )
 
