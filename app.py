@@ -106,9 +106,9 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [IMPROVED] SMART HEADLINE PARSER
+# [SMART HEADLINE PARSER]
 def format_headline(url):
-    if not url: return "Global Update"
+    if not url: return "Global Event Update"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
@@ -117,24 +117,20 @@ def format_headline(url):
         if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
-        # 1. Replace separators
+        # Clean text
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        
-        # 2. Remove Extensions
         text = re.sub(r'\.html?$', '', text)
         
-        # 3. AGGRESSIVE DATE REMOVAL (Fixes "2025 11 19")
-        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) # Remove dates like 2025/11/19
-        text = re.sub(r'\b\d{8}\b', '', text) # Remove dates like 20251119
-        text = re.sub(r'\b\d{6}\b', '', text) # Remove IDs like 159065
+        # Remove dates (YYYYMMDD or YYYY MM DD)
+        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
+        text = re.sub(r'\b\d{8}\b', '', text) 
+        text = re.sub(r'\b\d{6}\b', '', text)
         
-        # 4. Remove generic start words
+        # Remove generic start words
         text = re.sub(r'^(article|story|news|report)\s*', '', text, flags=re.IGNORECASE)
 
-        # 5. Clean up extra spaces
         headline = " ".join(text.split()).title()
         
-        # 6. Fallback if empty after cleaning
         if len(headline) < 4: return "Geopolitical Event Report"
         
         return headline
@@ -290,7 +286,7 @@ def render_ticker(engine):
     components.html(html, height=55)
 
 def render_visuals(engine):
-    t_map, t_trending = st.tabs(["🌐 3D MAP", "🔥 TRENDING FEED"])
+    t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
     
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
@@ -301,43 +297,77 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [FIXED & POLISHED FEED]
+    # [TRENDING NEWS LEADERBOARD (TAB 2)]
     with t_trending:
-        # Get Data, Group by URL to remove duplicates, Sort by Mention Count (Virality)
         sql = """
-            SELECT 
-                NEWS_LINK, 
-                MAX(ACTOR_COUNTRY_CODE) as COUNTRY, 
-                COUNT(*) as REPORTS
+            SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL 
-            GROUP BY 1 
-            ORDER BY 3 DESC
-            LIMIT 50
+            ORDER BY ARTICLE_COUNT DESC 
+            LIMIT 70
         """
         df = safe_read_sql(engine, sql)
         
         if not df.empty:
-            # 1. FORCE UPPERCASE COLUMNS
             df.columns = [c.upper() for c in df.columns]
+            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            df = df.drop_duplicates(subset=['Headline']).head(20)
             
-            # 2. Clean Headlines using Improved Logic
-            df['Topic'] = df['NEWS_LINK'].apply(format_headline)
-            
-            # 3. Create Final Display Table (Topic | Country | Reports | Link)
             st.dataframe(
-                df[['Topic', 'COUNTRY', 'REPORTS', 'NEWS_LINK']],
+                df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Topic": st.column_config.TextColumn("Trending Topic", width="large"),
-                    "COUNTRY": st.column_config.TextColumn("Country", width="small"),
-                    "REPORTS": st.column_config.NumberColumn("Reports", format="%d 📉"),
+                    "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
+                    "ACTOR_COUNTRY_CODE": st.column_config.TextColumn("Country", width="small"),
+                    "ARTICLE_COUNT": st.column_config.NumberColumn("Reports", format="%d 📉"),
                     "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")
                 }
             )
         else:
             st.info("No trending data available yet.")
+
+    # [CLASSIC CLEAN FEED (TAB 3)]
+    with t_feed:
+        # Group by URL to remove duplicates
+        base_sql = """
+            SELECT 
+                DATE, 
+                NEWS_LINK, 
+                CAST(AVG(SENTIMENT_SCORE) as FLOAT) as SENTIMENT 
+            FROM EVENTS_DAGSTER 
+            WHERE NEWS_LINK IS NOT NULL
+            GROUP BY 1, 2
+            ORDER BY 1 DESC 
+            LIMIT 50
+        """
+        df = safe_read_sql(engine, base_sql)
+        
+        if not df.empty:
+            df.columns = [c.upper() for c in df.columns] 
+            
+            # Smart Headlines
+            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            
+            # Format Date
+            try:
+                df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
+            except:
+                df['Date'] = df['DATE']
+
+            # Clean Display Table
+            st.dataframe(
+                df[['Date', 'Headline', 'SENTIMENT', 'NEWS_LINK']], 
+                use_container_width=True, 
+                hide_index=True, 
+                column_config={
+                    "Date": st.column_config.TextColumn("Date", width="small"),
+                    "Headline": st.column_config.TextColumn("Headline", width="large"),
+                    "SENTIMENT": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
+                    "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read")
+                }
+            )
+        else: st.info("No feed data.")
 
 # --- 6. MAIN ---
 def main():
