@@ -155,7 +155,7 @@ def get_query_engine(_engine):
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'STG_GDELT_EVENTS'.\n"
             "**RULES:**\n"
-            "1. **Exact Names:** 'USA' -> 'United States'. 'UK' -> 'United Kingdom'.\n"
+            "1. **Exact Capitalized Names**: Countries should be written in their abbreviated forms, such as 'USA' will be United States, 'UK' will be United Kingdom, and so on.\n"
             "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_NAME IS NOT NULL`.\n"
             "3. **Dates:** Use COUNT(*) grouped by date, NOT math.\n"
             "4. **Response:** Return SQL in metadata."
