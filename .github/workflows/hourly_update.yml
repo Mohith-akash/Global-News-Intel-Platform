@@ -1,16 +1,16 @@
-name: Hourly GDELT Refresh
+name: Hourly GDELT Backfill
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Runs every hour
+    - cron: '0 * * * *'  # hourly
   workflow_dispatch:
 
 jobs:
-  refresh-data:
+  backfill:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python 3.10
         uses: actions/setup-python@v4
@@ -25,28 +25,44 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies (uses same python interpreter)
+      - name: Install dependencies (using same python interpreter)
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements.txt
 
-      - name: Install extra packages (if you need them)
+      - name: (Optional) Install extras not in requirements
+        # remove this step if all packages are in requirements.txt
         run: |
-          # Optional: only if not already in requirements.txt
-          python -m pip install dagster dagster-webserver snowflake-connector-python python-dotenv
+          python -m pip install snowflake-connector-python pandas requests python-dotenv
 
-      - name: Verify dagster is importable from python
+      - name: Verify critical imports
         run: |
-          python -c "import importlib, sys; importlib.import_module('dagster'); print('dagster import OK:', __import__('dagster').__version__)"
+          python - <<'PY'
+          import importlib, sys
+          needed = ['pandas','requests','snowflake.connector','dotenv']
+          missing = []
+          for mod in needed:
+              try:
+                  importlib.import_module(mod)
+              except Exception as e:
+                  missing.append((mod,str(e)))
+          if missing:
+              print("Missing modules or import errors:")
+              for m,e in missing:
+                  print(m, "->", e)
+              sys.exit(2)
+          else:
+              print("All critical imports OK")
+          PY
 
       - name: Show installed packages (debug)
         run: |
-          python -m pip show dagster || echo "dagster not found in pip show"
-          python -m pip list --format=columns | sed -n '1,80p'
+          python -m pip show pandas requests snowflake-connector-python python-dotenv || true
+          python -m pip list --format=columns | sed -n '1,120p'
 
-      - name: Run pipeline (use the correct script)
+      - name: Run backfill.py
         env:
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
@@ -56,5 +72,5 @@ jobs:
           SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
-          # <-- Make sure this file name is the one you intend to run on CI.
+          # ensure the same interpreter runs the script
           python backfill.py
