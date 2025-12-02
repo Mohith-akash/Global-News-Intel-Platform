@@ -59,21 +59,44 @@ def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
-        section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
-        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding-left: 8px;}
-        div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.8rem; }
-        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.5rem; }
+        
+        /* [FIX] Proper Padding for Main Content */
+        .block-container { 
+            padding-top: 2rem; 
+            padding-bottom: 2rem; 
+            padding-left: 3rem; 
+            padding-right: 3rem; 
+        }
+        
+        /* Sidebar Padding */
+        section[data-testid="stSidebar"] .block-container { 
+            padding-top: 2rem; 
+            padding-left: 1rem; 
+            padding-right: 1rem; 
+        }
+        
+        /* Cards */
+        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
+        div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
+        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
+        
+        /* Chat */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
         
         /* Report Box */
-        .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
+        .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
         
-        /* Example Questions Box */
+        /* Example Box */
         .example-box {
-            background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px;
+            background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
         }
-        .example-item { color: #94a3b8; font-size: 0.9em; margin-bottom: 5px; }
+        .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
+        
+        /* Hiding Footer */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -145,7 +168,6 @@ def get_query_engine(_engine):
 
 def run_manual_override(prompt, engine):
     p = prompt.lower()
-    # OVERRIDE: USA vs China
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
         sql = """
             SELECT ACTOR_COUNTRY_NAME, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
@@ -192,6 +214,10 @@ def render_sidebar(engine):
         count = count_df.iloc[0,0] if not count_df.empty else 0
         st.metric("Total Events", f"{count:,}")
         
+        # Connection Status Check
+        if count == 0:
+            st.error("⚠️ Database Disconnected. Check Secrets.")
+        
         try:
             with engine.connect() as conn:
                 res = conn.execute(text("SELECT MIN(EVENT_DATE), MAX(EVENT_DATE) FROM STG_GDELT_EVENTS")).fetchone()
@@ -224,43 +250,46 @@ def render_hud(engine):
         st.plotly_chart(fig, use_container_width=True)
     with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
 
-# [FIX] Ticker now has inline CSS to guarantee visibility inside iframe
 def render_ticker(engine):
     df = safe_read_sql(engine, "SELECT ACTOR_NAME, ACTOR_COUNTRY_NAME, IMPACT_SCORE FROM STG_GDELT_EVENTS WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY EVENT_DATE DESC LIMIT 7")
+    
+    # [FIX] Default content if DB fails so ticker isn't "struck"
+    text_content = "⚠️ SYSTEM OFFLINE: CHECK DATABASE CONNECTION"
+    
     if not df.empty:
         df.columns = [c.upper() for c in df.columns]
         items = [f"⚠️ {r['ACTOR_NAME']} ({r['ACTOR_COUNTRY_NAME']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
         
-        # INLINE CSS for Iframe Isolation
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <style>
-            .ticker-container {{
-                width: 100%; overflow: hidden; background-color: #450a0a; color: #fecaca;
-                padding: 10px; border-left: 5px solid #ef4444; margin-bottom: 0px;
-                white-space: nowrap; box-sizing: border-box; font-family: monospace; font-weight: bold; font-size: 14px;
-            }}
-            .ticker-content {{
-                display: inline-block; padding-left: 100%;
-                animation: ticker-anim 30s linear infinite;
-            }}
-            @keyframes ticker-anim {{
-                0% {{ transform: translate3d(0, 0, 0); }}
-                100% {{ transform: translate3d(-100%, 0, 0); }}
-            }}
-        </style>
-        </head>
-        <body style="margin:0;">
-            <div class="ticker-container">
-                <div class="ticker-content">{text_content}</div>
-            </div>
-        </body>
-        </html>
-        """
-        components.html(html, height=50)
+    # [FIX] Self-contained CSS for Iframe
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        .ticker-container {{
+            width: 100%; overflow: hidden; background-color: #450a0a; color: #fecaca;
+            padding: 10px; border-left: 5px solid #ef4444; margin-bottom: 0px;
+            white-space: nowrap; box-sizing: border-box; font-family: monospace; font-weight: bold; font-size: 14px;
+        }}
+        .ticker-content {{
+            display: inline-block; padding-left: 100%;
+            animation: ticker-anim 30s linear infinite;
+        }}
+        @keyframes ticker-anim {{
+            0% {{ transform: translate3d(0, 0, 0); }}
+            100% {{ transform: translate3d(-100%, 0, 0); }}
+        }}
+    </style>
+    </head>
+    <body style="margin:0;">
+        <div class="ticker-container">
+            <div class="ticker-content">{text_content}</div>
+        </div>
+    </body>
+    </html>
+    """
+    components.html(html, height=50)
 
 def render_visuals(engine):
     t_map, t_trends, t_feed = st.tabs(["🌐 3D MAP", "📈 TRENDS", "📋 FEED"])
@@ -272,10 +301,9 @@ def render_visuals(engine):
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("No Map Data")
+        else: st.info("No Map Data - Check Database Connection")
 
     with t_trends:
-        # Strict 30 Days filter to avoid "Time Travel"
         sql_trend = """
             SELECT EVENT_DATE, COUNT(*) as V 
             FROM STG_GDELT_EVENTS 
@@ -287,7 +315,7 @@ def render_visuals(engine):
             df.columns = ["Date", "Volume"]
             df['Date'] = pd.to_datetime(df['Date'])
             st.altair_chart(alt.Chart(df).mark_area(line={'color':'#3b82f6'}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='rgba(59, 130, 246, 0.5)', offset=0), alt.GradientStop(color='rgba(59, 130, 246, 0.0)', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(x='Date', y='Volume').properties(height=350), use_container_width=True)
-        else: st.info("No trend data available (last 30 days).")
+        else: st.info("No trend data available.")
 
     with t_feed:
         countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_NAME FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY 1")
@@ -380,7 +408,6 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
@@ -388,7 +415,6 @@ def main():
                                 with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)

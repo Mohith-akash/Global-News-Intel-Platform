@@ -1,0 +1,40 @@
+name: Hourly GDELT Pipeline
+
+# Trigger: Run every hour at minute 0
+on:
+  schedule:
+    - cron: '0 * * * *'
+  # Allow manual run button (for testing)
+  workflow_dispatch:
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Check out your code
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # 2. Install Python
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 3. Install your libraries
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # 4. Run the script with your Secrets
+      - name: Run Pipeline
+        env:
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
+        run: |
+          python run_pipeline.py
