@@ -106,36 +106,41 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [SMART HEADLINE PARSER]
-def format_headline(url):
-    if not url: return "Global Event Update"
+# [HEAVILY IMPROVED HEADLINE CLEANER]
+def format_headline(url, actor):
+    if not url: return f"Update on {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # If slug is bad, try previous segment
-        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
-            slug = path.rstrip('/').split('/')[-2]
-
-        # Clean text
+        # 1. Clean the slug text
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         text = re.sub(r'\.html?$', '', text)
         
-        # Remove dates (YYYYMMDD or YYYY MM DD)
-        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
-        text = re.sub(r'\b\d{8}\b', '', text) 
-        text = re.sub(r'\b\d{6}\b', '', text)
+        # 2. Filter out Junk (Pure numbers, hashes, or generic file names)
+        # Regex checks for "mostly digits" or "hex strings"
+        if re.match(r'^[\d\s]+$', text) or (len(text) > 10 and not ' ' in text):
+            # Fallback to previous path segment if current one is junk
+            prev_slug = path.rstrip('/').split('/')[-2]
+            if len(prev_slug) > 4 and not re.match(r'^[\d]+$', prev_slug):
+                text = prev_slug.replace('-', ' ')
+            else:
+                return f"Latest Report: {actor}" # Final fallback
+
+        # 3. Aggressive Date Removal
+        text = re.sub(r'\b20\d{2}[\s]?\d{1,2}[\s]?\d{1,2}\b', '', text) # 2025 11 19
+        text = re.sub(r'\b\d{8}\b', '', text) # 20251119
         
-        # Remove generic start words
-        text = re.sub(r'^(article|story|news|report)\s*', '', text, flags=re.IGNORECASE)
+        # 4. Remove Clickbait Prefixes
+        text = re.sub(r'^(article|story|news|report|index|default)\s*', '', text, flags=re.IGNORECASE)
 
         headline = " ".join(text.split()).title()
         
-        if len(headline) < 4: return "Geopolitical Event Report"
+        if len(headline) < 5: return f"Update on {actor}"
         
         return headline
     except:
-        return "Intelligence Report"
+        return f"Update on {actor}"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -297,10 +302,10 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [TRENDING NEWS LEADERBOARD (TAB 2)]
+    # [TAB 2: TRENDING NEWS (LEADERBOARD)]
     with t_trending:
         sql = """
-            SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT
+            SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL 
             ORDER BY ARTICLE_COUNT DESC 
@@ -310,7 +315,7 @@ def render_visuals(engine):
         
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
-            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             df = df.drop_duplicates(subset=['Headline']).head(20)
             
             st.dataframe(
@@ -327,14 +332,15 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [CLASSIC CLEAN FEED (TAB 3)]
+    # [TAB 3: GLOBAL FEED (TIMELINE - FIXED)]
     with t_feed:
-        # Group by URL to remove duplicates
+        # Group by Link to deduplicate
         base_sql = """
             SELECT 
                 DATE, 
                 NEWS_LINK, 
-                CAST(AVG(SENTIMENT_SCORE) as FLOAT) as SENTIMENT 
+                MAX(MAIN_ACTOR) as MAIN_ACTOR,
+                AVG(IMPACT_SCORE) as IMPACT_SCORE 
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL
             GROUP BY 1, 2
@@ -346,24 +352,32 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             
-            # Smart Headlines
-            df['Headline'] = df['NEWS_LINK'].apply(format_headline)
+            # 1. Clean Headlines (Using smart cleaner + fallback actor name)
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             
-            # Format Date
+            # 2. Format Date (02 Dec)
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except:
                 df['Date'] = df['DATE']
 
-            # Clean Display Table
+            # 3. Create "Type" Column (Impact Words)
+            def get_type(score):
+                if score < -3: return "🔥 Conflict"
+                if score > 3: return "🤝 Diplomacy"
+                return "📢 General"
+            
+            df['Type'] = df['IMPACT_SCORE'].apply(get_type)
+
+            # 4. Display 4 Clean Columns
             st.dataframe(
-                df[['Date', 'Headline', 'SENTIMENT', 'NEWS_LINK']], 
+                df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
                 use_container_width=True, 
                 hide_index=True, 
                 column_config={
                     "Date": st.column_config.TextColumn("Date", width="small"),
                     "Headline": st.column_config.TextColumn("Headline", width="large"),
-                    "SENTIMENT": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
+                    "Type": st.column_config.TextColumn("Category", width="small"),
                     "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read")
                 }
             )
