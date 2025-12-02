@@ -55,21 +55,21 @@ SNOWFLAKE_CONFIG = {
     "role": "ACCOUNTADMIN"
 }
 
-# --- 2. STYLING (Stealth + High Contrast) ---
+# --- 2. STYLING ---
 def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
         
-        /* HIDE PROFILE & FOOTER (Stealth Mode) */
+        /* HIDE PROFILE & FOOTER */
         header {visibility: hidden;}
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         .stDeployButton {display:none;}
         
-        /* Layout Padding */
-        section[data-testid="stSidebar"] .block-container { padding-top: 2rem; }
-        .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+        /* Spacing */
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
+        section[data-testid="stSidebar"] .block-container { padding-top: 2rem; padding-left: 1rem; padding-right: 1rem; }
         
         /* Metrics */
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
@@ -135,7 +135,7 @@ def get_query_engine(_engine):
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "EVENTS_DAGSTER" # [FIX] Updated Table Name
+        target_table = "EVENTS_DAGSTER"
         matched = next((t for t in combined_names if t.upper() == target_table), None)
         
         if not matched: return None
@@ -143,42 +143,68 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
+        # [SMARTER AI BRAIN]
+        # We give it a "Data Dictionary" so it understands the codes and metrics.
         update_str = (
-            "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
+            "You are a Senior Geopolitical Intelligence Analyst. Querying 'EVENTS_DAGSTER'.\n"
+            "**DATA DICTIONARY:**\n"
+            "- `ACTOR_COUNTRY_CODE`: FIPS 10-4 Country Codes (e.g., 'US'=USA, 'CH'=China, 'RS'=Russia, 'UK'=United Kingdom, 'IZ'=Israel, 'PL'=Palestine).\n"
+            "- `IMPACT_SCORE`: Scale -10 to 10. (Negative=Conflict/Crisis, Positive=Diplomacy/Aid).\n"
+            "- `SENTIMENT_SCORE`: Tone of news coverage.\n"
+            "\n"
             "**RULES:**\n"
-            "1. **Exact Names:** 'USA' -> 'United States'. 'UK' -> 'United Kingdom'.\n"
-            "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_CODE IS NOT NULL`.\n" # Changed to CODE as per your pipeline
-            "3. **Dates:** Use COUNT(*) grouped by date, NOT math.\n"
+            "1. **Narrative Responses:** After running the SQL, do NOT just list numbers. Explain what they mean. If trends are flat, say so. If US events are high, mention it implies high diplomatic activity.\n"
+            "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_CODE IS NOT NULL`.\n"
+            "3. **Dates:** Use COUNT(*) grouped by `DATE` for trends.\n"
             "4. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
     except: return None
 
-# --- 4. LOGIC MODULES ---
+# --- 4. LOGIC MODULES (The "Knowledge Base") ---
 
 def run_manual_override(prompt, engine):
     p = prompt.lower()
+    
+    # [NEW] KNOWLEDGE BASE INTERCEPTOR
+    # This answers definitions immediately without asking the DB
+    definitions = {
+        "conflict index": "### 🛡️ Conflict Index Definition\nThe **Conflict Index** is a measure of the intensity of negative geopolitical events.\n\nIt is calculated using the **Goldstein Scale**, which rates events from **-10 (Military Attack)** to **+10 (Military Assistance)**. \n- A score of **0 to 5** indicates minor diplomatic tension.\n- A score **above 5** indicates serious conflict or instability.",
+        "stability": "### ⚖️ Stability Score\n**Stability** represents the overall tone of media coverage for a region.\n\n- **0-40 (Red):** Highly Unstable / Negative Coverage (War, Crisis).\n- **40-60 (Yellow):** Neutral / Mixed Coverage.\n- **60-100 (Green):** Stable / Positive Coverage (Diplomacy, Trade deals).",
+        "impact score": "### 💥 Impact Score\nThe **Impact Score** quantifies the significance of an event on a scale of **-10 to 10**.\n\nNegative values denote **conflict** (e.g., riots, war), while positive values denote **cooperation** (e.g., treaties, aid). Zero indicates a neutral event or statement.",
+    }
+    
+    for key, explanation in definitions.items():
+        if key in p:
+            return True, None, explanation, "-- Knowledge Base Retrieval"
+
+    # [EXISTING] SQL OVERRIDE (USA vs China)
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
-        # [FIX] Updated Table Name
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
             FROM EVENTS_DAGSTER 
-            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') -- Using codes for robustness
+            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') 
             GROUP BY 1 ORDER BY 2 DESC
         """
         df = safe_read_sql(engine, sql)
-        if not df.empty: df.columns = [c.upper() for c in df.columns]
-        summary = "### 🇨🇳 vs 🇺🇸 Direct Comparison\n"
+        if not df.empty: 
+            df.columns = [c.upper() for c in df.columns]
+            # Map codes to names for the user
+            country_map = {'US': '🇺🇸 United States', 'CH': '🇨🇳 China'}
+            df['ACTOR_COUNTRY_CODE'] = df['ACTOR_COUNTRY_CODE'].map(country_map).fillna(df['ACTOR_COUNTRY_CODE'])
+        
+        summary = "### 🇨🇳 vs 🇺🇸 Superpower Standoff\n"
         if not df.empty:
             for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} articles (Sent: {row['AVG_SENTIMENT']:.2f})\n"
-        else: summary += "No data found."
+                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} tracked events. (Avg Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
+            summary += "\n*Data indicates relative media volume and tone between the two nations.*"
+        else: summary += "No comparative data found in current window."
         return True, df, summary, sql
+        
     return False, None, None, None
 
 def generate_briefing(engine):
-    # [FIX] Updated Table Name
     sql = """
         SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
@@ -188,7 +214,7 @@ def generate_briefing(engine):
     if df.empty: return "Insufficient data."
     data = df.to_string(index=False)
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data:\n{data}").text
+    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Use country names, not codes (e.g. US=USA, RS=Russia):\n{data}").text
 
 # --- 5. UI COMPONENTS ---
 
@@ -199,25 +225,27 @@ def render_sidebar(engine):
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
                 st.session_state['generated_report'] = generate_briefing(engine)
-                st.success("Report Generated! Check top of dashboard.")
+                st.success("Report Generated!")
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
-        # [FIX] Updated Table Name
         count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
         count = count_df.iloc[0,0] if not count_df.empty else 0
-        st.metric("Total Events", f"{count:,}")
+        st.metric("Total Events", f"{count:,}", help="Total number of geopolitical events ingested.")
         
-        # Connection Status Check
         if count == 0:
-            st.error("⚠️ No Data Found. Check Pipeline.")
+            st.error("⚠️ No Data. Check Pipeline.")
         
         try:
             with engine.connect() as conn:
-                # [FIX] Updated Table Name
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
                 if res and res[0]:
-                    st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
+                    try:
+                        d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
+                        d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
+                        st.info(f"📅 **Window:**\n{d_min} to {d_max}")
+                    except:
+                        st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
         except: pass
             
         st.markdown("<br>", unsafe_allow_html=True)
@@ -230,7 +258,6 @@ def render_sidebar(engine):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
-    # [FIX] Updated Table Name
     metrics = safe_read_sql(engine, "SELECT COUNT(*) as T, AVG(SENTIMENT_SCORE) as S, AVG(CASE WHEN IMPACT_SCORE<0 THEN IMPACT_SCORE END) as C FROM EVENTS_DAGSTER")
     if metrics.empty: return
     
@@ -239,15 +266,32 @@ def render_hud(engine):
     conf = abs(metrics.iloc[0,2] or 0)
     
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("Signal Volume", f"{vol:,}", delta="Real-time")
+    with c1: 
+        st.metric("Signal Volume", f"{vol:,}", delta="Real-time", help="Live count of ingested news events.")
     with c2:
-        fig = go.Figure(go.Indicator(mode="gauge+number", value=sent, title={'text':"Stability"}, gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}))
-        fig.update_layout(height=150, margin=dict(t=30,b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number", 
+            value=sent, 
+            title={'text':"Stability Score"}, 
+            gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}
+        ))
+        fig.update_layout(
+            height=170, 
+            margin=dict(t=40,b=10,l=20,r=20), 
+            paper_bgcolor="rgba(0,0,0,0)", 
+            font={'color':"white"}
+        )
         st.plotly_chart(fig, use_container_width=True)
-    with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
+    with c3: 
+        st.metric(
+            "Conflict Index", 
+            f"{conf:.2f} / 10", 
+            delta="Severity", 
+            delta_color="inverse", 
+            help="Average intensity of negative events (0=Peace, 10=War)."
+        )
 
 def render_ticker(engine):
-    # [FIX] Updated Table Name & High Contrast CSS
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
     
     text_content = "⚠️ SYSTEM INITIALIZING... SCANNING GLOBAL FEEDS..."
@@ -299,10 +343,8 @@ def render_visuals(engine):
     t_map, t_trends, t_feed = st.tabs(["🌐 3D MAP", "📈 TRENDS", "📋 FEED"])
     
     with t_map:
-        # [FIX] Updated Table Name
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
-            # Assuming Country Code is ISO-3 or 2, Plotly handles it well
             fig = px.choropleth(df, locations="Country", locationmode='ISO-3', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
@@ -310,7 +352,6 @@ def render_visuals(engine):
         else: st.info("No Map Data")
 
     with t_trends:
-        # [FIX] Updated Table Name & Time Window Logic
         sql_trend = """
             SELECT DATE, COUNT(*) as V 
             FROM EVENTS_DAGSTER 
@@ -319,7 +360,6 @@ def render_visuals(engine):
         df = safe_read_sql(engine, sql_trend)
         if not df.empty:
             df.columns = ["Date", "Volume"]
-            # Convert YYYYMMDD string to datetime for chart
             try:
                 df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d')
             except: pass
@@ -328,7 +368,6 @@ def render_visuals(engine):
         else: st.info("No trend data available.")
 
     with t_feed:
-        # [FIX] Updated Table Name
         countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY 1")
         opts = ["Global Stream"] + countries.iloc[:,0].tolist() if not countries.empty else ["Global Stream"]
         sel = st.selectbox("Target Selector:", opts)
@@ -355,7 +394,7 @@ def render_visuals(engine):
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
-                "Date": st.column_config.TextColumn("Date"), # Kept as text since format varies
+                "Date": st.column_config.TextColumn("Date"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
                 "Source": st.column_config.LinkColumn("Source", display_text="Read Report")
             })
@@ -392,15 +431,15 @@ def main():
         b1, b2, b3 = st.columns(3)
         p = None
         if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'." # Example
+        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         if b3.button("📈 Trends"): p = "Which country (no nulls) has highest event count?"
         
         st.markdown("""
         <div class="example-box">
             <div class="example-item">1. Analyze the conflict trend in the Middle East.</div>
             <div class="example-item">2. Which country has the lowest sentiment score?</div>
-            <div class="example-item">3. Compare media coverage of USA vs China.</div>
-            <div class="example-item">4. List recent Diplomatic events involving UK.</div>
+            <div class="example-item">3. What is Conflict Index?</div>
+            <div class="example-item">4. Compare media coverage of USA vs China.</div>
             <div class="example-item">5. Summarize activity involving Russia.</div>
         </div>
         """, unsafe_allow_html=True)
@@ -419,13 +458,16 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
+                            # 1. Manual Override (Knowledge Base + Hardcoded SQL)
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
                                 if m_df is not None and not m_df.empty: st.dataframe(m_df)
-                                with st.expander("Override Trace"): st.code(m_sql, language='sql')
+                                if m_sql and "-- Knowledge" not in m_sql:
+                                    with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
+                                # 2. AI Fallback (NL-to-SQL)
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)
