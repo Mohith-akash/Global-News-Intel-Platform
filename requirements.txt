@@ -8,5 +8,6 @@ llama-index-core
 llama-index-llms-gemini
 llama-index-embeddings-gemini
 snowflake-connector-python
+snowflake-sqlalchemy
 sqlalchemy
 pycountry
