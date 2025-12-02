@@ -61,29 +61,28 @@ def style_app():
     <style>
         .stApp { background-color: #0b0f19; }
         
-        /* HIDE PROFILE & FOOTER */
+        /* STEALTH MODE: HIDE PROFILE & FOOTER */
         header {visibility: hidden;}
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         .stDeployButton {display:none;}
         
-        /* Spacing */
+        /* SPACING */
         .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
-        section[data-testid="stSidebar"] .block-container { padding-top: 2rem; padding-left: 1rem; padding-right: 1rem; }
         
-        /* Metrics */
+        /* METRICS CARDS */
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
         
-        /* Chat */
+        /* CHAT BUBBLES */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
         
-        /* Report Box */
+        /* REPORT BOX */
         .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
         
-        /* Example Box */
+        /* EXAMPLE QUESTIONS */
         .example-box {
             background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
         }
@@ -135,7 +134,7 @@ def get_query_engine(_engine):
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "EVENTS_DAGSTER"
+        target_table = "EVENTS_DAGSTER" # [FIX] Correct Table
         matched = next((t for t in combined_names if t.upper() == target_table), None)
         
         if not matched: return None
@@ -143,43 +142,41 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # [SMARTER AI BRAIN]
-        # We give it a "Data Dictionary" so it understands the codes and metrics.
+        # [SMART BOT BRAIN 2.0]
+        # Includes specific fixes for sorting and handling NULL values (The "Poland" Fix)
         update_str = (
-            "You are a Senior Geopolitical Intelligence Analyst. Querying 'EVENTS_DAGSTER'.\n"
+            "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**DATA DICTIONARY:**\n"
-            "- `ACTOR_COUNTRY_CODE`: FIPS 10-4 Country Codes (e.g., 'US'=USA, 'CH'=China, 'RS'=Russia, 'UK'=United Kingdom, 'IZ'=Israel, 'PL'=Palestine).\n"
-            "- `IMPACT_SCORE`: Scale -10 to 10. (Negative=Conflict/Crisis, Positive=Diplomacy/Aid).\n"
-            "- `SENTIMENT_SCORE`: Tone of news coverage.\n"
+            "- `ACTOR_COUNTRY_CODE`: Country Code (e.g., 'US'=USA, 'CH'=China).\n"
+            "- `IMPACT_SCORE`: Scale -10 (Conflict) to 10 (Cooperation).\n"
             "\n"
-            "**RULES:**\n"
-            "1. **Narrative Responses:** After running the SQL, do NOT just list numbers. Explain what they mean. If trends are flat, say so. If US events are high, mention it implies high diplomatic activity.\n"
-            "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_CODE IS NOT NULL`.\n"
-            "3. **Dates:** Use COUNT(*) grouped by `DATE` for trends.\n"
+            "**CRITICAL RULES:**\n"
+            "1. **NO NULLS IN RANKING:** When asked for 'highest', 'lowest', 'most violent', or 'top', YOU MUST add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "2. **NULLS LAST:** If sorting by a score, use `ORDER BY [column] DESC NULLS LAST`.\n"
+            "3. **Narrative:** Don't just show a table. Explain the context (e.g. 'This high impact event indicates...').\n"
             "4. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
     except: return None
 
-# --- 4. LOGIC MODULES (The "Knowledge Base") ---
+# --- 4. LOGIC MODULES ---
 
 def run_manual_override(prompt, engine):
     p = prompt.lower()
     
-    # [NEW] KNOWLEDGE BASE INTERCEPTOR
-    # This answers definitions immediately without asking the DB
+    # [FIX] KNOWLEDGE BASE: Bot defines terms instantly
     definitions = {
-        "conflict index": "### 🛡️ Conflict Index Definition\nThe **Conflict Index** is a measure of the intensity of negative geopolitical events.\n\nIt is calculated using the **Goldstein Scale**, which rates events from **-10 (Military Attack)** to **+10 (Military Assistance)**. \n- A score of **0 to 5** indicates minor diplomatic tension.\n- A score **above 5** indicates serious conflict or instability.",
-        "stability": "### ⚖️ Stability Score\n**Stability** represents the overall tone of media coverage for a region.\n\n- **0-40 (Red):** Highly Unstable / Negative Coverage (War, Crisis).\n- **40-60 (Yellow):** Neutral / Mixed Coverage.\n- **60-100 (Green):** Stable / Positive Coverage (Diplomacy, Trade deals).",
-        "impact score": "### 💥 Impact Score\nThe **Impact Score** quantifies the significance of an event on a scale of **-10 to 10**.\n\nNegative values denote **conflict** (e.g., riots, war), while positive values denote **cooperation** (e.g., treaties, aid). Zero indicates a neutral event or statement.",
+        "conflict index": "### 🛡️ Conflict Index Definition\nThis measures the **intensity** of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests and threats.\n- **8-10:** Military assault and war.",
+        "stability": "### ⚖️ Stability Score\nRepresents the overall **tone/sentiment** of news coverage.\n- **< 40:** High Instability (Crisis/War).\n- **> 60:** High Stability (Peace/Trade).",
+        "impact score": "### 💥 Impact Score\nMeasures the significance of an event (-10 to 10).\n- **Negative:** Conflict (Riots, War).\n- **Positive:** Cooperation (Aid, Treaties)."
     }
     
     for key, explanation in definitions.items():
         if key in p:
             return True, None, explanation, "-- Knowledge Base Retrieval"
 
-    # [EXISTING] SQL OVERRIDE (USA vs China)
+    # [FIX] SQL OVERRIDE (USA vs China)
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
@@ -190,16 +187,10 @@ def run_manual_override(prompt, engine):
         df = safe_read_sql(engine, sql)
         if not df.empty: 
             df.columns = [c.upper() for c in df.columns]
-            # Map codes to names for the user
-            country_map = {'US': '🇺🇸 United States', 'CH': '🇨🇳 China'}
-            df['ACTOR_COUNTRY_CODE'] = df['ACTOR_COUNTRY_CODE'].map(country_map).fillna(df['ACTOR_COUNTRY_CODE'])
-        
-        summary = "### 🇨🇳 vs 🇺🇸 Superpower Standoff\n"
-        if not df.empty:
+            summary = "### 🇨🇳 vs 🇺🇸 Superpower Analysis\n"
             for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} tracked events. (Avg Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
-            summary += "\n*Data indicates relative media volume and tone between the two nations.*"
-        else: summary += "No comparative data found in current window."
+                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} events. (Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
+        else: summary = "No comparative data found."
         return True, df, summary, sql
         
     return False, None, None, None
@@ -214,7 +205,7 @@ def generate_briefing(engine):
     if df.empty: return "Insufficient data."
     data = df.to_string(index=False)
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Use country names, not codes (e.g. US=USA, RS=Russia):\n{data}").text
+    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Use full country names:\n{data}").text
 
 # --- 5. UI COMPONENTS ---
 
@@ -225,17 +216,18 @@ def render_sidebar(engine):
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
                 st.session_state['generated_report'] = generate_briefing(engine)
-                st.success("Report Generated!")
+                st.success("Report Ready!")
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
         count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
         count = count_df.iloc[0,0] if not count_df.empty else 0
-        st.metric("Total Events", f"{count:,}", help="Total number of geopolitical events ingested.")
+        st.metric("Total Events", f"{count:,}")
         
         if count == 0:
             st.error("⚠️ No Data. Check Pipeline.")
         
+        # [FIX] DATE FORMATTING (20251121 -> 21 Nov 2025)
         try:
             with engine.connect() as conn:
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
@@ -266,36 +258,23 @@ def render_hud(engine):
     conf = abs(metrics.iloc[0,2] or 0)
     
     c1, c2, c3 = st.columns(3)
-    with c1: 
-        st.metric("Signal Volume", f"{vol:,}", delta="Real-time", help="Live count of ingested news events.")
+    with c1: st.metric("Signal Volume", f"{vol:,}", delta="Real-time")
     with c2:
+        # [FIX] GAUGE SIZE ADJUSTMENT
         fig = go.Figure(go.Indicator(
             mode="gauge+number", 
             value=sent, 
             title={'text':"Stability Score"}, 
             gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}
         ))
-        fig.update_layout(
-            height=170, 
-            margin=dict(t=40,b=10,l=20,r=20), 
-            paper_bgcolor="rgba(0,0,0,0)", 
-            font={'color':"white"}
-        )
+        fig.update_layout(height=170, margin=dict(t=40,b=10,l=20,r=20), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
         st.plotly_chart(fig, use_container_width=True)
-    with c3: 
-        st.metric(
-            "Conflict Index", 
-            f"{conf:.2f} / 10", 
-            delta="Severity", 
-            delta_color="inverse", 
-            help="Average intensity of negative events (0=Peace, 10=War)."
-        )
+    with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
 
 def render_ticker(engine):
+    # [FIX] High Contrast Ticker
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
-    
     text_content = "⚠️ SYSTEM INITIALIZING... SCANNING GLOBAL FEEDS..."
-    
     if not df.empty:
         df.columns = [c.upper() for c in df.columns]
         items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
@@ -306,36 +285,12 @@ def render_ticker(engine):
     <html>
     <head>
     <style>
-        .ticker-wrap {{
-            width: 100%;
-            overflow: hidden;
-            background-color: #7f1d1d;
-            border-left: 5px solid #ef4444;
-            padding: 10px 0;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-        }}
-        .ticker {{
-            display: inline-block;
-            white-space: nowrap;
-            animation: marquee 35s linear infinite;
-            font-family: monospace;
-            font-weight: bold;
-            font-size: 16px;
-            color: #ffffff;
-        }}
-        @keyframes marquee {{
-            0% {{ transform: translateX(100%); }}
-            100% {{ transform: translateX(-100%); }}
-        }}
+        .ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }}
+        .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }}
+        @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
     </style>
     </head>
-    <body style="margin:0;">
-        <div class="ticker-wrap">
-            <div class="ticker">{text_content}</div>
-        </div>
-    </body>
-    </html>
+    <body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>
     """
     components.html(html, height=55)
 
@@ -352,10 +307,11 @@ def render_visuals(engine):
         else: st.info("No Map Data")
 
     with t_trends:
+        # [FIX] SORTED TRENDS (Chronological)
         sql_trend = """
             SELECT DATE, COUNT(*) as V 
             FROM EVENTS_DAGSTER 
-            GROUP BY 1 ORDER BY 1 DESC LIMIT 30
+            GROUP BY 1 ORDER BY 1 ASC  -- Sorted Oldest to Newest
         """
         df = safe_read_sql(engine, sql_trend)
         if not df.empty:
@@ -458,7 +414,7 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override (Knowledge Base + Hardcoded SQL)
+                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
@@ -467,7 +423,7 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback (NL-to-SQL)
+                                # 2. AI Fallback
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)
