@@ -144,7 +144,6 @@ def get_query_engine(_engine):
             "**DATA DICTIONARY:**\n"
             "- `ACTOR_COUNTRY_CODE`: Country Code (e.g., 'US'=USA, 'CH'=China).\n"
             "- `IMPACT_SCORE`: Scale -10 (Violent/Conflict) to 10 (Peace/Cooperation).\n"
-            "- `ARTICLE_COUNT`: Number of mentions (higher = more trending).\n"
             "- `NEWS_LINK`: URL to the source article.\n"
             "\n"
             "**CRITICAL RULES:**\n"
@@ -190,7 +189,7 @@ def run_manual_override(prompt, engine):
         """
         df = safe_read_sql(engine, sql)
         if not df.empty:
-            # Generate AI Summary of these specific events
+            df.columns = [c.upper() for c in df.columns] # Normalize Cols
             model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
             data_str = df.drop(columns=['NEWS_LINK']).to_string(index=False)
             summary = model.complete(f"Here are the top 5 viral geopolitical events by article volume. Explain briefly what is happening for each one based on the actor and country. Data:\n{data_str}").text
@@ -330,20 +329,28 @@ def render_visuals(engine):
         else: st.info("No Map Data")
 
     with t_trends:
-        # [FIX] BAR GRAPH for Trends
+        # [FIXED KEYERROR]
         sql_trend = """
-            SELECT DATE, COUNT(*) as "Event Volume"
+            SELECT DATE, COUNT(*) as "EVENT_VOLUME"
             FROM EVENTS_DAGSTER 
             GROUP BY 1 ORDER BY 1 ASC
         """
         df = safe_read_sql(engine, sql_trend)
         if not df.empty:
-            df['Date'] = pd.to_datetime(df['DATE'], format='%Y%m%d')
-            # Using Bar Chart as requested
+            # 1. FORCE UPPERCASE COLUMNS to fix KeyError: 'DATE'
+            df.columns = [c.upper() for c in df.columns]
+            
+            # 2. Handle Date Conversion safely
+            try:
+                df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
+            except:
+                df['Date'] = pd.to_datetime(df['DATE'])
+
+            # 3. Render Bar Chart
             chart = alt.Chart(df).mark_bar(color='#3b82f6').encode(
                 x=alt.X('Date', axis=alt.Axis(format='%b %d')),
-                y='Event Volume',
-                tooltip=['Date', 'Event Volume']
+                y=alt.Y('EVENT_VOLUME', title='Event Volume'),
+                tooltip=['Date', 'EVENT_VOLUME']
             ).properties(height=350)
             st.altair_chart(chart, use_container_width=True)
         else: st.info("No trend data available.")
@@ -374,7 +381,6 @@ def render_visuals(engine):
         
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
-            # [FIX] Read Button for Feed
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
                 "Date": st.column_config.TextColumn("Date"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
@@ -426,7 +432,6 @@ def main():
         p = None
         if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
-        # [FIX] Button sends Specific Trigger
         if b3.button("📈 Trends"): p = "Show me the top 5 trending events by article volume."
         
         st.markdown("""
@@ -458,7 +463,6 @@ def main():
                             if matched:
                                 st.markdown(m_txt)
                                 if m_df is not None and not m_df.empty: 
-                                    # [FIX] Smart Link Injector for Trends
                                     if 'NEWS_LINK' in m_df.columns:
                                         st.caption("Top Trending Sources:")
                                         st.dataframe(
@@ -478,7 +482,6 @@ def main():
                                     resp = qe.query(prompt)
                                     st.markdown(resp.response)
                                     
-                                    # [FIX] Smart Link Injector for AI
                                     if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
                                         sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
