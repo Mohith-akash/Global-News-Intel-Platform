@@ -6,14 +6,11 @@ import pandas as pd
 import snowflake.connector
 import os
 from snowflake.connector.pandas_tools import write_pandas
-from dagster import asset, Output, MetadataValue, Definitions, ScheduleDefinition, define_asset_job
+from dagster import asset, Output, Definitions, ScheduleDefinition, define_asset_job
 from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
 load_dotenv()
-
-GDELT_MASTER_URL = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
-TARGET_TABLE = "EVENTS_DAGSTER"
 
 # Snowflake Config
 SNOWFLAKE_CONFIG = {
@@ -26,42 +23,45 @@ SNOWFLAKE_CONFIG = {
     "role": "ACCOUNTADMIN"
 }
 
+TARGET_TABLE = "EVENTS_DAGSTER"
+
+# --- HELPER: Get Latest GDELT URL ---
+def get_gdelt_url():
+    """
+    Constructs the URL for the previous 15-minute interval to ensure file exists.
+    """
+    # Go back 15 minutes to be safe (GDELT takes time to upload)
+    now = datetime.datetime.utcnow() - datetime.timedelta(minutes=15)
+    
+    # Round down to nearest 15 minutes
+    rounded_minute = (now.minute // 15) * 15
+    rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
+    
+    timestamp = rounded_time.strftime("%Y%m%d%H%M00")
+    url = f"http://data.gdeltproject.org/gdeltv2/{timestamp}.export.CSV.zip"
+    
+    print(f"🕒 Generated Timestamp: {timestamp}")
+    print(f"🔗 Target URL: {url}")
+    return url
+
 # --- ASSETS ---
 
 @asset
 def gdelt_raw_data() -> pd.DataFrame:
-    """
-    Ingests the latest GDELT Event batch.
-    """
-    print(f"--- Starting Extraction Pipeline ---")
+    print(f"--- Starting Hourly Extraction ---")
     
-    # GDELT updates every 15 mins. We look for the MOST RECENT file.
-    # We grab the master list and find the last entry.
+    url = get_gdelt_url()
+    
     try:
-        response = requests.get(GDELT_MASTER_URL)
-        response.raise_for_status()
-        
-        # Get the last line that is an export CSV
-        lines = response.text.splitlines()
-        target_url = None
-        
-        # Iterate backwards to find the latest English export
-        for line in reversed(lines):
-            if "export.CSV.zip" in line:
-                target_url = line.split(" ")[-1]
-                break
-                
-        if not target_url:
-            print("Warning: No URL found.")
-            return pd.DataFrame()
+        r = requests.get(url, timeout=15)
+        if r.status_code != 200:
+            print(f"⚠️ File not found (Status {r.status_code}). Skipping this run.")
+            return pd.DataFrame() # Return empty DF, don't crash
             
-        print(f"Found Target URL: {target_url}")
-
-        r = requests.get(target_url)
         z = zipfile.ZipFile(io.BytesIO(r.content))
         csv_filename = z.namelist()[0]
         
-        print("Parsing CSV...")
+        print(f"📂 Processing: {csv_filename}")
         with z.open(csv_filename) as f:
             df = pd.read_csv(f, sep='\t', header=None, 
                              usecols=[0, 1, 6, 7, 29, 30, 31, 34, 60])
@@ -72,65 +72,55 @@ def gdelt_raw_data() -> pd.DataFrame:
             "SENTIMENT_SCORE", "NEWS_LINK"
         ]
         
-        # Data Type Enforcement
+        # Enforce Types
         df['EVENT_ID'] = df['EVENT_ID'].astype(str)
         df['DATE'] = df['DATE'].astype(str)
         
-        print(f"Extraction Complete: {len(df)} rows ready for loading.")
+        print(f"✅ Extracted {len(df)} rows.")
         return df
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Extraction Error: {e}")
         return pd.DataFrame()
 
 @asset
 def gdelt_snowflake_table(gdelt_raw_data: pd.DataFrame) -> Output:
-    """
-    Loads data into Snowflake.
-    """
     df = gdelt_raw_data
     
     if df.empty:
-        return Output(None, metadata={"status": "Skipped - No Data"})
+        print("⚠️ No data to load. Exiting.")
+        return Output(None, metadata={"status": "Skipped"})
 
-    print(f"Connecting to Snowflake Account: {SNOWFLAKE_CONFIG['account']}...")
-    
+    print(f"🔌 Connecting to Snowflake...")
     conn = snowflake.connector.connect(**SNOWFLAKE_CONFIG)
     
     try:
-        cursor = conn.cursor()
-        cursor.execute(f"USE WAREHOUSE {SNOWFLAKE_CONFIG['warehouse']}")
-        cursor.execute(f"USE DATABASE {SNOWFLAKE_CONFIG['database']}")
-        cursor.execute(f"USE SCHEMA {SNOWFLAKE_CONFIG['schema']}")
-        cursor.close()
-
+        # 1. Write Data
         success, n_chunks, n_rows, _ = write_pandas(
             conn, 
             df, 
             TARGET_TABLE, 
             auto_create_table=True,
-            overwrite=False # Append new data, don't overwrite!
+            overwrite=False
         )
-        print(f"Upload Successful: {n_rows} rows inserted into {TARGET_TABLE}.")
+        
+        # 2. CRITICAL: Commit the transaction!
+        conn.commit()
+        
+        print(f"🎉 SUCCESS: Inserted {n_rows} rows into {TARGET_TABLE}.")
+        
+    except Exception as e:
+        print(f"❌ Load Error: {e}")
+        raise e # Fail the run so we know
         
     finally:
         conn.close()
     
-    return Output(
-        f"Uploaded {n_rows} rows", 
-        metadata={
-            "Row Count": n_rows,
-            "Target Table": TARGET_TABLE
-        }
-    )
+    return Output(f"Uploaded {n_rows} rows", metadata={"rows": n_rows})
 
-# --- JOB & SCHEDULE ---
-
-# 1. Define a Job that materializes the assets
+# --- JOB DEFINITIONS ---
 gdelt_job = define_asset_job(name="gdelt_ingestion_job", selection="*")
 
-# 2. Define a Schedule (Run every hour)
-# Cron expression: "0 * * * *" means "At minute 0 of every hour"
 gdelt_schedule = ScheduleDefinition(
     job=gdelt_job,
     cron_schedule="0 * * * *", 
