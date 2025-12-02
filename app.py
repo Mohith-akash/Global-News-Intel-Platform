@@ -94,8 +94,6 @@ def safe_read_sql(_engine, sql, params=None):
         with _engine.connect() as conn:
             return pd.read_sql(text(sql), conn, params=params)
     except Exception as e:
-        # [DEBUG MODE] Print error to screen so we know why it's failing
-        st.error(f"⚠️ SQL Error: {str(e)}")
         logger.error(f"SQL Error: {e}")
         return pd.DataFrame()
 
@@ -104,6 +102,9 @@ def is_safe_sql(sql: str) -> bool:
     low = sql.lower()
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
+
+def clean_key(text):
+    return text.lower().replace("_", " ").replace("-", " ").strip()
 
 # [HEADLINE CLEANER]
 def format_headline(url):
@@ -156,7 +157,7 @@ def get_query_engine(_engine):
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL` for rankings.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
             "4. **Response:** Return SQL in metadata."
         )
@@ -248,21 +249,44 @@ def render_sidebar(engine):
         if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
+# [UPDATED METRICS HUD]
 def render_hud(engine):
-    metrics = safe_read_sql(engine, "SELECT COUNT(*) as T, AVG(SENTIMENT_SCORE) as S, AVG(CASE WHEN IMPACT_SCORE<0 THEN IMPACT_SCORE END) as C FROM EVENTS_DAGSTER")
-    if metrics.empty: return
-    
-    vol = metrics.iloc[0,0]
-    sent = ((metrics.iloc[0,1] or 0) + 10) / 20 * 100
-    conf = abs(metrics.iloc[0,2] or 0)
-    
+    # 1. Volume
+    sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
+    # 2. Hotspot (Most active country)
+    sql_hotspot = "SELECT ACTOR_COUNTRY_CODE, COUNT(*) FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 1"
+    # 3. Critical Alerts (High Impact)
+    sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) >= 6"
+
+    # Defaults
+    vol, hotspot, crit = 0, "Scanning...", 0
+
+    try:
+        # Volume
+        df_vol = safe_read_sql(engine, sql_vol)
+        if not df_vol.empty: vol = df_vol.iloc[0,0]
+
+        # Hotspot
+        df_hot = safe_read_sql(engine, sql_hotspot)
+        if not df_hot.empty: 
+            code = df_hot.iloc[0,0]
+            try:
+                # Convert "US" -> "United States"
+                c = pycountry.countries.get(alpha_2=code)
+                hotspot = c.name if c else code
+            except: hotspot = code
+
+        # Critical
+        df_crit = safe_read_sql(engine, sql_crit)
+        if not df_crit.empty: crit = df_crit.iloc[0,0]
+
+    except Exception as e:
+        hotspot = "Offline"
+
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("Signal Volume", f"{vol:,}", delta="Real-time")
-    with c2:
-        fig = go.Figure(go.Indicator(mode="gauge+number", value=sent, title={'text':"Stability Score"}, gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}))
-        fig.update_layout(height=180, margin=dict(t=50,b=10,l=20,r=20), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
-        st.plotly_chart(fig, use_container_width=True)
-    with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
+    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total analyzed events.")
+    with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Country with the most news right now.")
+    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="High Impact", delta_color="inverse", help="Events with extreme Impact Score.")
 
 def render_ticker(engine):
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
@@ -291,7 +315,7 @@ def render_visuals(engine):
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("No Map Data. If Snowflake error appears above, fix quota.")
+        else: st.info("No Map Data")
 
     # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
@@ -323,7 +347,7 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (CLEAN)]
+    # [TAB 3: GLOBAL FEED (FIXED)]
     with t_feed:
         base_sql = """
             SELECT 
