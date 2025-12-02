@@ -60,32 +60,18 @@ def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
-        
-        /* HIDE PROFILE & FOOTER */
         header {visibility: hidden;}
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         .stDeployButton {display:none;}
-        
-        /* Spacing */
         .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
-        
-        /* Metrics */
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
-        
-        /* Chat */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
-        
-        /* Report Box */
         .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
-        
-        /* Example Box */
-        .example-box {
-            background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
-        }
+        .example-box { background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; }
         .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
     </style>
     """, unsafe_allow_html=True)
@@ -138,7 +124,6 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # [SMART BOT BRAIN]
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**DATA DICTIONARY:**\n"
@@ -149,7 +134,7 @@ def get_query_engine(_engine):
             "**CRITICAL RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column in your SQL so users can read the news.\n"
             "2. **DEFINING VIOLENCE:** 'Most violent' means the LOWEST Impact Score (e.g. -10). Sort ASCENDING.\n"
-            "3. **NO NULLS:** When looking for extremes (highest/lowest), you MUST add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "3. **NO NULLS:** When looking for extremes, add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "4. **NULLS LAST:** Always append `NULLS LAST` to ORDER BY.\n"
             "5. **Response:** Return SQL in metadata."
         )
@@ -162,43 +147,15 @@ def get_query_engine(_engine):
 def run_manual_override(prompt, engine):
     p = prompt.lower()
     
-    # [KNOWLEDGE BASE]
     definitions = {
         "conflict index": "### 🛡️ Conflict Index Definition\nThis measures the **intensity** of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests and threats.\n- **8-10:** Military assault and war.",
         "stability": "### ⚖️ Stability Score\nRepresents the overall **tone/sentiment** of news coverage.\n- **< 40:** High Instability (Crisis/War).\n- **> 60:** High Stability (Peace/Trade).",
         "impact score": "### 💥 Impact Score\nMeasures the significance of an event (-10 to 10).\n- **Negative:** Conflict (Riots, War).\n- **Positive:** Cooperation (Aid, Treaties)."
     }
-    
     for key, explanation in definitions.items():
         if key in p:
             return True, None, explanation, "-- Knowledge Base Retrieval"
 
-    # [OVERRIDE: TOP 5 TRENDS WITH LINKS]
-    if "top 5 trending" in p:
-        sql = """
-            SELECT 
-                MAIN_ACTOR, 
-                ACTOR_COUNTRY_CODE, 
-                ARTICLE_COUNT, 
-                NEWS_LINK,
-                DATE
-            FROM EVENTS_DAGSTER 
-            WHERE NEWS_LINK IS NOT NULL 
-            ORDER BY ARTICLE_COUNT DESC NULLS LAST 
-            LIMIT 5
-        """
-        df = safe_read_sql(engine, sql)
-        if not df.empty:
-            df.columns = [c.upper() for c in df.columns] # Normalize Cols
-            model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-            data_str = df.drop(columns=['NEWS_LINK']).to_string(index=False)
-            summary = model.complete(f"Here are the top 5 viral geopolitical events by article volume. Explain briefly what is happening for each one based on the actor and country. Data:\n{data_str}").text
-            
-            return True, df, summary, sql
-        else:
-            return True, None, "No trending data available right now.", sql
-
-    # [OVERRIDE: USA vs China]
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
@@ -317,7 +274,8 @@ def render_ticker(engine):
     components.html(html, height=55)
 
 def render_visuals(engine):
-    t_map, t_trends, t_feed = st.tabs(["🌐 3D MAP", "📈 TRENDS", "📋 FEED"])
+    # [UPDATED TABS] Removed Trends Chart, Added Trending News Leaderboard
+    t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
     
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
@@ -328,32 +286,34 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    with t_trends:
-        # [FIXED KEYERROR]
-        sql_trend = """
-            SELECT DATE, COUNT(*) as "EVENT_VOLUME"
+    # [NEW] TRENDING NEWS LEADERBOARD (Top 50 Viral Events)
+    with t_trending:
+        sql = """
+            SELECT 
+                MAIN_ACTOR as "Topic", 
+                NEWS_LINK as "Source", 
+                ACTOR_COUNTRY_CODE as "Country", 
+                ARTICLE_COUNT as "Reports"
             FROM EVENTS_DAGSTER 
-            GROUP BY 1 ORDER BY 1 ASC
+            WHERE NEWS_LINK IS NOT NULL 
+            ORDER BY ARTICLE_COUNT DESC 
+            LIMIT 50
         """
-        df = safe_read_sql(engine, sql_trend)
+        df = safe_read_sql(engine, sql)
         if not df.empty:
-            # 1. FORCE UPPERCASE COLUMNS to fix KeyError: 'DATE'
-            df.columns = [c.upper() for c in df.columns]
-            
-            # 2. Handle Date Conversion safely
-            try:
-                df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
-            except:
-                df['Date'] = pd.to_datetime(df['DATE'])
-
-            # 3. Render Bar Chart
-            chart = alt.Chart(df).mark_bar(color='#3b82f6').encode(
-                x=alt.X('Date', axis=alt.Axis(format='%b %d')),
-                y=alt.Y('EVENT_VOLUME', title='Event Volume'),
-                tooltip=['Date', 'EVENT_VOLUME']
-            ).properties(height=350)
-            st.altair_chart(chart, use_container_width=True)
-        else: st.info("No trend data available.")
+            st.dataframe(
+                df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Topic": st.column_config.TextColumn("Topic (Actor)", width="medium"),
+                    "Source": st.column_config.LinkColumn("Link", display_text="🔗 Read"),
+                    "Country": st.column_config.TextColumn("Country", width="small"),
+                    "Reports": st.column_config.NumberColumn("Volume", format="%d")
+                }
+            )
+        else:
+            st.info("No trending data available yet.")
 
     with t_feed:
         countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY 1")
@@ -384,7 +344,7 @@ def render_visuals(engine):
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
                 "Date": st.column_config.TextColumn("Date"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                "Source": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")
+                "Source": st.column_config.LinkColumn("Source", display_text="🔗 Read")
             })
         else: st.info("No feed data.")
 
@@ -428,11 +388,11 @@ def main():
     with c_chat:
         st.subheader("💬 AI Analyst")
         
-        b1, b2, b3 = st.columns(3)
+        # [REMOVED TRENDS BUTTON]
+        b1, b2 = st.columns(2)
         p = None
-        if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
-        if b3.button("📈 Trends"): p = "Show me the top 5 trending events by article volume."
+        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
         st.markdown("""
         <div class="example-box">
@@ -491,7 +451,7 @@ def main():
                                                     st.caption("Contextual Data:")
                                                     st.dataframe(
                                                         df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
                                                         hide_index=True
                                                     )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
