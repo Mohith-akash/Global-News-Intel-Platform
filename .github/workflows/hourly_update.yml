@@ -1,21 +1,23 @@
+# .github/workflows/hourly_update.yml
 name: Hourly GDELT Backfill
 
 on:
   schedule:
-    - cron: '0 * * * *'    # hourly
+    - cron: '0 * * * *'    # runs at minute 0 every hour
   workflow_dispatch:
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -32,23 +34,23 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements.txt
 
-      - name: Optional extras (if not in requirements.txt)
+      - name: (Optional) Install extras not in requirements
         run: |
-          # Only if needed; safe to keep but prefer putting these into requirements.txt
+          # Only if you truly need extras not listed in requirements.txt
           python -m pip install snowflake-connector-python pandas requests python-dotenv
 
       - name: Debug: show repository top-level & python path
         run: |
-          echo "Working dir: $(pwd)"
+          echo "Working directory: $(pwd)"
           ls -la
           python -c "import sys; print('python executable:', sys.executable); print('sys.path[:3]:', sys.path[:3])"
 
-      - name: Verify pipeline.py and imports
+      - name: Verify pipeline module and critical imports
         run: |
           python - <<'PY'
           import importlib, sys
-          missing = []
           modules = ['pipeline','dagster','pandas','requests','snowflake.connector','dotenv']
+          missing = []
           for m in modules:
               try:
                   importlib.import_module(m)
