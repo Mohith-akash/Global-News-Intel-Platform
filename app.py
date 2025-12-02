@@ -94,6 +94,8 @@ def safe_read_sql(_engine, sql, params=None):
         with _engine.connect() as conn:
             return pd.read_sql(text(sql), conn, params=params)
     except Exception as e:
+        # [DEBUG MODE] Print error to screen so we know why it's failing
+        st.error(f"⚠️ SQL Error: {str(e)}")
         logger.error(f"SQL Error: {e}")
         return pd.DataFrame()
 
@@ -102,9 +104,6 @@ def is_safe_sql(sql: str) -> bool:
     low = sql.lower()
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
-
-def clean_key(text):
-    return text.lower().replace("_", " ").replace("-", " ").strip()
 
 # [HEADLINE CLEANER]
 def format_headline(url):
@@ -157,7 +156,7 @@ def get_query_engine(_engine):
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL` for rankings.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
             "4. **Response:** Return SQL in metadata."
         )
@@ -292,7 +291,7 @@ def render_visuals(engine):
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("No Map Data")
+        else: st.info("No Map Data. If Snowflake error appears above, fix quota.")
 
     # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
@@ -324,7 +323,7 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (FIXED)]
+    # [TAB 3: GLOBAL FEED (CLEAN)]
     with t_feed:
         base_sql = """
             SELECT 
@@ -378,7 +377,7 @@ def main():
     style_app()
     engine = get_db_engine()
     
-    # [CRITICAL FIX: SESSION STATE INIT]
+    # [CRITICAL: Init Session State]
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
         
