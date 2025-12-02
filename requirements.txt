@@ -4,7 +4,14 @@ altair
 plotly
 python-dotenv
 llama-index
-google-generativeai
-snowflake-connector-python
-sqlalchemy
+llama-index-core
+llama-index-llms-gemini
+llama-index-embeddings-gemini
+# --- PINNED VERSIONS TO FIX CRASH ---
+snowflake-connector-python>=3.10.0,<4.0.0
+snowflake-sqlalchemy>=1.5.0
+sqlalchemy>=1.4.0
+# ------------------------------------
 pycountry
+dagster
+requests

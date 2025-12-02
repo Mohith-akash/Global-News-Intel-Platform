@@ -55,13 +55,10 @@ def fetch_gdelt_urls(days):
     valid_urls = []
     # Stream process the lines to save memory
     for line in response.text.splitlines():
-        # Check if line contains any of our target dates AND is an export CSV
         if "export.CSV.zip" in line:
-            # GDELT format: ID HASH URL
             parts = line.split(" ")
             if len(parts) > 2:
                 url = parts[-1]
-                # Check if URL contains our date pattern (e.g. /20250101120000.export...)
                 if any(d in url for d in target_dates):
                     valid_urls.append(url)
     
@@ -75,7 +72,6 @@ def process_and_upload(urls):
     conn = get_snowflake_conn()
     total_uploaded = 0
     
-    # Process in chunks
     for i in range(0, len(urls), BATCH_SIZE):
         batch_urls = urls[i : i + BATCH_SIZE]
         print(f"\n🔄 Processing Batch {i // BATCH_SIZE + 1} ({len(batch_urls)} files)...")
@@ -92,7 +88,6 @@ def process_and_upload(urls):
                 csv_filename = z.namelist()[0]
                 
                 with z.open(csv_filename) as f:
-                    # Parse only columns we need
                     df = pd.read_csv(f, sep='\t', header=None, 
                                      usecols=[0, 1, 6, 7, 29, 30, 31, 34, 60])
                     
@@ -102,7 +97,6 @@ def process_and_upload(urls):
                         "SENTIMENT_SCORE", "NEWS_LINK"
                     ]
                     
-                    # Data Cleaning
                     df['EVENT_ID'] = df['EVENT_ID'].astype(str)
                     df['DATE'] = df['DATE'].astype(str)
                     batch_dfs.append(df)
@@ -114,8 +108,14 @@ def process_and_upload(urls):
         if not batch_dfs:
             continue
             
-        # Combine all DFs in this batch
         master_df = pd.concat(batch_dfs, ignore_index=True)
+        
+        # --- CRITICAL FIX: DEDUPING ---
+        rows_before_dedupe = len(master_df)
+        master_df.drop_duplicates(subset=['EVENT_ID'], keep='first', inplace=True)
+        rows_after_dedupe = len(master_df)
+        print(f"   🧹 Deduped: Removed {rows_before_dedupe - rows_after_dedupe} duplicate event IDs.")
+        # --- END CRITICAL FIX ---
         
         if master_df.empty:
             continue
@@ -128,7 +128,7 @@ def process_and_upload(urls):
                 master_df, 
                 TARGET_TABLE, 
                 auto_create_table=True,
-                overwrite=False  # IMPORTANT: False means APPEND to existing data
+                overwrite=False  # Append new data
             )
             total_uploaded += n_rows
             print(f"   ✅ Batch Complete. Total uploaded so far: {total_uploaded:,}")
@@ -147,6 +147,5 @@ if __name__ == "__main__":
         total = process_and_upload(urls)
         print(f"\n🎉 BACKFILL COMPLETE!")
         print(f"📊 Total Incidents Ingested: {total:,}")
-        print("IMPORTANT: Now run the 'CREATE OR REPLACE TABLE' SQL command in Snowflake to update your clean table.")
     else:
         print("No URLs found. Check connection.")
