@@ -59,21 +59,40 @@ def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
+        
+        /* Sidebar */
         section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
-        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding-left: 8px;}
+        
+        /* Cards */
+        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.8rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.5rem; }
+        
+        /* Chat */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
         
-        /* Report Box */
-        .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
+        /* Ticker */
+        .ticker-container {
+            width: 100%; overflow: hidden; background-color: #450a0a; color: #fecaca;
+            padding: 10px; border-left: 5px solid #ef4444; margin-bottom: 15px;
+            white-space: nowrap; box-sizing: border-box; border-radius: 4px;
+        }
+        .ticker-content {
+            display: inline-block; padding-left: 100%;
+            animation: ticker-anim 30s linear infinite;
+            font-family: monospace; font-weight: bold;
+        }
+        @keyframes ticker-anim { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-100%, 0, 0); } }
         
-        /* Example Questions Box */
+        /* Example Box */
         .example-box {
             background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px;
         }
         .example-item { color: #94a3b8; font-size: 0.9em; margin-bottom: 5px; }
+        
+        /* Report Box */
+        .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -224,43 +243,13 @@ def render_hud(engine):
         st.plotly_chart(fig, use_container_width=True)
     with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
 
-# [FIX] Ticker now has inline CSS to guarantee visibility inside iframe
 def render_ticker(engine):
     df = safe_read_sql(engine, "SELECT ACTOR_NAME, ACTOR_COUNTRY_NAME, IMPACT_SCORE FROM STG_GDELT_EVENTS WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY EVENT_DATE DESC LIMIT 7")
     if not df.empty:
         df.columns = [c.upper() for c in df.columns]
         items = [f"⚠️ {r['ACTOR_NAME']} ({r['ACTOR_COUNTRY_NAME']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
-        text_content = " &nbsp; | &nbsp; ".join(items)
-        
-        # INLINE CSS for Iframe Isolation
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <style>
-            .ticker-container {{
-                width: 100%; overflow: hidden; background-color: #450a0a; color: #fecaca;
-                padding: 10px; border-left: 5px solid #ef4444; margin-bottom: 0px;
-                white-space: nowrap; box-sizing: border-box; font-family: monospace; font-weight: bold; font-size: 14px;
-            }}
-            .ticker-content {{
-                display: inline-block; padding-left: 100%;
-                animation: ticker-anim 30s linear infinite;
-            }}
-            @keyframes ticker-anim {{
-                0% {{ transform: translate3d(0, 0, 0); }}
-                100% {{ transform: translate3d(-100%, 0, 0); }}
-            }}
-        </style>
-        </head>
-        <body style="margin:0;">
-            <div class="ticker-container">
-                <div class="ticker-content">{text_content}</div>
-            </div>
-        </body>
-        </html>
-        """
-        components.html(html, height=50)
+        text = " &nbsp; | &nbsp; ".join(items)
+        components.html(f"""<div class="ticker-container"><div class="ticker-content">{text}</div></div>""", height=60)
 
 def render_visuals(engine):
     t_map, t_trends, t_feed = st.tabs(["🌐 3D MAP", "📈 TRENDS", "📋 FEED"])
@@ -268,6 +257,7 @@ def render_visuals(engine):
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_NAME as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL GROUP BY 1")
         if not df.empty:
+            # Robust Map: Plot RAW names directly (Plotly handles standard names well)
             fig = px.choropleth(df, locations="Country", locationmode='country names', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
@@ -275,7 +265,7 @@ def render_visuals(engine):
         else: st.info("No Map Data")
 
     with t_trends:
-        # Strict 30 Days filter to avoid "Time Travel"
+        # [FIXED] 30-Day Window for Clean Chart
         sql_trend = """
             SELECT EVENT_DATE, COUNT(*) as V 
             FROM STG_GDELT_EVENTS 
@@ -287,13 +277,14 @@ def render_visuals(engine):
             df.columns = ["Date", "Volume"]
             df['Date'] = pd.to_datetime(df['Date'])
             st.altair_chart(alt.Chart(df).mark_area(line={'color':'#3b82f6'}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='rgba(59, 130, 246, 0.5)', offset=0), alt.GradientStop(color='rgba(59, 130, 246, 0.0)', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(x='Date', y='Volume').properties(height=350), use_container_width=True)
-        else: st.info("No trend data available (last 30 days).")
+        else: st.info("No trend data in last 30 days.")
 
     with t_feed:
         countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_NAME FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY 1")
         opts = ["Global Stream"] + countries.iloc[:,0].tolist() if not countries.empty else ["Global Stream"]
         sel = st.selectbox("Target Selector:", opts)
         
+        # [FIXED] Rich SQL with CASE statement for Categories
         base_sql = """
             SELECT 
                 EVENT_DATE as "Date", ACTOR_COUNTRY_NAME as "Region", ACTOR_NAME as "Actor",
@@ -315,6 +306,7 @@ def render_visuals(engine):
         
         df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
+            # [FIXED] Rich Column Config
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
                 "Date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
@@ -350,12 +342,14 @@ def main():
     with c_chat:
         st.subheader("💬 AI Analyst")
         
+        # [RESTORED] Action Buttons
         b1, b2, b3 = st.columns(3)
         p = None
         if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_NAME IS NOT NULL."
         if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_NAME = 'United Nations'."
         if b3.button("📈 Trends"): p = "Which country (no nulls) has highest event count?"
         
+        # [RESTORED] Example List
         st.markdown("""
         <div class="example-box">
             <div class="example-item">1. Analyze the conflict trend in the Middle East.</div>
