@@ -1,14 +1,6 @@
-streamlit
+# requirements.txt
 pandas
-altair
-plotly
+requests
 python-dotenv
-llama-index
-llama-index-core
-llama-index-llms-gemini
-llama-index-embeddings-gemini
 snowflake-connector-python
-snowflake-sqlalchemy
-sqlalchemy
-pycountry
 dagster
