@@ -15,6 +15,7 @@ import pycountry
 import logging
 import streamlit.components.v1 as components
 import re
+from urllib.parse import urlparse
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(
@@ -60,18 +61,32 @@ def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
+        
+        /* HIDE PROFILE & FOOTER */
         header {visibility: hidden;}
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         .stDeployButton {display:none;}
+        
+        /* Spacing */
         .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
+        
+        /* Metrics */
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
+        
+        /* Chat */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
+        
+        /* Report Box */
         .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
-        .example-box { background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; }
+        
+        /* Example Box */
+        .example-box {
+            background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
+        }
         .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
     </style>
     """, unsafe_allow_html=True)
@@ -104,6 +119,37 @@ def is_safe_sql(sql: str) -> bool:
 
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
+
+# [NEW] SMART HEADLINE PARSER
+def format_headline(url, actor):
+    """
+    Extracts a readable headline from a URL slug.
+    Fallback to Actor Name if URL is generic.
+    """
+    if not url: return f"Update on {actor}"
+    
+    try:
+        # Extract the last part of the URL (the slug)
+        path = urlparse(url).path
+        slug = path.rstrip('/').split('/')[-1]
+        
+        # If slug is numeric or too short, try the second to last part
+        if len(slug) < 5 or slug.isdigit():
+            slug = path.rstrip('/').split('/')[-2]
+
+        # Clean up: replace hyphens/underscores with spaces
+        headline = slug.replace('-', ' ').replace('_', ' ').replace('.html', '').replace('.htm', '')
+        
+        # Capitalize and clean
+        headline = headline.title()
+        
+        # If the result is junk (e.g. "Index" or "Article"), use Actor
+        if len(headline) < 5 or "Index" in headline or "Default" in headline:
+            return f"Latest Report: {actor}"
+            
+        return headline
+    except:
+        return f"Intelligence Report: {actor}"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -274,7 +320,6 @@ def render_ticker(engine):
     components.html(html, height=55)
 
 def render_visuals(engine):
-    # [UPDATED TABS] Removed Trends Chart, Added Trending News Leaderboard
     t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
     
     with t_map:
@@ -286,31 +331,44 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [NEW] TRENDING NEWS LEADERBOARD (Top 50 Viral Events)
+    # [NEW] VIRAL NEWS TABLE
     with t_trending:
+        # Get Top 50 Viral Events (Highest Report Count) sorted by VOLUME
+        # We also look at recent data (e.g. last 7 days) to ensure relevance if possible, 
+        # but pure volume sort is good for "All Time Trending" in the current batch.
         sql = """
             SELECT 
-                MAIN_ACTOR as "Topic", 
-                NEWS_LINK as "Source", 
-                ACTOR_COUNTRY_CODE as "Country", 
-                ARTICLE_COUNT as "Reports"
+                MAIN_ACTOR, 
+                NEWS_LINK, 
+                ARTICLE_COUNT,
+                DATE
             FROM EVENTS_DAGSTER 
             WHERE NEWS_LINK IS NOT NULL 
             ORDER BY ARTICLE_COUNT DESC 
             LIMIT 50
         """
         df = safe_read_sql(engine, sql)
+        
         if not df.empty:
+            # 1. Generate Smart Headlines
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            
+            # 2. Rename Volume
+            df['Reports'] = df['ARTICLE_COUNT']
+            
+            # 3. Create Clean Table (Headline -> Reports -> Link)
+            display_df = df[['Headline', 'Reports', 'NEWS_LINK']]
+            
             st.dataframe(
-                df,
+                display_df,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Topic": st.column_config.TextColumn("Topic (Actor)", width="medium"),
-                    "Source": st.column_config.LinkColumn("Link", display_text="🔗 Read"),
-                    "Country": st.column_config.TextColumn("Country", width="small"),
-                    "Reports": st.column_config.NumberColumn("Volume", format="%d")
-                }
+                    "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
+                    "Reports": st.column_config.NumberColumn("Reports", format="%d 📉"),
+                    "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Now")
+                },
+                column_order=["Headline", "Reports", "NEWS_LINK"] # Explicit Order
             )
         else:
             st.info("No trending data available yet.")
@@ -388,11 +446,11 @@ def main():
     with c_chat:
         st.subheader("💬 AI Analyst")
         
-        # [REMOVED TRENDS BUTTON]
-        b1, b2 = st.columns(2)
+        b1, b2, b3 = st.columns(3)
         p = None
-        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
+        if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
+        if b3.button("📈 Trends"): p = "Show me the top 5 trending events by article volume."
         
         st.markdown("""
         <div class="example-box">
@@ -403,9 +461,6 @@ def main():
             <div class="example-item">5. Summarize activity involving Russia.</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        if "messages" not in st.session_state: st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to the live GDELT stream. Ask me anything."}]
-        for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
         
         if prompt := (st.chat_input("Directive...") or p):
             if st.session_state['llm_locked']:
@@ -451,7 +506,7 @@ def main():
                                                     st.caption("Contextual Data:")
                                                     st.dataframe(
                                                         df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
                                                         hide_index=True
                                                     )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
