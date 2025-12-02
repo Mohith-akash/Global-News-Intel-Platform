@@ -61,28 +61,28 @@ def style_app():
     <style>
         .stApp { background-color: #0b0f19; }
         
-        /* STEALTH MODE: HIDE PROFILE & FOOTER */
+        /* HIDE PROFILE & FOOTER */
         header {visibility: hidden;}
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         .stDeployButton {display:none;}
         
-        /* SPACING */
+        /* Spacing */
         .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
         
-        /* METRICS CARDS */
+        /* Metrics */
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
         
-        /* CHAT BUBBLES */
+        /* Chat */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
         
-        /* REPORT BOX */
+        /* Report Box */
         .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
         
-        /* EXAMPLE QUESTIONS */
+        /* Example Box */
         .example-box {
             background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
         }
@@ -110,10 +110,6 @@ def safe_read_sql(_engine, sql, params=None):
         logger.error(f"SQL Error: {e}")
         return pd.DataFrame()
 
-def get_iso3(country_name):
-    try: return pycountry.countries.search_fuzzy(country_name)[0].alpha_3
-    except: return None
-
 def is_safe_sql(sql: str) -> bool:
     if not sql: return False
     low = sql.lower()
@@ -134,7 +130,7 @@ def get_query_engine(_engine):
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "EVENTS_DAGSTER" # [FIX] Correct Table
+        target_table = "EVENTS_DAGSTER" 
         matched = next((t for t in combined_names if t.upper() == target_table), None)
         
         if not matched: return None
@@ -142,19 +138,20 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # [SMART BOT BRAIN 2.0]
-        # Includes specific fixes for sorting and handling NULL values (The "Poland" Fix)
+        # [SMART BOT BRAIN]
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**DATA DICTIONARY:**\n"
             "- `ACTOR_COUNTRY_CODE`: Country Code (e.g., 'US'=USA, 'CH'=China).\n"
-            "- `IMPACT_SCORE`: Scale -10 (Conflict) to 10 (Cooperation).\n"
+            "- `IMPACT_SCORE`: Scale -10 (Violent/Conflict) to 10 (Peace/Cooperation).\n"
+            "- `NEWS_LINK`: The URL to the source article.\n"
             "\n"
             "**CRITICAL RULES:**\n"
-            "1. **NO NULLS IN RANKING:** When asked for 'highest', 'lowest', 'most violent', or 'top', YOU MUST add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
-            "2. **NULLS LAST:** If sorting by a score, use `ORDER BY [column] DESC NULLS LAST`.\n"
-            "3. **Narrative:** Don't just show a table. Explain the context (e.g. 'This high impact event indicates...').\n"
-            "4. **Response:** Return SQL in metadata."
+            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column in your SQL query so users can verify sources.\n"
+            "2. **DEFINING VIOLENCE:** 'Most violent' means the LOWEST Impact Score (e.g. -10). Sort ASCENDING.\n"
+            "3. **NO NULLS:** When looking for extremes, add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "4. **NULLS LAST:** Always append `NULLS LAST` to ORDER BY.\n"
+            "5. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
@@ -165,7 +162,7 @@ def get_query_engine(_engine):
 def run_manual_override(prompt, engine):
     p = prompt.lower()
     
-    # [FIX] KNOWLEDGE BASE: Bot defines terms instantly
+    # [KNOWLEDGE BASE]
     definitions = {
         "conflict index": "### 🛡️ Conflict Index Definition\nThis measures the **intensity** of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests and threats.\n- **8-10:** Military assault and war.",
         "stability": "### ⚖️ Stability Score\nRepresents the overall **tone/sentiment** of news coverage.\n- **< 40:** High Instability (Crisis/War).\n- **> 60:** High Stability (Peace/Trade).",
@@ -176,7 +173,7 @@ def run_manual_override(prompt, engine):
         if key in p:
             return True, None, explanation, "-- Knowledge Base Retrieval"
 
-    # [FIX] SQL OVERRIDE (USA vs China)
+    # [SQL OVERRIDE] USA vs China
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
@@ -196,16 +193,17 @@ def run_manual_override(prompt, engine):
     return False, None, None, None
 
 def generate_briefing(engine):
+    # [FIX] Added NEWS_LINK selection
     sql = """
-        SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE 
+        SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
-        ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 20
+        ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 15
     """
     df = safe_read_sql(engine, sql)
     if df.empty: return "Insufficient data."
     data = df.to_string(index=False)
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Use full country names:\n{data}").text
+    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data. Format the output with Markdown links for sources like [Source](URL). Data:\n{data}").text
 
 # --- 5. UI COMPONENTS ---
 
@@ -227,7 +225,7 @@ def render_sidebar(engine):
         if count == 0:
             st.error("⚠️ No Data. Check Pipeline.")
         
-        # [FIX] DATE FORMATTING (20251121 -> 21 Nov 2025)
+        # [FIX] DATE FORMATTING
         try:
             with engine.connect() as conn:
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
@@ -260,19 +258,17 @@ def render_hud(engine):
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Signal Volume", f"{vol:,}", delta="Real-time")
     with c2:
-        # [FIX] GAUGE SIZE ADJUSTMENT
         fig = go.Figure(go.Indicator(
             mode="gauge+number", 
             value=sent, 
             title={'text':"Stability Score"}, 
             gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}
         ))
-        fig.update_layout(height=170, margin=dict(t=40,b=10,l=20,r=20), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
+        fig.update_layout(height=180, margin=dict(t=50,b=10,l=20,r=20), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
         st.plotly_chart(fig, use_container_width=True)
     with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
 
 def render_ticker(engine):
-    # [FIX] High Contrast Ticker
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
     text_content = "⚠️ SYSTEM INITIALIZING... SCANNING GLOBAL FEEDS..."
     if not df.empty:
@@ -307,11 +303,10 @@ def render_visuals(engine):
         else: st.info("No Map Data")
 
     with t_trends:
-        # [FIX] SORTED TRENDS (Chronological)
         sql_trend = """
             SELECT DATE, COUNT(*) as V 
             FROM EVENTS_DAGSTER 
-            GROUP BY 1 ORDER BY 1 ASC  -- Sorted Oldest to Newest
+            GROUP BY 1 ORDER BY 1 ASC
         """
         df = safe_read_sql(engine, sql_trend)
         if not df.empty:
@@ -352,7 +347,7 @@ def render_visuals(engine):
             st.dataframe(df, use_container_width=True, hide_index=True, column_config={
                 "Date": st.column_config.TextColumn("Date"),
                 "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                "Source": st.column_config.LinkColumn("Source", display_text="Read Report")
+                "Source": st.column_config.LinkColumn("Source", display_text="🔗 Read")
             })
         else: st.info("No feed data.")
 
@@ -388,7 +383,7 @@ def main():
         p = None
         if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
-        if b3.button("📈 Trends"): p = "Which country (no nulls) has highest event count?"
+        if b3.button("📈 Trends"): p = "Analyze the top 3 countries by event volume and summarize their geopolitical significance."
         
         st.markdown("""
         <div class="example-box">
@@ -414,7 +409,6 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
                             if matched:
                                 st.markdown(m_txt)
@@ -423,15 +417,28 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback
                                 qe = get_query_engine(engine)
                                 if qe:
                                     resp = qe.query(prompt)
-                                    st.write(resp.response)
-                                    if hasattr(resp, 'metadata') and resp.metadata:
-                                        sql = resp.metadata.get('sql_query', '')
+                                    st.markdown(resp.response)
+                                    
+                                    # [NEW] SMART DATA VISUALIZER
+                                    # If the AI generated SQL, run it again to get the table with links
+                                    if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                                        sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
+                                            df_context = safe_read_sql(engine, sql)
+                                            if not df_context.empty:
+                                                # Show table with "Read" buttons
+                                                cols_to_show = [c for c in df_context.columns if c != 'NEWS_LINK']
+                                                if 'NEWS_LINK' in df_context.columns:
+                                                    st.dataframe(
+                                                        df_context, 
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                        hide_index=True
+                                                    )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
+                                    
                                     st.session_state.messages.append({"role":"assistant", "content": resp.response})
                                 else:
                                     st.error("AI Engine unavailable.")
