@@ -15,10 +15,11 @@ import logging
 import re
 from urllib.parse import urlparse
 import pycountry
+from datetime import datetime
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(
-    page_title="Global Intelligence Platform", 
+    page_title="Global Intelligence Platform",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -29,10 +30,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gip")
 
-# Validation
+# Validation (unchanged)
 REQUIRED_ENVS = [
-    "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "SNOWFLAKE_ACCOUNT", 
-    "SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_DATABASE", "SNOWFLAKE_SCHEMA", 
+    "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "SNOWFLAKE_ACCOUNT",
+    "SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_DATABASE", "SNOWFLAKE_SCHEMA",
     "GOOGLE_API_KEY"
 ]
 missing = [k for k in REQUIRED_ENVS if not os.getenv(k)]
@@ -59,24 +60,46 @@ SNOWFLAKE_CONFIG = {
 def style_app():
     st.markdown("""
     <style>
-        .stApp { background-color: #0b0f19; }
+        .stApp { background-color: #0b0f19; color: #e5e7eb; }
         section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 10px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.8rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.5rem; }
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
-        
+
         /* Report Box */
         .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
-        
-        /* Example Questions */
         .example-box { background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-top: 10px; margin-bottom: 10px;}
         .example-item { color: #94a3b8; font-size: 0.9em; margin-bottom: 5px; font-family: monospace; }
+
+        /* Top-right nav tabs */
+        .nav-wrap { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px; margin-bottom: 6px; }
+        .tabs { display:flex; gap:8px; justify-content:flex-end; align-items:center; }
+        .tab-btn {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.06);
+            color: #cbd5e1;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .tab-btn.active {
+            background: linear-gradient(90deg, rgba(14,165,233,0.12), rgba(59,130,246,0.08));
+            border: 1px solid rgba(59,130,246,0.5);
+            color: #e6f0ff;
+            box-shadow: 0 4px 14px rgba(59,130,246,0.06);
+        }
+
+        /* Chat history list */
+        .history-item { background:#0f1724; border:1px solid #1f2937; padding:10px; border-radius:8px; margin-bottom:8px; }
+        .history-meta { color:#94a3b8; font-size:0.8rem; }
+
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. BACKEND ---
+# --- 3. BACKEND (unchanged core functions) ---
 @st.cache_resource
 def get_db_engine():
     url = (
@@ -105,40 +128,31 @@ def is_safe_sql(sql: str) -> bool:
 def clean_key(text):
     return text.lower().replace("_", " ").replace("-", " ").strip()
 
-# [HEAVILY IMPROVED HEADLINE CLEANER]
+# [HEAVILY IMPROVED HEADLINE CLEANER] (unchanged)
 def format_headline(url, actor):
     if not url: return f"Update on {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
-        
-        # If slug is bad (too short, digits, index.html), use previous segment
+
         if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         text = re.sub(r'\.html?$', '', text)
-        
-        # 1. REMOVE DATES (Aggressive)
-        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
-        text = re.sub(r'\b\d{8}\b', '', text) 
-        
-        # 2. REMOVE JUNK SUFFIXES (Long numbers at end)
+
+        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text)
+        text = re.sub(r'\b\d{8}\b', '', text)
         text = re.sub(r'\s[a-zA-Z0-9]{5,}$', '', text)
         text = re.sub(r'\s\d+$', '', text)
-        
-        # 3. GARBAGE DETECTOR (If mostly numbers/hex code)
+
         digit_count = sum(c.isdigit() for c in text)
         if len(text) > 0 and (digit_count / len(text) > 0.3):
             return f"Latest Intelligence: {actor}"
 
-        # 4. Remove Prefixes
         text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
-
         headline = " ".join(text.split()).title()
-        
         if len(headline) < 5: return f"Update on {actor}"
-        
         return headline
     except:
         return f"Intelligence Brief: {actor}"
@@ -151,17 +165,17 @@ def get_query_engine(_engine):
         embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
         Settings.llm = llm
         Settings.embed_model = embed_model
-        
+
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "EVENTS_DAGSTER" 
+        target_table = "EVENTS_DAGSTER"
         matched = next((t for t in combined_names if t.upper() == target_table), None)
-        
+
         if not matched: return None
-        
+
         sql_database = SQLDatabase(_engine, include_tables=[matched])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
-        
+
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
@@ -172,11 +186,10 @@ def get_query_engine(_engine):
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
-    except: return None
+    except:
+        return None
 
-# --- 4. LOGIC MODULES ---
-
-
+# generate_briefing (unchanged)
 def generate_briefing(engine):
     sql = """
         SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
@@ -190,15 +203,11 @@ def generate_briefing(engine):
     brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
 
-# --- 5. UI COMPONENTS ---
-
+# --- 5. UI COMPONENTS (unchanged functions reused) ---
 def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        
-        # Updated Hype Badge for 10M Scale
         st.info("🚀 **Monitoring 10M+ Incidents**\n90-Day Global Horizon (Parquet Optimized)")
-        
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
@@ -206,64 +215,56 @@ def render_sidebar(engine):
                 st.session_state['generated_report'] = report
                 st.session_state['report_sources'] = source_df
                 st.success("Report Ready!")
-        
+
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
         count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
         count = count_df.iloc[0,0] if not count_df.empty else 0
         st.metric("Total Events", f"{count:,}")
-        
+
         try:
             with engine.connect() as conn:
                 res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
                 if res and res[0]:
                     try:
-                        # [FIXED DATE FORMATTING]
                         d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
                         d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
                         st.info(f"📅 **Window:**\n{d_min} to {d_max}")
-                    except: st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
-        except: pass
-            
+                    except:
+                        st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
+        except:
+            pass
+
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
         st.success("☁️ Snowflake Data Cloud")
         st.success("🧠 Google Gemini 2.5")
-        
+
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Reset Session", use_container_width=True):
-            st.session_state.clear(); st.rerun()
+            st.session_state.clear()
+            st.rerun()
 
-# [NEW & IMPROVED METRICS]
 def render_hud(engine):
-    # 1. Volume
     sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
-    
-    # 2. Hotspot (Most active country code)
     sql_hotspot = "SELECT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
-    
-    # 3. Critical Alerts (Events with Extreme Impact)
     sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
 
-    # Defaults
     vol, hotspot, crit = 0, "Scanning...", 0
 
     try:
-        # Get Volume
         df_vol = safe_read_sql(engine, sql_vol)
         if not df_vol.empty: vol = df_vol.iloc[0,0]
 
-        # Get Hotspot (Convert Code to Name if possible)
         df_hot = safe_read_sql(engine, sql_hotspot)
-        if not df_hot.empty: 
+        if not df_hot.empty:
             code = df_hot.iloc[0,0]
             try:
                 c = pycountry.countries.get(alpha_2=code)
-                # Fallback to alpha_3 if 2 fails, or just use code
                 hotspot = c.name if c else code
-            except: hotspot = code
+            except:
+                hotspot = code
 
-        # Get Critical Count
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
 
@@ -282,7 +283,7 @@ def render_ticker(engine):
         df.columns = [c.upper() for c in df.columns]
         items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
-        
+
     html = f"""
     <!DOCTYPE html><html><head><style>
         .ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }}
@@ -294,7 +295,7 @@ def render_ticker(engine):
 
 def render_visuals(engine):
     t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
-    
+
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
@@ -302,9 +303,9 @@ def render_visuals(engine):
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("No Map Data")
+        else:
+            st.info("No Map Data")
 
-    # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
         sql = """
             SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
@@ -314,12 +315,11 @@ def render_visuals(engine):
             LIMIT 70
         """
         df = safe_read_sql(engine, sql)
-        
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             df = df.drop_duplicates(subset=['Headline']).head(20)
-            
+
             st.dataframe(
                 df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
                 use_container_width=True,
@@ -334,7 +334,6 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (CLEAN)]
     with t_feed:
         base_sql = """
             SELECT 
@@ -349,32 +348,25 @@ def render_visuals(engine):
             LIMIT 50
         """
         df = safe_read_sql(engine, base_sql)
-        
         if not df.empty:
-            df.columns = [c.upper() for c in df.columns] 
-            
-            # 1. Clean Headlines
+            df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            
-            # 2. Format Date (02 Dec)
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except:
                 df['Date'] = df['DATE']
 
-            # 3. Type (Impact Words)
             def get_type(score):
                 if score < -3: return "🔥 Conflict"
                 if score > 3: return "🤝 Diplomacy"
                 return "📢 General"
-            
+
             df['Type'] = df['IMPACT_SCORE'].apply(get_type)
 
-            # 4. Display 4 Clean Columns
             st.dataframe(
-                df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
-                use_container_width=True, 
-                hide_index=True, 
+                df[['Date', 'Headline', 'Type', 'NEWS_LINK']],
+                use_container_width=True,
+                hide_index=True,
                 column_config={
                     "Date": st.column_config.TextColumn("Date", width="small"),
                     "Headline": st.column_config.TextColumn("Headline", width="large"),
@@ -382,30 +374,40 @@ def render_visuals(engine):
                     "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read")
                 }
             )
-        else: st.info("No feed data.")
+        else:
+            st.info("No feed data.")
 
-# --- 6. MAIN ---
+# --- 6. MAIN (updated layout + chat history) ---
 def main():
     style_app()
     engine = get_db_engine()
-    
-    # [CRITICAL: Init Session State]
+
+    # session state initialization for UI switching & history
+    if 'active_tab' not in st.session_state:
+        st.session_state['active_tab'] = 'chat'  # 'chat' or 'visuals'
+
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
-        
+
+    # Chat history: a list of entries {prompt, response, ts}
+    if 'chat_history' not in st.session_state:
+        st.session_state['chat_history'] = []  # newest first
+
+    # Keep previous 'messages' to preserve initial greeting if desired
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to the live GDELT stream. Ask me anything."}]
 
     render_sidebar(engine)
     st.title("Global Intelligence Command Center")
     st.markdown("**Real-Time Geopolitical Signal Processing**")
-    
+
+    # Show generated report if present (unchanged)
     if 'generated_report' in st.session_state:
         with st.container():
             st.markdown("<div class='report-box'>", unsafe_allow_html=True)
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
-            
+
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
                 st.caption("Sources:")
                 try:
@@ -416,9 +418,10 @@ def main():
                         column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
                         hide_index=True
                     )
-                except: pass
+                except:
+                    pass
 
-            if st.button("Close"): 
+            if st.button("Close"):
                 del st.session_state['generated_report']
                 if 'report_sources' in st.session_state: del st.session_state['report_sources']
                 st.rerun()
@@ -427,67 +430,130 @@ def main():
     render_hud(engine)
     render_ticker(engine)
     st.divider()
-    
-    c_chat, c_viz = st.columns([35, 65])
-    with c_chat:
-        st.subheader("💬 AI Analyst")
-        
-        b1, b2 = st.columns(2)
-        p = None
-        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
-        
-        st.markdown("""
-        <div class="example-box">
-            <div class="example-item">1. Analyze the conflict trend in the Middle East.</div>
-            <div class="example-item">2. Which country has the lowest sentiment score?</div>
-            <div class="example-item">3. What is Conflict Index?</div>
-            <div class="example-item">4. Compare media coverage of USA vs China.</div>
-            <div class="example-item">5. Summarize activity involving Russia.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if prompt := (st.chat_input("Directive...") or p):
-            if st.session_state['llm_locked']:
-                st.warning("⚠️ Processing previous request...")
-            else:
-                st.session_state.messages.append({"role":"user", "content":prompt})
-                if not p: st.chat_message("user").write(prompt)
-                
-                with st.chat_message("assistant"):
-                    with st.spinner("Processing..."):
-                        st.session_state['llm_locked'] = True
-                        try:
-                            # 2. AI Fallback
-                            qe = get_query_engine(engine)
-                            if qe:
-                                resp = qe.query(prompt)
-                                st.markdown(resp.response)
-                                
-                                if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
-                                    sql = resp.metadata['sql_query']
-                                    if is_safe_sql(sql):
-                                        df_context = safe_read_sql(engine, sql)
-                                        if not df_context.empty:
-                                            df_context.columns = [c.upper() for c in df_context.columns]
-                                            if 'NEWS_LINK' in df_context.columns:
-                                                st.caption("Contextual Data:")
-                                                st.dataframe(
-                                                    df_context, 
-                                                    column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
-                                                    hide_index=True
-                                                )
-                                        with st.expander("SQL Trace"): st.code(sql, language='sql')
-                                
-                                st.session_state.messages.append({"role":"assistant", "content": resp.response})
-                            else:
-                                st.error("AI Engine unavailable.")
-                        except Exception as e:
-                            st.error(f"Query Failed: {e}")
-                        finally:
-                            st.session_state['llm_locked'] = False
 
-    with c_viz: render_visuals(engine)
+    # NAVBAR-LIKE BUTTONS: horizontal rule above and buttons aligned right
+    st.markdown('<div class="nav-wrap">', unsafe_allow_html=True)
+    cols = st.columns([2, 2, 1, 5, 1])    # last columns are for buttons (right aligned)
+    # Using the last two columns for buttons so they're on the right side
+    # Render button HTML to get custom styling and active state via session_state
+    active = st.session_state['active_tab']
+    tab_left_html = f'<button class="tab-btn {"active" if active=="chat" else ""}">Chat</button>'
+    tab_right_html = f'<button class="tab-btn {"active" if active=="visuals" else ""}">Visuals</button>'
+
+    # Chat button (left)
+    with cols[0]:
+        if st.button("Chat"):
+            st.session_state['active_tab'] = 'chat'
+            st.experimental_rerun()
+
+    # Visuals button (next to it)
+    with cols[1]:
+        if st.button("Visuals"):
+            st.session_state['active_tab'] = 'visuals'
+            st.experimental_rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Main switching logic: when 'chat' show example box + chat UI; when 'visuals' show the full render_visuals
+    if st.session_state['active_tab'] == 'chat':
+        # Put chat area full width (left column previously)
+        c1, c2 = st.columns([65, 35])  # give more space to the chat pane
+        with c1:
+            st.subheader("💬 AI Analyst")
+
+            # Quick buttons for standard prompts
+            b1, b2 = st.columns(2)
+            p = None
+            if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+            if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
+
+            st.markdown("""
+            <div class="example-box">
+                <div class="example-item">1. Analyze the conflict trend in the Middle East.</div>
+                <div class="example-item">2. Which country has the lowest sentiment score?</div>
+                <div class="example-item">3. What is Conflict Index?</div>
+                <div class="example-item">4. Compare media coverage of USA vs China.</div>
+                <div class="example-item">5. Summarize activity involving Russia.</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Chat history display (newest first, limited to 5)
+            if st.session_state['chat_history']:
+                st.markdown("**Recent Conversations**")
+                for idx, entry in enumerate(st.session_state['chat_history'][:5]):
+                    # newest appear first because we insert at 0
+                    with st.expander(f"{idx+1}. {entry['prompt'][:80]}...", expanded=False):
+                        st.markdown(f"<div class='history-meta'>When: {entry['ts']}</div>", unsafe_allow_html=True)
+                        st.markdown("**User:**")
+                        st.markdown(f"> {entry['prompt']}")
+                        st.markdown("**Assistant:**")
+                        st.markdown(entry['response'] or "_No response recorded_")
+
+            # Input area
+            user_prompt = st.chat_input("Directive...") if not p else p
+
+            if user_prompt:
+                if st.session_state['llm_locked']:
+                    st.warning("⚠️ Processing previous request...")
+                else:
+                    # Show the user's message in chat UI
+                    st.chat_message("user").write(user_prompt)
+                    st.session_state['llm_locked'] = True
+                    try:
+                        qe = get_query_engine(engine)
+                        if qe:
+                            resp = qe.query(user_prompt)
+                            # display result
+                            resp_text = resp.response if hasattr(resp, 'response') else str(resp)
+                            st.chat_message("assistant").write(resp_text)
+                            # store into chat_history (newest first)
+                            st.session_state['chat_history'].insert(0, {
+                                "prompt": user_prompt,
+                                "response": resp_text,
+                                "ts": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                            })
+                            # trim to 5
+                            if len(st.session_state['chat_history']) > 5:
+                                st.session_state['chat_history'] = st.session_state['chat_history'][:5]
+                            # If SQL available, show context & SQL trace (unchanged logic)
+                            if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                                sql = resp.metadata['sql_query']
+                                if is_safe_sql(sql):
+                                    df_context = safe_read_sql(engine, sql)
+                                    if not df_context.empty:
+                                        df_context.columns = [c.upper() for c in df_context.columns]
+                                        if 'NEWS_LINK' in df_context.columns:
+                                            st.caption("Contextual Data:")
+                                            st.dataframe(
+                                                df_context,
+                                                column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                hide_index=True
+                                            )
+                                    with st.expander("SQL Trace"):
+                                        st.code(sql, language='sql')
+                        else:
+                            st.error("AI Engine unavailable.")
+                    except Exception as e:
+                        st.error(f"Query Failed: {e}")
+                    finally:
+                        st.session_state['llm_locked'] = False
+
+        with c2:
+            # Right column can show small controls or summary
+            st.subheader("Quick Actions")
+            if st.button("Clear Chat History"):
+                st.session_state['chat_history'] = []
+                st.success("Chat history cleared.")
+            st.markdown("---")
+            st.info("Tip: Use the Chat / Visuals buttons at top-right to switch modes quickly.")
+
+    else:  # active_tab == 'visuals'
+        # Show visuals occupying the full right area (previously side-by-side)
+        c_full = st.container()
+        with c_full:
+            render_visuals(engine)
+
+    # end main
 
 if __name__ == "__main__":
     main()
