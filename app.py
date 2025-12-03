@@ -88,84 +88,88 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [HEADLINE CLEANER - IMPROVED]
+# [HEADLINE CLEANER - STRICT MODE]
 def format_headline(url, actor):
     """
-    Robust cleaning function to extract human-readable titles from URLs.
-    Removes random IDs, dates, and file extensions.
+    Very strict cleaner. If a headline looks like a hash or contains
+    mixed numbers/letters, it defaults to a clean 'Update on [Country]' string.
     """
-    if not url: 
-        return f"Intelligence Update: {actor}" if actor else "Global Situation Update"
+    # 1. Fallback base
+    fallback = f"Update on {actor}" if actor else "Global Intelligence Update"
     
+    if not url: return fallback
+
     try:
-        # 1. Parse and Unquote (handles %20 etc)
         parsed = urlparse(url)
         path = unquote(parsed.path)
         
-        # 2. Split path and filter empty strings
+        # Split by slash to find segments
         segments = [s for s in path.split('/') if s]
-        
-        if not segments:
-             return f"Latest Report: {actor}" if actor else "News Update"
+        if not segments: return fallback
 
-        # 3. Find the best segment (Iterate backwards to find text)
-        # We generally want the last segment, but sometimes the last segment is just an ID or "index.html"
-        candidates = segments[-3:] # Look at last 3 parts
-        best_candidate = ""
+        # Find the best segment (usually the last one that isn't an ID)
+        candidates = segments[-3:] 
+        raw_text = ""
         
         for seg in reversed(candidates):
-            # Clean extensions
-            seg_clean = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
+            # Clean file extensions
+            seg = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
             
-            # Skip if it looks like a Date (2024-12-01 or 20241201)
-            if re.search(r'\d{4}[-/]?\d{2}[-/]?\d{2}', seg_clean):
-                continue
+            # Skip if pure numbers
+            if seg.isdigit(): continue
             
-            # Skip if it is purely numeric (ID)
-            if re.match(r'^\d+$', seg_clean):
-                continue
-                
-            # Skip generic web terms
-            if seg_clean.lower() in ['index', 'default', 'home', 'article', 'story', 'news', 'show']:
-                continue
-                
-            # If segment is substantial, keep it
-            if len(seg_clean) > 4:
-                best_candidate = seg_clean
+            # Skip if date-like
+            if re.search(r'\d{4}', seg): continue
+            
+            # Skip short generic terms
+            if seg.lower() in ['index', 'default', 'article', 'news']: continue
+            
+            if len(seg) > 5:
+                raw_text = seg
                 break
         
-        # Fallback if no good path segment found
-        if not best_candidate:
-            return f"Strategic Update: {actor}" if actor else "International Report"
+        if not raw_text: return fallback
 
-        # 4. Clean the Text
-        text = best_candidate
-        text = text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
+        # 2. HEAVY CLEANING
+        # Replace separators with spaces
+        text = raw_text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         
-        # Remove specific junk patterns
-        text = re.sub(r'\b\d{8,}\b', '', text)       # Remove long digit IDs
-        text = re.sub(r'\b\d{1,4}\b', '', text)      # Remove isolated short numbers
-        text = re.sub(r'\b(html|php|asp)\b', '', text, flags=re.IGNORECASE) # Stray extensions
+        # Split into words
+        words = text.split()
+        clean_words = []
         
-        # 5. Final Formatting
-        text = " ".join(text.split()) # Remove double spaces
-        headline = text.title()
-        
-        # 6. Quality Control
-        # If the result is too short or garbage, fallback to Actor
-        if len(headline) < 6 or not re.search(r'[a-zA-Z]', headline):
-            return f"New Development: {actor}" if actor else "Global Alert"
+        for w in words:
+            # Drop any word that contains a number (e.g. "914E1Eae", "2024", "v4")
+            if any(char.isdigit() for char in w):
+                continue
             
-        return headline
+            # Drop very long words that are likely hashes (e.g. "Cn0K5Zyy0Vdo")
+            if len(w) > 14:
+                continue
+                
+            # Drop specific junk words
+            if w.lower() in ['html', 'php', 'story', 'id', 'page']:
+                continue
+                
+            clean_words.append(w)
+            
+        # Reassemble
+        final_text = " ".join(clean_words).title()
+        
+        # 3. VALIDATION
+        # If the result is too short, or empty, return fallback
+        if len(final_text) < 10 or len(clean_words) < 2:
+            return fallback
+            
+        return final_text
 
     except Exception:
-        return f"Briefing: {actor}" if actor else "Intelligence Alert"
+        return fallback
 
 @st.cache_resource
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
     try:
-        # USING GEMINI AGAIN
         llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
         embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
         Settings.llm = llm
@@ -194,36 +198,6 @@ def get_query_engine(_engine):
     except: return None
 
 # --- 4. LOGIC MODULES ---
-
-def run_manual_override(prompt, engine):
-    p = prompt.lower()
-    
-    definitions = {
-        "conflict index": "### 🛡️ Conflict Index Definition\nIntensity of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests/Threats.\n- **8-10:** Military assault/War.",
-        "stability": "### ⚖️ Stability Score\nOverall tone of coverage.\n- **< 40:** High Instability.\n- **> 60:** High Stability.",
-        "impact score": "### 💥 Impact Score\nSignificance (-10 to 10).\n- **Negative:** Conflict.\n- **Positive:** Cooperation."
-    }
-    for key, explanation in definitions.items():
-        if key in p:
-            return True, None, explanation, "-- Knowledge Base Retrieval"
-
-    if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
-        sql = """
-            SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
-            FROM EVENTS_DAGSTER 
-            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') 
-            GROUP BY 1 ORDER BY 2 DESC
-        """
-        df = safe_read_sql(engine, sql)
-        if not df.empty: 
-            df.columns = [c.upper() for c in df.columns]
-            summary = "### 🇨🇳 vs 🇺🇸 Superpower Analysis\n"
-            for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} events. (Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
-        else: summary = "No comparative data found."
-        return True, df, summary, sql
-        
-    return False, None, None, None
 
 def generate_briefing(engine):
     sql = """
@@ -333,7 +307,7 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            # Remove duplicates based on the clean headline
+            # Duplicate removal based on clean headline
             df = df.drop_duplicates(subset=['Headline']).head(20)
             
             st.dataframe(
@@ -450,35 +424,23 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
-                            if matched:
-                                st.markdown(m_txt)
-                                if m_df is not None and not m_df.empty: 
-                                    m_df.columns = [c.upper() for c in m_df.columns]
-                                    if 'NEWS_LINK' in m_df.columns:
-                                        st.caption("Top Trending Sources:")
-                                        st.dataframe(m_df, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")}, hide_index=True)
-                                    else: st.dataframe(m_df)
-                                if m_sql and "-- Knowledge" not in m_sql:
-                                    with st.expander("Override Trace"): st.code(m_sql, language='sql')
-                                st.session_state.messages.append({"role":"assistant", "content": m_txt})
-                            else:
-                                qe = get_query_engine(engine_ai)
-                                if qe:
-                                    resp = qe.query(prompt)
-                                    st.markdown(resp.response)
-                                    if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
-                                        sql = resp.metadata['sql_query']
-                                        if is_safe_sql(sql):
-                                            df_context = safe_read_sql(conn_ui, sql)
-                                            if not df_context.empty:
-                                                df_context.columns = [c.upper() for c in df_context.columns]
-                                                if 'NEWS_LINK' in df_context.columns:
-                                                    st.caption("Contextual Data:")
-                                                    st.dataframe(df_context, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")}, hide_index=True)
-                                            with st.expander("SQL Trace"): st.code(sql, language='sql')
-                                    st.session_state.messages.append({"role":"assistant", "content": resp.response})
-                                else: st.error("AI Engine unavailable.")
+                            # Direct AI processing (Manual Override Removed)
+                            qe = get_query_engine(engine_ai)
+                            if qe:
+                                resp = qe.query(prompt)
+                                st.markdown(resp.response)
+                                if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                                    sql = resp.metadata['sql_query']
+                                    if is_safe_sql(sql):
+                                        df_context = safe_read_sql(conn_ui, sql)
+                                        if not df_context.empty:
+                                            df_context.columns = [c.upper() for c in df_context.columns]
+                                            if 'NEWS_LINK' in df_context.columns:
+                                                st.caption("Contextual Data:")
+                                                st.dataframe(df_context, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")}, hide_index=True)
+                                        with st.expander("SQL Trace"): st.code(sql, language='sql')
+                                st.session_state.messages.append({"role":"assistant", "content": resp.response})
+                            else: st.error("AI Engine unavailable.")
                         except Exception as e: st.error(f"Query Failed: {e}")
                         finally: st.session_state['llm_locked'] = False
 
