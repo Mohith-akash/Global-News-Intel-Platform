@@ -15,7 +15,7 @@ import pycountry
 import logging
 import streamlit.components.v1 as components
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 import duckdb
 
 # --- 1. CONFIGURATION ---
@@ -68,7 +68,7 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}')
+    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
 
 @st.cache_resource
 def get_sql_engine():
@@ -88,99 +88,99 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [HEADLINE CLEANER]
-def format_headline(url, actor):
-    if not url: return f"Update on {actor}"
+# [HEADLINE CLEANER - STRICT MODE]
+def format_headline(url, actor=None):
+    # Default fallback if extraction fails entirely
+    fallback = "Global Incident Report"
+    
+    if not url: return fallback
     try:
-        path = urlparse(url).path
-        slug = path.rstrip('/').split('/')[-1]
-        
-        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
-            slug = path.rstrip('/').split('/')[-2]
+        parsed = urlparse(url)
+        path = unquote(parsed.path)
+        segments = [s for s in path.split('/') if s]
+        if not segments: return fallback
 
-        text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        text = re.sub(r'\.html?$', '', text)
+        # Scan path segments backwards for the best text candidate
+        candidates = segments[-3:] 
+        raw_text = ""
+        for seg in reversed(candidates):
+            # Clean common extensions
+            seg = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
+            # Skip if it's just digits, a date, or generic words
+            if seg.isdigit() or re.search(r'\d{4}', seg): continue
+            if seg.lower() in ['index', 'default', 'article', 'news', 'story']: continue
+            if len(seg) > 5:
+                raw_text = seg; break
         
-        # Kill Dates & Junk IDs
-        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
-        text = re.sub(r'\b\d{8}\b', '', text) 
-        if re.search(r'[A-Za-z0-9]{15,}', text): return f"Latest Intelligence: {actor}"
-
-        text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
-        headline = " ".join(text.split()).title()
+        if not raw_text: return fallback
         
-        if len(headline) < 5: return f"Update on {actor}"
-        return headline
-    except:
-        return f"Briefing: {actor}"
+        # Clean up the text
+        text = raw_text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
+        words = text.split()
+        clean_words = []
+        for w in words:
+            # Drop words with digits (IDs) or that are too long (hashes)
+            if any(char.isdigit() for char in w) or len(w) > 14: continue
+            if w.lower() in ['html', 'php', 'story', 'id', 'page']: continue
+            clean_words.append(w)
+            
+        final_text = " ".join(clean_words).title()
+        
+        # Final validation
+        if len(final_text) < 10 or len(clean_words) < 2: return fallback
+        if not re.search(r'[a-zA-Z]', final_text): return fallback
+        
+        return final_text
+    except Exception: return fallback
 
 @st.cache_resource
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
+    
+    # 1. Init Models
+    llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
+    embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
+    Settings.llm = llm
+    Settings.embed_model = embed_model
+    
+    # 2. Verify Table Exists
     try:
-        # USING GEMINI AGAIN
-        llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
-        embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
-        Settings.llm = llm
-        Settings.embed_model = embed_model
-        
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
         target_table = next((t for t in combined_names if t.upper() == "EVENTS_DAGSTER"), None)
         
-        if not target_table: return None
-        
+        if not target_table:
+            st.error(f"❌ Table 'EVENTS_DAGSTER' not found. Found: {combined_names}")
+            return None
+            
+        # 3. Build Engine
         sql_database = SQLDatabase(_engine, include_tables=[target_table])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
+        # [CRITICAL] Rules to ensure we get cleaner data
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
-            "**RULES:**\n"
-            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
-            "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
-            "4. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
-            "5. **Response:** Return SQL in metadata."
+            "**MANDATORY RULES:**\n"
+            "1. **SELECT COLS:** ALWAYS select `DATE`, `MAIN_ACTOR`, `NEWS_LINK`, `IMPACT_SCORE`, `ACTOR_COUNTRY_CODE`.\n"
+            "2. **FILTER:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "3. **SORT:** Use `ORDER BY DATE DESC` for 'latest' or 'recent'.\n"
+            "4. **LIMIT:** default to `LIMIT 10` unless specified.\n"
+            "5. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
+            "6. **RESPONSE:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
-    except: return None
+
+    except Exception as e:
+        st.error(f"🔥 AI Engine Crash: {str(e)}")
+        return None
 
 # --- 4. LOGIC MODULES ---
 
-def run_manual_override(prompt, engine):
-    p = prompt.lower()
-    
-    definitions = {
-        "conflict index": "### 🛡️ Conflict Index Definition\nIntensity of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests/Threats.\n- **8-10:** Military assault/War.",
-        "stability": "### ⚖️ Stability Score\nOverall tone of coverage.\n- **< 40:** High Instability.\n- **> 60:** High Stability.",
-        "impact score": "### 💥 Impact Score\nSignificance (-10 to 10).\n- **Negative:** Conflict.\n- **Positive:** Cooperation."
-    }
-    for key, explanation in definitions.items():
-        if key in p:
-            return True, None, explanation, "-- Knowledge Base Retrieval"
-
-    if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
-        sql = """
-            SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
-            FROM EVENTS_DAGSTER 
-            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') 
-            GROUP BY 1 ORDER BY 2 DESC
-        """
-        df = safe_read_sql(engine, sql)
-        if not df.empty: 
-            df.columns = [c.upper() for c in df.columns]
-            summary = "### 🇨🇳 vs 🇺🇸 Superpower Analysis\n"
-            for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} events. (Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
-        else: summary = "No comparative data found."
-        return True, df, summary, sql
-        
-    return False, None, None, None
-
 def generate_briefing(engine):
+    # Added DATE to selection to allow formatting in the report
     sql = """
-        SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
+        SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
         ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 10
     """
@@ -206,7 +206,6 @@ def render_sidebar(engine):
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
-        
         try:
             count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
             count = count_df.iloc[0,0] if not count_df.empty else 0
@@ -227,7 +226,6 @@ def render_hud(engine):
     sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
 
     vol, hotspot, crit = 0, "Scanning...", 0
-
     try:
         df_vol = safe_read_sql(engine, sql_vol)
         if not df_vol.empty: vol = df_vol.iloc[0,0]
@@ -242,7 +240,6 @@ def render_hud(engine):
 
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
-
     except Exception: hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
@@ -257,13 +254,11 @@ def render_ticker(engine):
         df.columns = [c.upper() for c in df.columns]
         items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
-        
     html = f"""<!DOCTYPE html><html><head><style>.ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }} .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }} @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}</style></head><body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>"""
     components.html(html, height=55)
 
 def render_visuals(engine):
     t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
-    
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
@@ -282,16 +277,13 @@ def render_visuals(engine):
             LIMIT 70
         """
         df = safe_read_sql(engine, sql)
-        
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             df = df.drop_duplicates(subset=['Headline']).head(20)
-            
             st.dataframe(
                 df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
-                use_container_width=True,
-                hide_index=True,
+                use_container_width=True, hide_index=True,
                 column_config={
                     "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
                     "ACTOR_COUNTRY_CODE": st.column_config.TextColumn("Country", width="small"),
@@ -303,36 +295,20 @@ def render_visuals(engine):
 
     with t_feed:
         base_sql = """
-            SELECT 
-                DATE, 
-                NEWS_LINK, 
-                MAX(MAIN_ACTOR) as MAIN_ACTOR,
-                AVG(IMPACT_SCORE) as IMPACT_SCORE 
-            FROM EVENTS_DAGSTER 
-            WHERE NEWS_LINK IS NOT NULL
-            GROUP BY 1, 2
-            ORDER BY 1 DESC 
-            LIMIT 50
+            SELECT DATE, NEWS_LINK, MAX(MAIN_ACTOR) as MAIN_ACTOR, AVG(IMPACT_SCORE) as IMPACT_SCORE 
+            FROM EVENTS_DAGSTER WHERE NEWS_LINK IS NOT NULL GROUP BY 1, 2 ORDER BY 1 DESC LIMIT 50
         """
         df = safe_read_sql(engine, base_sql)
-        
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            try:
-                df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
+            try: df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
             except: df['Date'] = df['DATE']
-
-            def get_type(score):
-                if score < -3: return "🔥 Conflict"
-                if score > 3: return "🤝 Diplomacy"
-                return "📢 General"
-            df['Type'] = df['IMPACT_SCORE'].apply(get_type)
+            df['Type'] = df['IMPACT_SCORE'].apply(lambda x: "🔥 Conflict" if x < -3 else ("🤝 Diplomacy" if x > 3 else "📢 General"))
 
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
-                use_container_width=True, 
-                hide_index=True, 
+                use_container_width=True, hide_index=True, 
                 column_config={
                     "Date": st.column_config.TextColumn("Date", width="small"),
                     "Headline": st.column_config.TextColumn("Headline", width="large"),
@@ -345,15 +321,10 @@ def render_visuals(engine):
 # --- 6. MAIN ---
 def main():
     style_app()
-    
-    # [CRITICAL] Connect using MotherDuck
     conn_ui = get_db_connection()
     engine_ai = get_sql_engine()
     
-    # [CRITICAL: Init Session State]
-    if 'llm_locked' not in st.session_state:
-        st.session_state['llm_locked'] = False
-        
+    if 'llm_locked' not in st.session_state: st.session_state['llm_locked'] = False
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to MotherDuck GDELT stream. Ask me anything."}]
 
@@ -366,12 +337,40 @@ def main():
             st.markdown("<div class='report-box'>", unsafe_allow_html=True)
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
+            
+            # [IMPROVED BRIEFING SOURCES TABLE]
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
                 try:
                     src_df = st.session_state['report_sources']
                     src_df.columns = [c.upper() for c in src_df.columns]
-                    st.dataframe(src_df[['NEWS_LINK']], column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")}, hide_index=True)
-                except: pass
+                    
+                    # Format Dates
+                    if 'DATE' in src_df.columns:
+                        try:
+                            src_df['DATE'] = pd.to_datetime(src_df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
+                        except: pass
+                    
+                    # Format Headlines (Incident focused)
+                    if 'NEWS_LINK' in src_df.columns:
+                        src_df['Headline'] = src_df.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
+                        
+                        # Prepare Display
+                        disp_cols = ['DATE', 'Headline', 'IMPACT_SCORE', 'NEWS_LINK']
+                        disp_cols = [c for c in disp_cols if c in src_df.columns]
+                        
+                        st.caption("Intelligence Sources:")
+                        st.dataframe(
+                            src_df[disp_cols].rename(columns={'IMPACT_SCORE': 'Intensity'}),
+                            column_config={
+                                "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read"),
+                                "Headline": st.column_config.TextColumn("Incident / Headline", width="large"),
+                                "DATE": st.column_config.TextColumn("Date", width="small")
+                            }, 
+                            hide_index=True
+                        )
+                except Exception as e: 
+                    st.error(f"Error displaying sources: {e}")
+                    
             if st.button("Close"): 
                 del st.session_state['generated_report']
                 if 'report_sources' in st.session_state: del st.session_state['report_sources']
@@ -385,12 +384,18 @@ def main():
     c_chat, c_viz = st.columns([35, 65])
     with c_chat:
         st.subheader("💬 AI Analyst")
-        b1, b2 = st.columns(2)
+        # [REMOVED BUTTONS as requested]
         p = None
-        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
-        st.markdown("""<div class="example-box"><div class="example-item">1. Analyze the conflict trend in the Middle East.</div><div class="example-item">2. Which country has the lowest sentiment score?</div><div class="example-item">3. What is Conflict Index?</div></div>""", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="example-box">
+            <div class="example-item">1. List the last 5 events for the United States.</div>
+            <div class="example-item">2. Which country has the most events today?</div>
+            <div class="example-item">3. Show me top 5 events with high Impact Score.</div>
+            <div class="example-item">4. What are the latest events involving China?</div>
+            <div class="example-item">5. List recent negative events (Impact < -5).</div>
+        </div>
+        """, unsafe_allow_html=True)
         
         if prompt := (st.chat_input("Directive...") or p):
             if st.session_state['llm_locked']:
@@ -402,35 +407,56 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
-                            if matched:
-                                st.markdown(m_txt)
-                                if m_df is not None and not m_df.empty: 
-                                    m_df.columns = [c.upper() for c in m_df.columns]
-                                    if 'NEWS_LINK' in m_df.columns:
-                                        st.caption("Top Trending Sources:")
-                                        st.dataframe(m_df, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")}, hide_index=True)
-                                    else: st.dataframe(m_df)
-                                if m_sql and "-- Knowledge" not in m_sql:
-                                    with st.expander("Override Trace"): st.code(m_sql, language='sql')
-                                st.session_state.messages.append({"role":"assistant", "content": m_txt})
-                            else:
-                                qe = get_query_engine(engine_ai)
-                                if qe:
-                                    resp = qe.query(prompt)
-                                    st.markdown(resp.response)
-                                    if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
-                                        sql = resp.metadata['sql_query']
-                                        if is_safe_sql(sql):
-                                            df_context = safe_read_sql(conn_ui, sql)
-                                            if not df_context.empty:
-                                                df_context.columns = [c.upper() for c in df_context.columns]
-                                                if 'NEWS_LINK' in df_context.columns:
-                                                    st.caption("Contextual Data:")
-                                                    st.dataframe(df_context, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")}, hide_index=True)
-                                            with st.expander("SQL Trace"): st.code(sql, language='sql')
-                                    st.session_state.messages.append({"role":"assistant", "content": resp.response})
-                                else: st.error("AI Engine unavailable.")
+                            qe = get_query_engine(engine_ai)
+                            if qe:
+                                resp = qe.query(prompt)
+                                st.markdown(resp.response)
+                                if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                                    sql = resp.metadata['sql_query']
+                                    if is_safe_sql(sql):
+                                        df_context = safe_read_sql(conn_ui, sql)
+                                        if not df_context.empty:
+                                            # Normalize column names
+                                            df_context.columns = [c.upper() for c in df_context.columns]
+                                            
+                                            # [FIX 1: Safe Date Formatting]
+                                            if 'DATE' in df_context.columns:
+                                                try:
+                                                    df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
+                                                except: pass
+
+                                            # [FIX 2: Incident Headline & Strict Column Selection]
+                                            if 'NEWS_LINK' in df_context.columns:
+                                                # Use strict headline format
+                                                df_context['Headline'] = df_context.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
+                                                
+                                                # Rename cols for cleaner display
+                                                col_map = {'DATE': 'Date', 'IMPACT_SCORE': 'Intensity', 'NEWS_LINK': 'Source'}
+                                                df_context = df_context.rename(columns=col_map)
+                                                
+                                                # Strict Column Selection (Exclude EVENT_ID, Codes, etc)
+                                                target_cols = ['Date', 'Headline', 'Intensity', 'Source']
+                                                final_cols = [c for c in target_cols if c in df_context.columns]
+                                                df_show = df_context[final_cols]
+
+                                                st.caption("Contextual Data:")
+                                                st.dataframe(
+                                                    df_show, 
+                                                    column_config={
+                                                        "Source": st.column_config.LinkColumn("Link", display_text="🔗 Open"),
+                                                        "Headline": st.column_config.TextColumn("Incident", width="large"),
+                                                        "Date": st.column_config.TextColumn("Date", width="small"),
+                                                        "Intensity": st.column_config.NumberColumn("Intensity", format="%.1f")
+                                                    }, 
+                                                    hide_index=True,
+                                                    use_container_width=True
+                                                )
+                                            else:
+                                                st.dataframe(df_context, hide_index=True)
+
+                                        with st.expander("SQL Trace"): st.code(sql, language='sql')
+                                st.session_state.messages.append({"role":"assistant", "content": resp.response})
+                            else: st.error("AI Engine unavailable.")
                         except Exception as e: st.error(f"Query Failed: {e}")
                         finally: st.session_state['llm_locked'] = False
 
