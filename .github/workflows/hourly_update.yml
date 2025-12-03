@@ -1,48 +1,39 @@
-name: 30-Min GDELT Refresh
+name: 30-Min GDELT Refresh (MotherDuck)
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Runs every 30 minutes (Minute 0 and Minute 30)
-  workflow_dispatch:        # Allows you to click "Run Now" manually
+    - cron: '*/30 * * * *'  # Runs every 30 minutes
+  workflow_dispatch:        # Allows manual "Run Now" button
 
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Get the code from your repo
+    # 1. Get code
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2. Set up Python 3.10 (Stable version for Snowflake)
+    # 2. Set up Python (3.10 is great for DuckDB)
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    # 3. Install Dependencies
+    # 3. Install Dependencies (Reads your updated requirements.txt)
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install all packages from requirements.txt
         pip install -r requirements.txt
-        
-        # Ensure setuptools is present for some snowflake dependencies
-        pip install setuptools
 
-    # 4. EXECUTION: Run the Dagster Job using the CLI
+    # 4. EXECUTION: Run the Pipeline
     - name: Execute Dagster Job
       env:
-        # These secrets are automatically available to the script
-        SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
+        # [CRITICAL] New MotherDuck Token
+        MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+        # Keep Google Key for any embedding logic if needed
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       run: |
-        echo "🚀 Starting 30-Min Dagster Job Execution..."
-        # Command Structure: dagster job execute -f <file> -j <job_name>
+        echo "🚀 Starting MotherDuck Ingestion..."
         dagster job execute -f pipeline.py -j gdelt_ingestion_job
-        echo "✅ Pipeline Command Sent."
+        echo "✅ Data Refresh Complete."
