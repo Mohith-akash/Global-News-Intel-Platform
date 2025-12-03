@@ -112,12 +112,17 @@ def format_headline(url, actor):
         words = text.split()
         clean_words = []
         for w in words:
+            # Drop words with digits, too long, or specific junk
             if any(char.isdigit() for char in w) or len(w) > 14: continue
             if w.lower() in ['html', 'php', 'story', 'id', 'page']: continue
             clean_words.append(w)
             
         final_text = " ".join(clean_words).title()
+        
+        # Validations
         if len(final_text) < 10 or len(clean_words) < 2: return fallback
+        if not re.search(r'[a-zA-Z]', final_text): return fallback
+        
         return final_text
     except Exception: return fallback
 
@@ -145,16 +150,16 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[target_table])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # ADDED RULE 6: ALWAYS SELECT MAIN_ACTOR
+        # [CRITICAL] Rules to ensure we get cleaner data
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
-            "**RULES:**\n"
-            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **INCLUDE ACTOR:** ALWAYS select the `MAIN_ACTOR` column.\n"
-            "3. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
-            "4. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
+            "**MANDATORY RULES:**\n"
+            "1. **SELECT COLS:** ALWAYS select `DATE`, `MAIN_ACTOR`, `NEWS_LINK`, `IMPACT_SCORE`, `ACTOR_COUNTRY_CODE`.\n"
+            "2. **FILTER:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "3. **SORT:** Use `ORDER BY DATE DESC` for 'latest' or 'recent'.\n"
+            "4. **LIMIT:** default to `LIMIT 10` unless specified.\n"
             "5. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
-            "6. **Response:** Return SQL in metadata."
+            "6. **RESPONSE:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
@@ -289,7 +294,7 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            try: df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
+            try: df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
             except: df['Date'] = df['DATE']
             df['Type'] = df['IMPACT_SCORE'].apply(lambda x: "🔥 Conflict" if x < -3 else ("🤝 Diplomacy" if x > 3 else "📢 General"))
 
@@ -379,33 +384,40 @@ def main():
                                         if not df_context.empty:
                                             df_context.columns = [c.upper() for c in df_context.columns]
                                             
-                                            # [FIX 1: Date Formatting]
+                                            # [FIX 1: Safe Date Formatting]
                                             if 'DATE' in df_context.columns:
                                                 try:
                                                     df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
                                                 except: pass
 
-                                            # [FIX 2: Headline Generation for Chat]
+                                            # [FIX 2: Headline & Clean Table]
+                                            # Determine actor column (handle if missing)
+                                            actor_col = 'MAIN_ACTOR' if 'MAIN_ACTOR' in df_context.columns else None
+                                            
                                             if 'NEWS_LINK' in df_context.columns:
-                                                # Determine actor column (handle if missing)
-                                                actor_col = 'MAIN_ACTOR' if 'MAIN_ACTOR' in df_context.columns else None
-                                                
                                                 def safe_format(row):
                                                     actor = row[actor_col] if actor_col else "Global Event"
                                                     return format_headline(row['NEWS_LINK'], actor)
                                                 
                                                 df_context['Headline'] = df_context.apply(safe_format, axis=1)
                                                 
-                                                # Reorder to put Headline first
-                                                cols = ['Headline'] + [c for c in df_context.columns if c != 'Headline' and c != 'NEWS_LINK'] + ['NEWS_LINK']
-                                                df_context = df_context[cols]
+                                                # Select & Order columns nicely
+                                                display_cols = ['Headline', 'DATE']
+                                                if 'ACTOR_COUNTRY_CODE' in df_context.columns: display_cols.append('ACTOR_COUNTRY_CODE')
+                                                if 'IMPACT_SCORE' in df_context.columns: display_cols.append('IMPACT_SCORE')
+                                                display_cols.append('NEWS_LINK')
+                                                
+                                                # Filter to only existing columns
+                                                display_cols = [c for c in display_cols if c in df_context.columns]
+                                                df_show = df_context[display_cols]
 
                                                 st.caption("Contextual Data:")
                                                 st.dataframe(
-                                                    df_context, 
+                                                    df_show, 
                                                     column_config={
                                                         "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read"),
-                                                        "Headline": st.column_config.TextColumn("Headline", width="large")
+                                                        "Headline": st.column_config.TextColumn("Headline", width="large"),
+                                                        "DATE": st.column_config.TextColumn("Date", width="small")
                                                     }, 
                                                     hide_index=True
                                                 )
