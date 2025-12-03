@@ -29,6 +29,6 @@ jobs:
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       run: |
         echo "🚀 Starting MotherDuck Ingestion..."
-        # USE PYTHON -M TO GUARANTEE EXECUTION
+        # THIS IS THE CRITICAL FIX: DO NOT USE 'dagster job execute'
         python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
