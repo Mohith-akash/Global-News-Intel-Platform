@@ -90,9 +90,7 @@ def is_safe_sql(sql: str) -> bool:
 
 # [HEADLINE CLEANER - STRICT MODE]
 def format_headline(url, actor=None):
-    # Default fallback if extraction fails entirely
     fallback = "Global Incident Report"
-    
     if not url: return fallback
     try:
         parsed = urlparse(url)
@@ -100,13 +98,10 @@ def format_headline(url, actor=None):
         segments = [s for s in path.split('/') if s]
         if not segments: return fallback
 
-        # Scan path segments backwards for the best text candidate
         candidates = segments[-3:] 
         raw_text = ""
         for seg in reversed(candidates):
-            # Clean common extensions
             seg = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
-            # Skip if it's just digits, a date, or generic words
             if seg.isdigit() or re.search(r'\d{4}', seg): continue
             if seg.lower() in ['index', 'default', 'article', 'news', 'story']: continue
             if len(seg) > 5:
@@ -114,31 +109,34 @@ def format_headline(url, actor=None):
         
         if not raw_text: return fallback
         
-        # Clean up the text
         text = raw_text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         words = text.split()
         clean_words = []
         for w in words:
-            # Drop words with digits (IDs) or that are too long (hashes)
             if any(char.isdigit() for char in w) or len(w) > 14: continue
             if w.lower() in ['html', 'php', 'story', 'id', 'page']: continue
             clean_words.append(w)
             
         final_text = " ".join(clean_words).title()
         
-        # Final validation
         if len(final_text) < 10 or len(clean_words) < 2: return fallback
         if not re.search(r'[a-zA-Z]', final_text): return fallback
         
         return final_text
     except Exception: return fallback
 
+# --- OPTIMIZED AI QUERY ENGINE ---
+
 @st.cache_resource
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # 1. Init Models
-    llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
+    # 1. Init Models with Better Settings
+    llm = Gemini(
+        model=GEMINI_MODEL, 
+        api_key=api_key,
+        temperature=0.1,  # Lower temperature for more precise SQL generation
+    )
     embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
     Settings.llm = llm
     Settings.embed_model = embed_model
@@ -152,33 +150,204 @@ def get_query_engine(_engine):
         if not target_table:
             st.error(f"❌ Table 'EVENTS_DAGSTER' not found. Found: {combined_names}")
             return None
-            
-        # 3. Build Engine
-        sql_database = SQLDatabase(_engine, include_tables=[target_table])
-        query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
-        # [CRITICAL] Rules to ensure we get cleaner data
-        update_str = (
-            "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
-            "**MANDATORY RULES:**\n"
-            "1. **SELECT COLS:** ALWAYS select `DATE`, `MAIN_ACTOR`, `NEWS_LINK`, `IMPACT_SCORE`, `ACTOR_COUNTRY_CODE`.\n"
-            "2. **FILTER:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
-            "3. **SORT:** Use `ORDER BY DATE DESC` for 'latest' or 'recent'.\n"
-            "4. **LIMIT:** default to `LIMIT 10` unless specified.\n"
-            "5. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
-            "6. **RESPONSE:** Return SQL in metadata."
+        # 3. Get Schema Information
+        with _engine.connect() as conn:
+            schema_query = f"""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = '{target_table}'
+            """
+            try:
+                schema_df = pd.read_sql(schema_query, conn)
+                schema_info = schema_df.to_string(index=False)
+            except:
+                schema_info = "Schema unavailable"
+        
+        # 4. Build Engine
+        sql_database = SQLDatabase(_engine, include_tables=[target_table])
+        query_engine = NLSQLTableQueryEngine(
+            sql_database=sql_database, 
+            llm=llm,
+            synthesize_response=True  # Enable response synthesis
         )
-        query_engine.update_prompts({"text_to_sql_prompt": update_str})
+        
+        # 5. ENHANCED SYSTEM PROMPT with Schema Context
+        enhanced_prompt = f"""You are an elite Geopolitical Intelligence Analyst with access to the GDELT database.
+
+**DATABASE SCHEMA:**
+Table: EVENTS_DAGSTER
+{schema_info}
+
+**KEY COLUMNS:**
+- DATE: Format YYYYMMDD (e.g., 20250104)
+- MAIN_ACTOR: Primary entity involved
+- ACTOR_COUNTRY_CODE: ISO-2 country code
+- EVENT_BASE_CODE: CAMEO event type
+- IMPACT_SCORE: Goldstein scale (-10 to +10, negative=conflict, positive=cooperation)
+- ARTICLE_COUNT: Media coverage intensity
+- NEWS_LINK: Source URL
+- AVG_TONE: Sentiment (-100 to +100)
+
+**INTELLIGENCE ANALYSIS GUIDELINES:**
+
+1. **TEMPORAL CONTEXT:**
+   - Today's date is {datetime.datetime.now().strftime('%Y-%m-%d')} (format: {datetime.datetime.now().strftime('%Y%m%d')} in DATE column)
+   - "Recent" = last 7 days
+   - "Latest" = last 24-48 hours
+   - Always filter by date when analyzing trends
+
+2. **SQL GENERATION RULES:**
+   - ALWAYS include: DATE, MAIN_ACTOR, NEWS_LINK, IMPACT_SCORE, ACTOR_COUNTRY_CODE
+   - Filter NULL values: `WHERE IMPACT_SCORE IS NOT NULL AND NEWS_LINK IS NOT NULL`
+   - For "recent" queries: `WHERE DATE >= {(datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')}`
+   - For "today": `WHERE DATE = {datetime.datetime.now().strftime('%Y%m%d')}`
+   - Sort by relevance: `ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC`
+   - Default limit: `LIMIT 10` (adjust based on query)
+   - Use DuckDB syntax (e.g., `LIMIT`, not `TOP`)
+
+3. **ANALYTICAL DEPTH:**
+   - Identify patterns and anomalies
+   - Compare IMPACT_SCORE with ARTICLE_COUNT (high coverage + high impact = critical)
+   - Note sentiment trends (AVG_TONE)
+   - Highlight escalations (multiple negative events for same actor)
+   - Provide geopolitical context when relevant
+
+4. **QUERY INTERPRETATION:**
+   - "Crisis" → IMPACT_SCORE < -6
+   - "Conflict" → IMPACT_SCORE < -3
+   - "Cooperation" → IMPACT_SCORE > 5
+   - "Trending" → High ARTICLE_COUNT
+   - "Active" → Multiple recent events
+   - Country names → Use ACTOR_COUNTRY_CODE (convert to ISO-2)
+
+5. **RESPONSE QUALITY:**
+   - Start with key findings (executive summary style)
+   - Support claims with specific data points
+   - Mention data limitations when relevant
+   - Suggest follow-up queries for deeper analysis
+   - Format numbers clearly (dates, scores, counts)
+
+6. **ERROR HANDLING:**
+   - If no results: explain why and suggest alternative queries
+   - If ambiguous request: clarify interpretation before querying
+   - If time-sensitive: prioritize recent data
+
+**EXAMPLE QUERIES:**
+
+"What's happening in Ukraine?"
+→ SELECT DATE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK 
+   FROM EVENTS_DAGSTER 
+   WHERE ACTOR_COUNTRY_CODE = 'UA' 
+   AND DATE >= {(datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')}
+   ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC 
+   LIMIT 15
+
+"Show me conflicts today"
+→ SELECT DATE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, NEWS_LINK
+   FROM EVENTS_DAGSTER
+   WHERE DATE = {datetime.datetime.now().strftime('%Y%m%d')}
+   AND IMPACT_SCORE < -3
+   ORDER BY IMPACT_SCORE ASC
+   LIMIT 20
+
+"Which countries have the most activity?"
+→ SELECT ACTOR_COUNTRY_CODE, 
+          COUNT(*) as event_count,
+          AVG(IMPACT_SCORE) as avg_impact,
+          SUM(ARTICLE_COUNT) as media_coverage
+   FROM EVENTS_DAGSTER
+   WHERE DATE >= {(datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')}
+   AND ACTOR_COUNTRY_CODE IS NOT NULL
+   GROUP BY ACTOR_COUNTRY_CODE
+   ORDER BY event_count DESC
+   LIMIT 10
+
+Always return valid SQL in metadata and provide analytical insights in your response."""
+
+        query_engine.update_prompts({"text_to_sql_prompt": enhanced_prompt})
         return query_engine
 
     except Exception as e:
         st.error(f"🔥 AI Engine Crash: {str(e)}")
+        logger.exception("Query engine initialization failed")
         return None
+
+
+# --- ENHANCED QUERY EXECUTION WITH RETRY LOGIC ---
+
+def execute_ai_query(query_engine, prompt, conn_ui, max_retries=2):
+    """Enhanced query execution with error handling and retry logic"""
+    
+    for attempt in range(max_retries):
+        try:
+            # Generate response
+            resp = query_engine.query(prompt)
+            
+            # Validate SQL if present
+            if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                sql = resp.metadata['sql_query']
+                
+                # Safety check
+                if not is_safe_sql(sql):
+                    return {
+                        'success': False,
+                        'error': 'Generated SQL contains forbidden operations',
+                        'response': None
+                    }
+                
+                # Execute SQL
+                try:
+                    df_context = safe_read_sql(conn_ui, sql)
+                    return {
+                        'success': True,
+                        'response': resp.response,
+                        'sql': sql,
+                        'data': df_context,
+                        'metadata': resp.metadata
+                    }
+                except Exception as sql_error:
+                    if attempt < max_retries - 1:
+                        # Retry with error feedback
+                        error_msg = str(sql_error)
+                        refined_prompt = f"{prompt}\n\nPrevious SQL failed with error: {error_msg}\nPlease generate corrected SQL."
+                        continue
+                    else:
+                        return {
+                            'success': False,
+                            'error': f'SQL execution failed: {sql_error}',
+                            'response': resp.response,
+                            'sql': sql
+                        }
+            else:
+                # No SQL generated (direct response)
+                return {
+                    'success': True,
+                    'response': resp.response,
+                    'sql': None,
+                    'data': None
+                }
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                continue
+            else:
+                return {
+                    'success': False,
+                    'error': str(e),
+                    'response': None
+                }
+    
+    return {
+        'success': False,
+        'error': 'Max retries exceeded',
+        'response': None
+    }
+
 
 # --- 4. LOGIC MODULES ---
 
 def generate_briefing(engine):
-    # Added DATE to selection to allow formatting in the report
     sql = """
         SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
@@ -197,7 +366,7 @@ def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.subheader("📋 Intelligence Report")
-        if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
+        if st.button("🔄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
                 report, source_df = generate_briefing(engine)
                 st.session_state['generated_report'] = report
@@ -258,7 +427,7 @@ def render_ticker(engine):
     components.html(html, height=55)
 
 def render_visuals(engine):
-    t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
+    t_map, t_trending, t_feed = st.tabs(["🌍 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
@@ -338,23 +507,19 @@ def main():
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
             
-            # [IMPROVED BRIEFING SOURCES TABLE]
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
                 try:
                     src_df = st.session_state['report_sources']
                     src_df.columns = [c.upper() for c in src_df.columns]
                     
-                    # Format Dates
                     if 'DATE' in src_df.columns:
                         try:
                             src_df['DATE'] = pd.to_datetime(src_df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
                         except: pass
                     
-                    # Format Headlines (Incident focused)
                     if 'NEWS_LINK' in src_df.columns:
                         src_df['Headline'] = src_df.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
                         
-                        # Prepare Display
                         disp_cols = ['DATE', 'Headline', 'IMPACT_SCORE', 'NEWS_LINK']
                         disp_cols = [c for c in disp_cols if c in src_df.columns]
                         
@@ -384,81 +549,108 @@ def main():
     c_chat, c_viz = st.columns([35, 65])
     with c_chat:
         st.subheader("💬 AI Analyst")
-        # [REMOVED BUTTONS as requested]
-        p = None
         
-        st.markdown("""
+        st.markdown(f"""
         <div class="example-box">
-            <div class="example-item">1. List the last 5 events for the United States.</div>
-            <div class="example-item">2. Which country has the most events today?</div>
-            <div class="example-item">3. Show me top 5 events with high Impact Score.</div>
-            <div class="example-item">4. What are the latest events involving China?</div>
-            <div class="example-item">5. List recent negative events (Impact < -5).</div>
+            <strong>🎯 Smart Query Examples:</strong>
+            <div class="example-item">1. What are the top 5 crisis events in the last 48 hours?</div>
+            <div class="example-item">2. Compare military activity between Russia and China this week</div>
+            <div class="example-item">3. Which countries had the most diplomatic events today?</div>
+            <div class="example-item">4. Show me trending stories with high media coverage</div>
+            <div class="example-item">5. Identify any escalating conflicts in the Middle East</div>
+            <div class="example-item">6. What's the sentiment trend for United States events?</div>
         </div>
         """, unsafe_allow_html=True)
         
-        if prompt := (st.chat_input("Directive...") or p):
+        if prompt := st.chat_input("Enter intelligence query..."):
             if st.session_state['llm_locked']:
                 st.warning("⚠️ Processing previous request...")
             else:
                 st.session_state.messages.append({"role":"user", "content":prompt})
-                if not p: st.chat_message("user").write(prompt)
+                st.chat_message("user").write(prompt)
+                
                 with st.chat_message("assistant"):
-                    with st.spinner("Processing..."):
+                    with st.spinner("🧠 Analyzing intelligence data..."):
                         st.session_state['llm_locked'] = True
                         try:
                             qe = get_query_engine(engine_ai)
                             if qe:
-                                resp = qe.query(prompt)
-                                st.markdown(resp.response)
-                                if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
-                                    sql = resp.metadata['sql_query']
-                                    if is_safe_sql(sql):
-                                        df_context = safe_read_sql(conn_ui, sql)
-                                        if not df_context.empty:
-                                            # Normalize column names
-                                            df_context.columns = [c.upper() for c in df_context.columns]
+                                # Execute with enhanced error handling
+                                result = execute_ai_query(qe, prompt, conn_ui)
+                                
+                                if result['success']:
+                                    # Display response
+                                    st.markdown(result['response'])
+                                    
+                                    # Display data if available
+                                    if result['data'] is not None and not result['data'].empty:
+                                        df_context = result['data']
+                                        df_context.columns = [c.upper() for c in df_context.columns]
+                                        
+                                        # Format dates
+                                        if 'DATE' in df_context.columns:
+                                            try:
+                                                df_context['DATE'] = pd.to_datetime(
+                                                    df_context['DATE'].astype(str), 
+                                                    format='%Y%m%d'
+                                                ).dt.strftime('%d %b %Y')
+                                            except: pass
+                                        
+                                        # Create headlines if NEWS_LINK exists
+                                        if 'NEWS_LINK' in df_context.columns:
+                                            df_context['Headline'] = df_context.apply(
+                                                lambda x: format_headline(x['NEWS_LINK']), 
+                                                axis=1
+                                            )
                                             
-                                            # [FIX 1: Safe Date Formatting]
-                                            if 'DATE' in df_context.columns:
-                                                try:
-                                                    df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
-                                                except: pass
-
-                                            # [FIX 2: Incident Headline & Strict Column Selection]
-                                            if 'NEWS_LINK' in df_context.columns:
-                                                # Use strict headline format
-                                                df_context['Headline'] = df_context.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
-                                                
-                                                # Rename cols for cleaner display
-                                                col_map = {'DATE': 'Date', 'IMPACT_SCORE': 'Intensity', 'NEWS_LINK': 'Source'}
-                                                df_context = df_context.rename(columns=col_map)
-                                                
-                                                # Strict Column Selection (Exclude EVENT_ID, Codes, etc)
-                                                target_cols = ['Date', 'Headline', 'Intensity', 'Source']
-                                                final_cols = [c for c in target_cols if c in df_context.columns]
-                                                df_show = df_context[final_cols]
-
-                                                st.caption("Contextual Data:")
-                                                st.dataframe(
-                                                    df_show, 
-                                                    column_config={
-                                                        "Source": st.column_config.LinkColumn("Link", display_text="🔗 Open"),
-                                                        "Headline": st.column_config.TextColumn("Incident", width="large"),
-                                                        "Date": st.column_config.TextColumn("Date", width="small"),
-                                                        "Intensity": st.column_config.NumberColumn("Intensity", format="%.1f")
-                                                    }, 
-                                                    hide_index=True,
-                                                    use_container_width=True
-                                                )
-                                            else:
-                                                st.dataframe(df_context, hide_index=True)
-
-                                        with st.expander("SQL Trace"): st.code(sql, language='sql')
-                                st.session_state.messages.append({"role":"assistant", "content": resp.response})
-                            else: st.error("AI Engine unavailable.")
-                        except Exception as e: st.error(f"Query Failed: {e}")
-                        finally: st.session_state['llm_locked'] = False
+                                            col_map = {
+                                                'DATE': 'Date', 
+                                                'IMPACT_SCORE': 'Impact', 
+                                                'NEWS_LINK': 'Source',
+                                                'ARTICLE_COUNT': 'Coverage'
+                                            }
+                                            df_context = df_context.rename(columns=col_map)
+                                            
+                                            # Smart column selection
+                                            priority_cols = ['Date', 'Headline', 'Impact', 'Coverage', 'Source']
+                                            display_cols = [c for c in priority_cols if c in df_context.columns]
+                                            
+                                            st.caption("📊 Supporting Data:")
+                                            st.dataframe(
+                                                df_context[display_cols],
+                                                column_config={
+                                                    "Source": st.column_config.LinkColumn("🔗", display_text="Read"),
+                                                    "Headline": st.column_config.TextColumn("Event", width="large"),
+                                                    "Impact": st.column_config.NumberColumn("Impact", format="%.1f"),
+                                                    "Coverage": st.column_config.NumberColumn("Media", format="%d 📰")
+                                                },
+                                                hide_index=True,
+                                                use_container_width=True
+                                            )
+                                        else:
+                                            st.dataframe(df_context, hide_index=True)
+                                    
+                                    # SQL trace
+                                    if result['sql']:
+                                        with st.expander("🔍 SQL Trace"):
+                                            st.code(result['sql'], language='sql')
+                                    
+                                    st.session_state.messages.append({
+                                        "role": "assistant", 
+                                        "content": result['response']
+                                    })
+                                else:
+                                    st.error(f"❌ Query failed: {result['error']}")
+                                    if result['sql']:
+                                        with st.expander("Debug: Generated SQL"):
+                                            st.code(result['sql'], language='sql')
+                            else:
+                                st.error("AI Engine unavailable.")
+                        except Exception as e:
+                            st.error(f"Query Failed: {e}")
+                            logger.exception("Query execution failed")
+                        finally:
+                            st.session_state['llm_locked'] = False
 
     with c_viz: render_visuals(conn_ui)
 
