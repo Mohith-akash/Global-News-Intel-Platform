@@ -68,9 +68,8 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    # CRITICAL FIX: read_only=True prevents write-lock crashes
-    # config configures the client to be more tolerant
-    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True, config={'motherduck_user_agent': 'streamlit_app'})
+    # REMOVED invalid config. Kept read_only=True for safety.
+    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
 
 @st.cache_resource
 def get_sql_engine():
@@ -339,7 +338,16 @@ def main():
         if b1.button("🚨 Conflicts", width="stretch"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN Events", width="stretch"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
-        st.markdown("""<div class="example-box"><div class="example-item">1. Analyze the conflict trend in the Middle East.</div><div class="example-item">2. Which country has the lowest sentiment score?</div><div class="example-item">3. What is Conflict Index?</div></div>""", unsafe_allow_html=True)
+        # [NEW: 5 Proper Sample Questions]
+        st.markdown("""
+        <div class="example-box">
+            <div class="example-item">1. Summarize the most negative events involving NATO countries today.</div>
+            <div class="example-item">2. List the top 5 emerging diplomatic conflicts in Southeast Asia.</div>
+            <div class="example-item">3. Show me all events with an Impact Score > 5 regarding renewable energy.</div>
+            <div class="example-item">4. Which country has the highest volume of news coverage right now?</div>
+            <div class="example-item">5. Find recent protests (Conflict Index > 4) in South America.</div>
+        </div>
+        """, unsafe_allow_html=True)
         
         if prompt := (st.chat_input("Directive...") or p):
             if st.session_state['llm_locked']:
