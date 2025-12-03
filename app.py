@@ -40,40 +40,6 @@ if missing:
     st.error(f"❌ CRITICAL ERROR: Missing env vars: {', '.join(missing)}")
     st.stop()
 
-# --- SECURITY: Password Gate ---
-# Set "APP_PASSWORD" in your Secrets for production. Default is 'admin123'.
-REQUIRED_PASSWORD = os.getenv("APP_PASSWORD", "admin123") 
-
-def check_password():
-    """Simple password protection to prevent Snowflake bill shock."""
-    if "password_correct" not in st.session_state:
-        st.session_state.password_correct = False
-
-    if st.session_state.password_correct:
-        return True
-
-    st.markdown("""
-    <style>
-        .stTextInput { width: 300px; margin: 0 auto; }
-        .stButton { width: 300px; margin: 0 auto; display: block; }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.title("🔒 Classified Access")
-        pwd = st.text_input("Enter Clearance Code", type="password")
-        if st.button("Authenticate"):
-            if pwd == REQUIRED_PASSWORD:
-                st.session_state.password_correct = True
-                st.rerun()
-            else:
-                st.error("Access Denied.")
-    return False
-
-if not check_password():
-    st.stop()
-
 # Constants
 GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
