@@ -4,18 +4,17 @@ import pandas as pd
 import altair as alt
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import SQLDatabase, Settings
 from llama_index.core.query_engine import NLSQLTableQueryEngine
 from sqlalchemy import create_engine, text, inspect
-import datetime
-import pycountry
 import logging
-import streamlit.components.v1 as components
 import re
 from urllib.parse import urlparse
+import pycountry
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(
@@ -41,6 +40,40 @@ if missing:
     st.error(f"❌ CRITICAL ERROR: Missing env vars: {', '.join(missing)}")
     st.stop()
 
+# --- SECURITY: Password Gate ---
+# Set "APP_PASSWORD" in your Secrets for production. Default is 'admin123'.
+REQUIRED_PASSWORD = os.getenv("APP_PASSWORD", "admin123") 
+
+def check_password():
+    """Simple password protection to prevent Snowflake bill shock."""
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if st.session_state.password_correct:
+        return True
+
+    st.markdown("""
+    <style>
+        .stTextInput { width: 300px; margin: 0 auto; }
+        .stButton { width: 300px; margin: 0 auto; display: block; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.title("🔒 Classified Access")
+        pwd = st.text_input("Enter Clearance Code", type="password")
+        if st.button("Authenticate"):
+            if pwd == REQUIRED_PASSWORD:
+                st.session_state.password_correct = True
+                st.rerun()
+            else:
+                st.error("Access Denied.")
+    return False
+
+if not check_password():
+    st.stop()
+
 # Constants
 GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
@@ -61,19 +94,19 @@ def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
-        header {visibility: hidden;}
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        .stDeployButton {display:none;}
-        .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
-        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
-        div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
-        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
+        section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
+        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 10px; }
+        div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.8rem; }
+        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.5rem; }
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
-        .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
-        .example-box { background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; }
-        .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
+        
+        /* Report Box */
+        .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
+        
+        /* Example Questions */
+        .example-box { background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-top: 10px; }
+        .example-item { color: #94a3b8; font-size: 0.9em; margin-bottom: 5px; font-family: monospace; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -225,6 +258,10 @@ def generate_briefing(engine):
 def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
+        
+        # Updated Hype Badge for 10M Scale
+        st.info("🚀 **Monitoring 10M+ Incidents**\n90-Day Global Horizon (Parquet Optimized)")
+        
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
