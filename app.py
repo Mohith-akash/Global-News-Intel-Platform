@@ -6,8 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
-# CHANGED: Import Groq
-from llama_index.llms.groq import Groq
+from llama_index.llms.groq import Groq  # Changed: Use Groq
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import SQLDatabase, Settings
 from llama_index.core.query_engine import NLSQLTableQueryEngine
@@ -15,6 +14,7 @@ from sqlalchemy import create_engine, text, inspect
 import logging
 import re
 from urllib.parse import urlparse
+import duckdb
 import pycountry
 
 # --- 1. CONFIGURATION ---
@@ -31,31 +31,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gip")
 
 # Validation
-REQUIRED_ENVS = [
-    "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "SNOWFLAKE_ACCOUNT", 
-    "SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_DATABASE", "SNOWFLAKE_SCHEMA", 
-    "GOOGLE_API_KEY", "GROQ_API_KEY" # Added GROQ_API_KEY
-]
+REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "GOOGLE_API_KEY", "GROQ_API_KEY"]
 missing = [k for k in REQUIRED_ENVS if not os.getenv(k)]
 if missing:
     st.error(f"❌ CRITICAL ERROR: Missing env vars: {', '.join(missing)}")
     st.stop()
 
 # Constants
-# CHANGED: Using Groq Model
 GROQ_MODEL = "llama-3.1-8b-instant"
 GEMINI_EMBED_MODEL = "models/embedding-001"
-
-# Snowflake Config
-SNOWFLAKE_CONFIG = {
-    "user": os.getenv("SNOWFLAKE_USER"),
-    "password": os.getenv("SNOWFLAKE_PASSWORD"),
-    "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-    "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-    "database": os.getenv("SNOWFLAKE_DATABASE"),
-    "schema": os.getenv("SNOWFLAKE_SCHEMA"),
-    "role": "ACCOUNTADMIN"
-}
 
 # --- 2. STYLING ---
 def style_app():
@@ -78,22 +62,25 @@ def style_app():
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. BACKEND ---
-@st.cache_resource
-def get_db_engine():
-    url = (
-        f"snowflake://{SNOWFLAKE_CONFIG['user']}:{SNOWFLAKE_CONFIG['password']}"
-        f"@{SNOWFLAKE_CONFIG['account']}/{SNOWFLAKE_CONFIG['database']}/"
-        f"{SNOWFLAKE_CONFIG['schema']}?warehouse={SNOWFLAKE_CONFIG['warehouse']}"
-        f"&role={SNOWFLAKE_CONFIG['role']}"
-    )
-    return create_engine(url)
+# --- 3. BACKEND (MOTHERDUCK) ---
 
-@st.cache_data(ttl=300)
-def safe_read_sql(_engine, sql, params=None):
+# Native DuckDB Connection (For UI/Pandas)
+@st.cache_resource
+def get_db_connection():
+    token = os.getenv("MOTHERDUCK_TOKEN")
+    # Connects to the 'gdelt_db' database in MotherDuck
+    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}')
+
+# SQLAlchemy Engine (For LlamaIndex AI)
+@st.cache_resource
+def get_sql_engine():
+    token = os.getenv("MOTHERDUCK_TOKEN")
+    return create_engine(f'duckdb:///md:gdelt_db?motherduck_token={token}')
+
+def safe_read_sql(conn, query):
     try:
-        with _engine.connect() as conn:
-            return pd.read_sql(text(sql), conn, params=params)
+        # DuckDB native execution
+        return conn.execute(query).df()
     except Exception as e:
         logger.error(f"SQL Error: {e}")
         return pd.DataFrame()
@@ -104,42 +91,34 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-def clean_key(text):
-    return text.lower().replace("_", " ").replace("-", " ").strip()
-
-# [HEAVILY IMPROVED HEADLINE CLEANER]
+# [RUTHLESS HEADLINE CLEANER]
 def format_headline(url, actor):
     if not url: return f"Update on {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # If slug is bad (too short, digits, index.html), use previous segment
-        if len(slug) < 5 or slug.replace('-','').isdigit() or 'index' in slug.lower():
+        # If slug is useless, try previous path segment
+        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         text = re.sub(r'\.html?$', '', text)
         
-        # 1. REMOVE DATES (Aggressive)
+        # 1. KILL GARBAGE IDS (The 30-digit junk)
+        if re.search(r'[A-Za-z0-9]{15,}', text): 
+            return f"Latest Intelligence: {actor}"
+            
+        # 2. KILL DATES
         text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
         text = re.sub(r'\b\d{8}\b', '', text) 
-        
-        # 2. REMOVE JUNK SUFFIXES (Long numbers at end)
-        text = re.sub(r'\s[a-zA-Z0-9]{5,}$', '', text)
-        text = re.sub(r'\s\d+$', '', text)
-        
-        # 3. GARBAGE DETECTOR (If mostly numbers/hex code)
-        digit_count = sum(c.isdigit() for c in text)
-        if len(text) > 0 and (digit_count / len(text) > 0.3):
-            return f"Latest Intelligence: {actor}"
 
-        # 4. Remove Prefixes
+        # 3. CLEAN START
         text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
 
         headline = " ".join(text.split()).title()
         
-        if len(headline) < 5: return f"Update on {actor}"
+        if len(headline) < 5: return f"Report: {actor}"
         
         return headline
     except:
@@ -151,23 +130,23 @@ def get_query_engine(_engine):
     groq_api_key = os.getenv("GROQ_API_KEY")
     
     try:
-        # CHANGED: Initialize Groq LLM
+        # CHANGED: Using Groq Llama 3.1
         llm = Groq(model=GROQ_MODEL, api_key=groq_api_key)
         
-        # Keep Gemini for Embeddings (Groq doesn't do embeddings yet)
+        # Keep Gemini for Embeddings
         embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=google_api_key)
-        
         Settings.llm = llm
         Settings.embed_model = embed_model
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "EVENTS_DAGSTER" 
-        matched = next((t for t in combined_names if t.upper() == target_table), None)
         
-        if not matched: return None
+        # Look for EVENTS_DAGSTER (MotherDuck tables are often lowercase, check both)
+        target_table = next((t for t in combined_names if t.upper() == "EVENTS_DAGSTER"), None)
         
-        sql_database = SQLDatabase(_engine, include_tables=[matched])
+        if not target_table: return None
+        
+        sql_database = SQLDatabase(_engine, include_tables=[target_table])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
         update_str = (
@@ -176,13 +155,12 @@ def get_query_engine(_engine):
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
             "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
-            "4. **Response:** Return SQL in metadata."
+            "4. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`, not `TOP 5`).\n"
+            "5. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
-    except Exception as e: 
-        logger.error(f"Engine Error: {e}")
-        return None
+    except: return None
 
 # --- 4. LOGIC MODULES ---
 
@@ -199,6 +177,7 @@ def run_manual_override(prompt, engine):
             return True, None, explanation, "-- Knowledge Base Retrieval"
 
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
+        # DuckDB Syntax
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
             FROM EVENTS_DAGSTER 
@@ -226,7 +205,7 @@ def generate_briefing(engine):
     if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
     
-    # CHANGED: Use Groq for Briefing too
+    # CHANGED: Use Groq for Briefing
     model = Groq(model=GROQ_MODEL, api_key=os.getenv("GROQ_API_KEY"))
     brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
@@ -236,10 +215,6 @@ def generate_briefing(engine):
 def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        
-        # Updated Hype Badge for 10M Scale
-        st.info("🚀 **Monitoring 10M+ Incidents**\n90-Day Global Horizon (Parquet Optimized)")
-        
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
@@ -250,71 +225,61 @@ def render_sidebar(engine):
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
-        count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
-        count = count_df.iloc[0,0] if not count_df.empty else 0
-        st.metric("Total Events", f"{count:,}")
         
         try:
-            with engine.connect() as conn:
-                res = conn.execute(text("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER")).fetchone()
-                if res and res[0]:
-                    try:
-                        # [FIXED DATE FORMATTING]
-                        d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
-                        d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
-                        st.info(f"📅 **Window:**\n{d_min} to {d_max}")
-                    except: st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
+            count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
+            count = count_df.iloc[0,0] if not count_df.empty else 0
+            st.metric("Total Events", f"{count:,}")
+        except: st.metric("Total Events", "Connecting...")
+        
+        try:
+            # DuckDB Date query (Supports MIN/MAX directly)
+            res = engine.execute("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER").fetchone()
+            if res and res[0]:
+                try:
+                    d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
+                    d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
+                    st.info(f"📅 **Window:**\n{d_min} to {d_max}")
+                except: st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
         except: pass
             
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
-        st.success("☁️ Snowflake Data Cloud")
-        st.success("⚡ Groq Llama 3.1") # CHANGED: Display Groq
+        st.success("🦆 MotherDuck (Cloud DuckDB)")
+        st.success("⚡ Groq Llama 3.1")
         
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
-# [NEW & IMPROVED METRICS]
 def render_hud(engine):
-    # 1. Volume
     sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
-    
-    # 2. Hotspot (Most active country code)
     sql_hotspot = "SELECT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
-    
-    # 3. Critical Alerts (Events with Extreme Impact)
     sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
 
-    # Defaults
     vol, hotspot, crit = 0, "Scanning...", 0
 
     try:
-        # Get Volume
         df_vol = safe_read_sql(engine, sql_vol)
         if not df_vol.empty: vol = df_vol.iloc[0,0]
 
-        # Get Hotspot (Convert Code to Name if possible)
         df_hot = safe_read_sql(engine, sql_hotspot)
         if not df_hot.empty: 
             code = df_hot.iloc[0,0]
             try:
                 c = pycountry.countries.get(alpha_2=code)
-                # Fallback to alpha_3 if 2 fails, or just use code
                 hotspot = c.name if c else code
             except: hotspot = code
 
-        # Get Critical Count
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
 
-    except Exception as e:
-        hotspot = "Offline"
+    except Exception as e: hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
-    with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Country with highest event volume right now.")
-    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Number of high-intensity conflict/diplomacy events.")
+    with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Most active country.")
+    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Events with Impact Score > 6.")
 
 def render_ticker(engine):
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
@@ -345,7 +310,6 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
         sql = """
             SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
@@ -375,7 +339,6 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (CLEAN)]
     with t_feed:
         base_sql = """
             SELECT 
@@ -394,16 +357,13 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             
-            # 1. Clean Headlines
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             
-            # 2. Format Date (02 Dec)
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except:
                 df['Date'] = df['DATE']
 
-            # 3. Type (Impact Words)
             def get_type(score):
                 if score < -3: return "🔥 Conflict"
                 if score > 3: return "🤝 Diplomacy"
@@ -411,7 +371,6 @@ def render_visuals(engine):
             
             df['Type'] = df['IMPACT_SCORE'].apply(get_type)
 
-            # 4. Display 4 Clean Columns
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
                 use_container_width=True, 
@@ -428,18 +387,20 @@ def render_visuals(engine):
 # --- 6. MAIN ---
 def main():
     style_app()
-    engine = get_db_engine()
     
-    # [CRITICAL: Init Session State]
+    # [CRITICAL] Connect using MotherDuck
+    conn_ui = get_db_connection()
+    engine_ai = get_sql_engine()
+    
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
         
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to the live GDELT stream. Ask me anything."}]
+        st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to MotherDuck GDELT stream. Ask me anything."}]
 
-    render_sidebar(engine)
+    render_sidebar(conn_ui)
     st.title("Global Intelligence Command Center")
-    st.markdown("**Real-Time Geopolitical Signal Processing**")
+    st.markdown("**Real-Time Geopolitical Signal Processing (MotherDuck Engine)**")
     
     if 'generated_report' in st.session_state:
         with st.container():
@@ -465,8 +426,8 @@ def main():
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    render_hud(engine)
-    render_ticker(engine)
+    render_hud(conn_ui)
+    render_ticker(conn_ui)
     st.divider()
     
     c_chat, c_viz = st.columns([35, 65])
@@ -499,8 +460,8 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override
-                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
+                            # 1. Manual Override (UI Connection)
+                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
                             if matched:
                                 st.markdown(m_txt)
                                 if m_df is not None and not m_df.empty: 
@@ -518,8 +479,8 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback
-                                qe = get_query_engine(engine)
+                                # 2. AI Fallback (AI Engine Connection)
+                                qe = get_query_engine(engine_ai)
                                 if qe:
                                     resp = qe.query(prompt)
                                     st.markdown(resp.response)
@@ -527,7 +488,7 @@ def main():
                                     if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
                                         sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
-                                            df_context = safe_read_sql(engine, sql)
+                                            df_context = safe_read_sql(conn_ui, sql)
                                             if not df_context.empty:
                                                 df_context.columns = [c.upper() for c in df_context.columns]
                                                 if 'NEWS_LINK' in df_context.columns:
@@ -547,7 +508,7 @@ def main():
                         finally:
                             st.session_state['llm_locked'] = False
 
-    with c_viz: render_visuals(engine)
+    with c_viz: render_visuals(conn_ui)
 
 if __name__ == "__main__":
     main()
