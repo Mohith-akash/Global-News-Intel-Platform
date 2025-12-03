@@ -282,7 +282,8 @@ def render_hud(engine):
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
 
-    except Exception as e: hotspot = "Offline"
+    except Exception as e:
+        hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
@@ -475,7 +476,7 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override
+                            # 1. Manual Override (UI Connection)
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
                             if matched:
                                 st.markdown(m_txt)
@@ -494,7 +495,7 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback
+                                # 2. AI Fallback (AI Engine Connection)
                                 qe = get_query_engine(engine_ai)
                                 if qe:
                                     resp = qe.query(prompt)
