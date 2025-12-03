@@ -6,7 +6,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
-from llama_index.llms.groq import Groq  # Changed: Use Groq
+# CHANGED: Import Groq
+from llama_index.llms.groq import Groq
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import SQLDatabase, Settings
 from llama_index.core.query_engine import NLSQLTableQueryEngine
@@ -38,7 +39,8 @@ if missing:
     st.stop()
 
 # Constants
-GROQ_MODEL = "llama-3.1-8b-instant"
+# CHANGED: Using Llama 3.3 70B
+GROQ_MODEL = "llama-3.3-70b-versatile"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
 # --- 2. STYLING ---
@@ -130,7 +132,7 @@ def get_query_engine(_engine):
     groq_api_key = os.getenv("GROQ_API_KEY")
     
     try:
-        # CHANGED: Using Groq Llama 3.1
+        # CHANGED: Using Groq Llama 3.3 70B
         llm = Groq(model=GROQ_MODEL, api_key=groq_api_key)
         
         # Keep Gemini for Embeddings
@@ -215,6 +217,10 @@ def generate_briefing(engine):
 def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
+        
+        # Updated Hype Badge for 10M Scale
+        st.info("🚀 **Monitoring 10M+ Incidents**\n90-Day Global Horizon (Parquet Optimized)")
+        
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
@@ -246,13 +252,14 @@ def render_sidebar(engine):
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
         st.success("🦆 MotherDuck (Cloud DuckDB)")
-        st.success("⚡ Groq Llama 3.1")
+        st.success("⚡ Groq Llama 3.3")
         
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
+    # DuckDB SQL
     sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
     sql_hotspot = "SELECT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
     sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
@@ -268,6 +275,7 @@ def render_hud(engine):
             code = df_hot.iloc[0,0]
             try:
                 c = pycountry.countries.get(alpha_2=code)
+                # Fallback to alpha_3 if 2 fails, or just use code
                 hotspot = c.name if c else code
             except: hotspot = code
 
@@ -310,6 +318,7 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
+    # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
         sql = """
             SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
@@ -339,6 +348,7 @@ def render_visuals(engine):
         else:
             st.info("No trending data available yet.")
 
+    # [TAB 3: GLOBAL FEED (CLEAN)]
     with t_feed:
         base_sql = """
             SELECT 
@@ -357,13 +367,16 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             
+            # 1. Clean Headlines
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             
+            # 2. Format Date (02 Dec)
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except:
                 df['Date'] = df['DATE']
 
+            # 3. Type (Impact Words)
             def get_type(score):
                 if score < -3: return "🔥 Conflict"
                 if score > 3: return "🤝 Diplomacy"
@@ -371,6 +384,7 @@ def render_visuals(engine):
             
             df['Type'] = df['IMPACT_SCORE'].apply(get_type)
 
+            # 4. Display 4 Clean Columns
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
                 use_container_width=True, 
@@ -392,6 +406,7 @@ def main():
     conn_ui = get_db_connection()
     engine_ai = get_sql_engine()
     
+    # [CRITICAL: Init Session State]
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
         
@@ -460,7 +475,7 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override (UI Connection)
+                            # 1. Manual Override
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
                             if matched:
                                 st.markdown(m_txt)
@@ -479,7 +494,7 @@ def main():
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback (AI Engine Connection)
+                                # 2. AI Fallback
                                 qe = get_query_engine(engine_ai)
                                 if qe:
                                     resp = qe.query(prompt)
