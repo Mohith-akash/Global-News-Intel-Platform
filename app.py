@@ -71,7 +71,7 @@ def style_app():
         .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
         
         /* Example Questions */
-        .example-box { background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-top: 10px; }
+        .example-box { background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-top: 10px; margin-bottom: 10px;}
         .example-item { color: #94a3b8; font-size: 0.9em; margin-bottom: 5px; font-family: monospace; }
     </style>
     """, unsafe_allow_html=True)
@@ -176,35 +176,6 @@ def get_query_engine(_engine):
 
 # --- 4. LOGIC MODULES ---
 
-def run_manual_override(prompt, engine):
-    p = prompt.lower()
-    
-    definitions = {
-        "conflict index": "### 🛡️ Conflict Index Definition\nIntensity of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests/Threats.\n- **8-10:** Military assault/War.",
-        "stability": "### ⚖️ Stability Score\nOverall tone of coverage.\n- **< 40:** High Instability.\n- **> 60:** High Stability.",
-        "impact score": "### 💥 Impact Score\nSignificance (-10 to 10).\n- **Negative:** Conflict.\n- **Positive:** Cooperation."
-    }
-    for key, explanation in definitions.items():
-        if key in p:
-            return True, None, explanation, "-- Knowledge Base Retrieval"
-
-    if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
-        sql = """
-            SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
-            FROM EVENTS_DAGSTER 
-            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') 
-            GROUP BY 1 ORDER BY 2 DESC
-        """
-        df = safe_read_sql(engine, sql)
-        if not df.empty: 
-            df.columns = [c.upper() for c in df.columns]
-            summary = "### 🇨🇳 vs 🇺🇸 Superpower Analysis\n"
-            for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} events. (Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
-        else: summary = "No comparative data found."
-        return True, df, summary, sql
-        
-    return False, None, None, None
 
 def generate_briefing(engine):
     sql = """
@@ -300,7 +271,7 @@ def render_hud(engine):
         hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
+    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.", delta="High Activity", delta_color="\u200B")
     with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Country with highest event volume right now.")
     with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Number of high-intensity conflict/diplomacy events.")
 
@@ -487,49 +458,30 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override
-                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
-                            if matched:
-                                st.markdown(m_txt)
-                                if m_df is not None and not m_df.empty: 
-                                    m_df.columns = [c.upper() for c in m_df.columns]
-                                    if 'NEWS_LINK' in m_df.columns:
-                                        st.caption("Top Trending Sources:")
-                                        st.dataframe(
-                                            m_df,
-                                            column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
-                                            hide_index=True
-                                        )
-                                    else:
-                                        st.dataframe(m_df)
-                                if m_sql and "-- Knowledge" not in m_sql:
-                                    with st.expander("Override Trace"): st.code(m_sql, language='sql')
-                                st.session_state.messages.append({"role":"assistant", "content": m_txt})
+                            # 2. AI Fallback
+                            qe = get_query_engine(engine)
+                            if qe:
+                                resp = qe.query(prompt)
+                                st.markdown(resp.response)
+                                
+                                if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                                    sql = resp.metadata['sql_query']
+                                    if is_safe_sql(sql):
+                                        df_context = safe_read_sql(engine, sql)
+                                        if not df_context.empty:
+                                            df_context.columns = [c.upper() for c in df_context.columns]
+                                            if 'NEWS_LINK' in df_context.columns:
+                                                st.caption("Contextual Data:")
+                                                st.dataframe(
+                                                    df_context, 
+                                                    column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                    hide_index=True
+                                                )
+                                        with st.expander("SQL Trace"): st.code(sql, language='sql')
+                                
+                                st.session_state.messages.append({"role":"assistant", "content": resp.response})
                             else:
-                                # 2. AI Fallback
-                                qe = get_query_engine(engine)
-                                if qe:
-                                    resp = qe.query(prompt)
-                                    st.markdown(resp.response)
-                                    
-                                    if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
-                                        sql = resp.metadata['sql_query']
-                                        if is_safe_sql(sql):
-                                            df_context = safe_read_sql(engine, sql)
-                                            if not df_context.empty:
-                                                df_context.columns = [c.upper() for c in df_context.columns]
-                                                if 'NEWS_LINK' in df_context.columns:
-                                                    st.caption("Contextual Data:")
-                                                    st.dataframe(
-                                                        df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
-                                                        hide_index=True
-                                                    )
-                                            with st.expander("SQL Trace"): st.code(sql, language='sql')
-                                    
-                                    st.session_state.messages.append({"role":"assistant", "content": resp.response})
-                                else:
-                                    st.error("AI Engine unavailable.")
+                                st.error("AI Engine unavailable.")
                         except Exception as e:
                             st.error(f"Query Failed: {e}")
                         finally:
