@@ -4,19 +4,19 @@ import pandas as pd
 import altair as alt
 import plotly.express as px
 import plotly.graph_objects as go
-import streamlit.components.v1 as components
 from dotenv import load_dotenv
-# CHANGED: Import Groq
-from llama_index.llms.groq import Groq
+from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import SQLDatabase, Settings
 from llama_index.core.query_engine import NLSQLTableQueryEngine
 from sqlalchemy import create_engine, text, inspect
+import datetime
+import pycountry
 import logging
+import streamlit.components.v1 as components
 import re
 from urllib.parse import urlparse
 import duckdb
-import pycountry
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(
@@ -32,15 +32,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gip")
 
 # Validation
-REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "GOOGLE_API_KEY", "GROQ_API_KEY"]
+REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "GOOGLE_API_KEY"]
 missing = [k for k in REQUIRED_ENVS if not os.getenv(k)]
 if missing:
     st.error(f"❌ CRITICAL ERROR: Missing env vars: {', '.join(missing)}")
     st.stop()
 
 # Constants
-# CHANGED: Using Llama 3.3 70B
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
 # --- 2. STYLING ---
@@ -48,32 +47,29 @@ def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
-        section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
-        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 10px; }
-        div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.8rem; }
-        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.5rem; }
+        header {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none;}
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
+        div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
+        div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
+        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
-        
-        /* Report Box */
-        .report-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 20px; }
-        
-        /* Example Questions */
-        .example-box { background-color: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-top: 10px; }
-        .example-item { color: #94a3b8; font-size: 0.9em; margin-bottom: 5px; font-family: monospace; }
+        .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
+        .example-box { background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; }
+        .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. BACKEND (MOTHERDUCK) ---
 
-# Native DuckDB Connection (For UI/Pandas)
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    # Connects to the 'gdelt_db' database in MotherDuck
     return duckdb.connect(f'md:gdelt_db?motherduck_token={token}')
 
-# SQLAlchemy Engine (For LlamaIndex AI)
 @st.cache_resource
 def get_sql_engine():
     token = os.getenv("MOTHERDUCK_TOKEN")
@@ -81,7 +77,6 @@ def get_sql_engine():
 
 def safe_read_sql(conn, query):
     try:
-        # DuckDB native execution
         return conn.execute(query).df()
     except Exception as e:
         logger.error(f"SQL Error: {e}")
@@ -93,57 +88,50 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [RUTHLESS HEADLINE CLEANER]
+# [AGGRESSIVE HEADLINE CLEANER]
 def format_headline(url, actor):
     if not url: return f"Update on {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # If slug is useless, try previous path segment
+        # Fallback to previous segment if slug is bad
         if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         text = re.sub(r'\.html?$', '', text)
         
-        # 1. KILL GARBAGE IDS (The 30-digit junk)
-        if re.search(r'[A-Za-z0-9]{15,}', text): 
-            return f"Latest Intelligence: {actor}"
-            
-        # 2. KILL DATES
+        # 1. KILL DATES (2025 11 19)
         text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
         text = re.sub(r'\b\d{8}\b', '', text) 
 
-        # 3. CLEAN START
+        # 2. KILL JUNK (Pure numbers or Long Hashes like A745...)
+        if re.match(r'^\d+$', text) or re.search(r'[A-F0-9]{10,}', text):
+            return f"Intelligence Report: {actor}"
+
+        # 3. Clean Start Words
         text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
 
         headline = " ".join(text.split()).title()
         
-        if len(headline) < 5: return f"Report: {actor}"
+        if len(headline) < 5: return f"Update on {actor}"
         
         return headline
     except:
-        return f"Intelligence Brief: {actor}"
+        return f"Briefing: {actor}"
 
 @st.cache_resource
 def get_query_engine(_engine):
-    google_api_key = os.getenv("GOOGLE_API_KEY")
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    
+    api_key = os.getenv("GOOGLE_API_KEY")
     try:
-        # CHANGED: Using Groq Llama 3.3 70B
-        llm = Groq(model=GROQ_MODEL, api_key=groq_api_key)
-        
-        # Keep Gemini for Embeddings
-        embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=google_api_key)
+        llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
+        embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
         Settings.llm = llm
         Settings.embed_model = embed_model
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        
-        # Look for EVENTS_DAGSTER (MotherDuck tables are often lowercase, check both)
         target_table = next((t for t in combined_names if t.upper() == "EVENTS_DAGSTER"), None)
         
         if not target_table: return None
@@ -157,7 +145,7 @@ def get_query_engine(_engine):
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
             "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
-            "4. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`, not `TOP 5`).\n"
+            "4. **DIALECT:** Use DuckDB syntax.\n"
             "5. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
@@ -179,7 +167,6 @@ def run_manual_override(prompt, engine):
             return True, None, explanation, "-- Knowledge Base Retrieval"
 
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
-        # DuckDB Syntax
         sql = """
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
             FROM EVENTS_DAGSTER 
@@ -206,9 +193,7 @@ def generate_briefing(engine):
     df = safe_read_sql(engine, sql)
     if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
-    
-    # CHANGED: Use Groq for Briefing
-    model = Groq(model=GROQ_MODEL, api_key=os.getenv("GROQ_API_KEY"))
+    model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
     brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
 
@@ -217,10 +202,6 @@ def generate_briefing(engine):
 def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        
-        # Updated Hype Badge for 10M Scale
-        st.info("🚀 **Monitoring 10M+ Incidents**\n90-Day Global Horizon (Parquet Optimized)")
-        
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
@@ -238,28 +219,15 @@ def render_sidebar(engine):
             st.metric("Total Events", f"{count:,}")
         except: st.metric("Total Events", "Connecting...")
         
-        try:
-            # DuckDB Date query (Supports MIN/MAX directly)
-            res = engine.execute("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER").fetchone()
-            if res and res[0]:
-                try:
-                    d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
-                    d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
-                    st.info(f"📅 **Window:**\n{d_min} to {d_max}")
-                except: st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
-        except: pass
-            
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
-        st.success("🦆 MotherDuck (Cloud DuckDB)")
-        st.success("⚡ Groq Llama 3.3")
+        st.success("🦆 MotherDuck (Cloud)")
+        st.success("🧠 Google Gemini 2.5")
         
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
-    # DuckDB SQL
     sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
     sql_hotspot = "SELECT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
     sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
@@ -275,15 +243,13 @@ def render_hud(engine):
             code = df_hot.iloc[0,0]
             try:
                 c = pycountry.countries.get(alpha_2=code)
-                # Fallback to alpha_3 if 2 fails, or just use code
                 hotspot = c.name if c else code
             except: hotspot = code
 
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
 
-    except Exception as e:
-        hotspot = "Offline"
+    except Exception: hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
@@ -298,13 +264,7 @@ def render_ticker(engine):
         items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
         
-    html = f"""
-    <!DOCTYPE html><html><head><style>
-        .ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }}
-        .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }}
-        @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
-    </style></head><body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>
-    """
+    html = f"""<!DOCTYPE html><html><head><style>.ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }} .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }} @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}</style></head><body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>"""
     components.html(html, height=55)
 
 def render_visuals(engine):
@@ -319,7 +279,6 @@ def render_visuals(engine):
             st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
-    # [TAB 2: VIRAL NEWS LEADERBOARD]
     with t_trending:
         sql = """
             SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
@@ -346,10 +305,8 @@ def render_visuals(engine):
                     "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")
                 }
             )
-        else:
-            st.info("No trending data available yet.")
+        else: st.info("No trending data available yet.")
 
-    # [TAB 3: GLOBAL FEED (CLEAN)]
     with t_feed:
         base_sql = """
             SELECT 
@@ -367,25 +324,17 @@ def render_visuals(engine):
         
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
-            
-            # 1. Clean Headlines
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            
-            # 2. Format Date (02 Dec)
             try:
                 df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
-            except:
-                df['Date'] = df['DATE']
+            except: df['Date'] = df['DATE']
 
-            # 3. Type (Impact Words)
             def get_type(score):
                 if score < -3: return "🔥 Conflict"
                 if score > 3: return "🤝 Diplomacy"
                 return "📢 General"
-            
             df['Type'] = df['IMPACT_SCORE'].apply(get_type)
 
-            # 4. Display 4 Clean Columns
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
                 use_container_width=True, 
@@ -402,12 +351,9 @@ def render_visuals(engine):
 # --- 6. MAIN ---
 def main():
     style_app()
-    
-    # [CRITICAL] Connect using MotherDuck
     conn_ui = get_db_connection()
     engine_ai = get_sql_engine()
     
-    # [CRITICAL: Init Session State]
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
         
@@ -416,26 +362,19 @@ def main():
 
     render_sidebar(conn_ui)
     st.title("Global Intelligence Command Center")
-    st.markdown("**Real-Time Geopolitical Signal Processing (MotherDuck Engine)**")
+    st.markdown("**Real-Time Geopolitical Signal Processing**")
     
     if 'generated_report' in st.session_state:
         with st.container():
             st.markdown("<div class='report-box'>", unsafe_allow_html=True)
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
-            
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
-                st.caption("Sources:")
                 try:
                     src_df = st.session_state['report_sources']
                     src_df.columns = [c.upper() for c in src_df.columns]
-                    st.dataframe(
-                        src_df[['NEWS_LINK']],
-                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
-                        hide_index=True
-                    )
+                    st.dataframe(src_df[['NEWS_LINK']], column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")}, hide_index=True)
                 except: pass
-
             if st.button("Close"): 
                 del st.session_state['generated_report']
                 if 'report_sources' in st.session_state: del st.session_state['report_sources']
@@ -449,21 +388,12 @@ def main():
     c_chat, c_viz = st.columns([35, 65])
     with c_chat:
         st.subheader("💬 AI Analyst")
-        
         b1, b2 = st.columns(2)
         p = None
         if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
-        st.markdown("""
-        <div class="example-box">
-            <div class="example-item">1. Analyze the conflict trend in the Middle East.</div>
-            <div class="example-item">2. Which country has the lowest sentiment score?</div>
-            <div class="example-item">3. What is Conflict Index?</div>
-            <div class="example-item">4. Compare media coverage of USA vs China.</div>
-            <div class="example-item">5. Summarize activity involving Russia.</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("""<div class="example-box"><div class="example-item">1. Analyze the conflict trend in the Middle East.</div><div class="example-item">2. Which country has the lowest sentiment score?</div><div class="example-item">3. What is Conflict Index?</div></div>""", unsafe_allow_html=True)
         
         if prompt := (st.chat_input("Directive...") or p):
             if st.session_state['llm_locked']:
@@ -471,12 +401,10 @@ def main():
             else:
                 st.session_state.messages.append({"role":"user", "content":prompt})
                 if not p: st.chat_message("user").write(prompt)
-                
                 with st.chat_message("assistant"):
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # 1. Manual Override (UI Connection)
                             matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
                             if matched:
                                 st.markdown(m_txt)
@@ -484,23 +412,16 @@ def main():
                                     m_df.columns = [c.upper() for c in m_df.columns]
                                     if 'NEWS_LINK' in m_df.columns:
                                         st.caption("Top Trending Sources:")
-                                        st.dataframe(
-                                            m_df,
-                                            column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
-                                            hide_index=True
-                                        )
-                                    else:
-                                        st.dataframe(m_df)
+                                        st.dataframe(m_df, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")}, hide_index=True)
+                                    else: st.dataframe(m_df)
                                 if m_sql and "-- Knowledge" not in m_sql:
                                     with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                # 2. AI Fallback (AI Engine Connection)
                                 qe = get_query_engine(engine_ai)
                                 if qe:
                                     resp = qe.query(prompt)
                                     st.markdown(resp.response)
-                                    
                                     if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
                                         sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
@@ -509,20 +430,12 @@ def main():
                                                 df_context.columns = [c.upper() for c in df_context.columns]
                                                 if 'NEWS_LINK' in df_context.columns:
                                                     st.caption("Contextual Data:")
-                                                    st.dataframe(
-                                                        df_context, 
-                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
-                                                        hide_index=True
-                                                    )
+                                                    st.dataframe(df_context, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")}, hide_index=True)
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
-                                    
                                     st.session_state.messages.append({"role":"assistant", "content": resp.response})
-                                else:
-                                    st.error("AI Engine unavailable.")
-                        except Exception as e:
-                            st.error(f"Query Failed: {e}")
-                        finally:
-                            st.session_state['llm_locked'] = False
+                                else: st.error("AI Engine unavailable.")
+                        except Exception as e: st.error(f"Query Failed: {e}")
+                        finally: st.session_state['llm_locked'] = False
 
     with c_viz: render_visuals(conn_ui)
 

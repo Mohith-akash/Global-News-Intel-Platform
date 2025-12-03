@@ -15,4 +15,3 @@ sqlalchemy
 # -----------------------------
 pycountry
 requests
-llama-index-llms-groq
