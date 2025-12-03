@@ -95,6 +95,33 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
+# Quick data check function
+def check_data_availability(conn):
+    """Check what data is actually available"""
+    try:
+        # Check total records
+        total = safe_read_sql(conn, "SELECT COUNT(*) as c FROM EVENTS_DAGSTER")
+        
+        # Check date range
+        date_range = safe_read_sql(conn, "SELECT MIN(DATE) as min_date, MAX(DATE) as max_date FROM EVENTS_DAGSTER")
+        
+        # Check recent data (last 7 days)
+        week_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')
+        recent = safe_read_sql(conn, f"SELECT COUNT(*) as c FROM EVENTS_DAGSTER WHERE DATE >= '{week_ago}'")
+        
+        # Check sample countries
+        countries = safe_read_sql(conn, "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 5")
+        
+        return {
+            'total': total.iloc[0,0] if not total.empty else 0,
+            'date_range': date_range if not date_range.empty else None,
+            'recent_count': recent.iloc[0,0] if not recent.empty else 0,
+            'top_countries': countries if not countries.empty else None
+        }
+    except Exception as e:
+        logger.error(f"Data check failed: {e}")
+        return None
+
 # [HEADLINE CLEANER]
 def format_headline(url, actor=None):
     fallback = "Global Incident Report"
@@ -360,6 +387,20 @@ def generate_briefing(engine):
 def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
+        
+        # Data diagnostics
+        with st.expander("🔍 Data Status", expanded=False):
+            data_info = check_data_availability(engine)
+            if data_info:
+                st.metric("Total Records", f"{data_info['total']:,}")
+                st.metric("Recent (7 days)", f"{data_info['recent_count']:,}")
+                if data_info['date_range'] is not None and not data_info['date_range'].empty:
+                    st.caption(f"Date Range: {data_info['date_range'].iloc[0,0]} to {data_info['date_range'].iloc[0,1]}")
+                if data_info['top_countries'] is not None:
+                    st.caption("Top Countries:")
+                    for _, row in data_info['top_countries'].iterrows():
+                        st.caption(f"  • {row[0]}: {row[1]:,}")
+        
         st.subheader("📋 Intelligence Report")
         if st.button("🔄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
