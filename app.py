@@ -5,7 +5,6 @@ import altair as alt
 import plotly.express as px
 import plotly.graph_objects as go
 from dotenv import load_dotenv
-# UPDATED IMPORTS TO FIX DEPRECATION WARNINGS
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import SQLDatabase, Settings
@@ -40,7 +39,7 @@ if missing:
     st.stop()
 
 # Constants
-GEMINI_MODEL = "models/gemini-1.5-flash" # Updated to stable model name if needed, or keep yours
+GEMINI_MODEL = "models/gemini-1.5-flash"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
 # --- 2. STYLING ---
@@ -69,8 +68,9 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    # Added read_only=True to prevent locking issues which can cause crashes
-    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
+    # CRITICAL FIX: read_only=True prevents write-lock crashes
+    # config configures the client to be more tolerant
+    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True, config={'motherduck_user_agent': 'streamlit_app'})
 
 @st.cache_resource
 def get_sql_engine():
@@ -92,55 +92,36 @@ def is_safe_sql(sql: str) -> bool:
 
 # [HEADLINE CLEANER - STRICT MODE]
 def format_headline(url, actor):
-    """
-    Very strict cleaner. If a headline looks like a hash or contains
-    mixed numbers/letters, it defaults to a clean 'Update on [Country]' string.
-    """
     fallback = f"Update on {actor}" if actor else "Global Intelligence Update"
-    
     if not url: return fallback
-
     try:
         parsed = urlparse(url)
         path = unquote(parsed.path)
-        
         segments = [s for s in path.split('/') if s]
         if not segments: return fallback
 
         candidates = segments[-3:] 
         raw_text = ""
-        
         for seg in reversed(candidates):
             seg = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
-            if seg.isdigit(): continue
-            if re.search(r'\d{4}', seg): continue
+            if seg.isdigit() or re.search(r'\d{4}', seg): continue
             if seg.lower() in ['index', 'default', 'article', 'news']: continue
-            
             if len(seg) > 5:
-                raw_text = seg
-                break
+                raw_text = seg; break
         
         if not raw_text: return fallback
-
         text = raw_text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         words = text.split()
         clean_words = []
-        
         for w in words:
-            if any(char.isdigit() for char in w): continue
-            if len(w) > 14: continue
+            if any(char.isdigit() for char in w) or len(w) > 14: continue
             if w.lower() in ['html', 'php', 'story', 'id', 'page']: continue
             clean_words.append(w)
             
         final_text = " ".join(clean_words).title()
-        
-        if len(final_text) < 10 or len(clean_words) < 2:
-            return fallback
-            
+        if len(final_text) < 10 or len(clean_words) < 2: return fallback
         return final_text
-
-    except Exception:
-        return fallback
+    except Exception: return fallback
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -194,7 +175,6 @@ def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.subheader("📋 Intelligence Report")
-        # FIXED: use_container_width -> width="stretch"
         if st.button("📄 Generate Briefing", type="primary", width="stretch"):
             with st.spinner("Synthesizing..."):
                 report, source_df = generate_briefing(engine)
@@ -204,7 +184,6 @@ def render_sidebar(engine):
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
-        
         try:
             count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
             count = count_df.iloc[0,0] if not count_df.empty else 0
@@ -216,7 +195,6 @@ def render_sidebar(engine):
         st.success("🦆 MotherDuck (Cloud)")
         st.success("🧠 Google Gemini 1.5")
         
-        # FIXED: use_container_width -> width="stretch"
         if st.button("Reset Session", width="stretch"):
             st.session_state.clear(); st.rerun()
 
@@ -226,7 +204,6 @@ def render_hud(engine):
     sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
 
     vol, hotspot, crit = 0, "Scanning...", 0
-
     try:
         df_vol = safe_read_sql(engine, sql_vol)
         if not df_vol.empty: vol = df_vol.iloc[0,0]
@@ -241,7 +218,6 @@ def render_hud(engine):
 
         df_crit = safe_read_sql(engine, sql_crit)
         if not df_crit.empty: crit = df_crit.iloc[0,0]
-
     except Exception: hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
@@ -256,21 +232,18 @@ def render_ticker(engine):
         df.columns = [c.upper() for c in df.columns]
         items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
-        
     html = f"""<!DOCTYPE html><html><head><style>.ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }} .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }} @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}</style></head><body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>"""
     components.html(html, height=55)
 
 def render_visuals(engine):
     t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
-    
     with t_map:
         df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
             fig = px.choropleth(df, locations="Country", locationmode='ISO-3', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
-            # FIXED: use_container_width -> width="stretch" (handled by streamlit automatically mostly, but good to be safe)
-            st.plotly_chart(fig, use_container_width=True) 
+            st.plotly_chart(fig, width="stretch")
         else: st.info("No Map Data")
 
     with t_trending:
@@ -282,17 +255,13 @@ def render_visuals(engine):
             LIMIT 70
         """
         df = safe_read_sql(engine, sql)
-        
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
             df = df.drop_duplicates(subset=['Headline']).head(20)
-            
-            # FIXED: use_container_width -> width
             st.dataframe(
                 df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
-                use_container_width=True,
-                hide_index=True,
+                width="stretch", hide_index=True,
                 column_config={
                     "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
                     "ACTOR_COUNTRY_CODE": st.column_config.TextColumn("Country", width="small"),
@@ -304,36 +273,20 @@ def render_visuals(engine):
 
     with t_feed:
         base_sql = """
-            SELECT 
-                DATE, 
-                NEWS_LINK, 
-                MAX(MAIN_ACTOR) as MAIN_ACTOR,
-                AVG(IMPACT_SCORE) as IMPACT_SCORE 
-            FROM EVENTS_DAGSTER 
-            WHERE NEWS_LINK IS NOT NULL
-            GROUP BY 1, 2
-            ORDER BY 1 DESC 
-            LIMIT 50
+            SELECT DATE, NEWS_LINK, MAX(MAIN_ACTOR) as MAIN_ACTOR, AVG(IMPACT_SCORE) as IMPACT_SCORE 
+            FROM EVENTS_DAGSTER WHERE NEWS_LINK IS NOT NULL GROUP BY 1, 2 ORDER BY 1 DESC LIMIT 50
         """
         df = safe_read_sql(engine, base_sql)
-        
         if not df.empty:
             df.columns = [c.upper() for c in df.columns] 
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            try:
-                df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
+            try: df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
             except: df['Date'] = df['DATE']
-
-            def get_type(score):
-                if score < -3: return "🔥 Conflict"
-                if score > 3: return "🤝 Diplomacy"
-                return "📢 General"
-            df['Type'] = df['IMPACT_SCORE'].apply(get_type)
+            df['Type'] = df['IMPACT_SCORE'].apply(lambda x: "🔥 Conflict" if x < -3 else ("🤝 Diplomacy" if x > 3 else "📢 General"))
 
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
-                use_container_width=True, 
-                hide_index=True, 
+                width="stretch", hide_index=True, 
                 column_config={
                     "Date": st.column_config.TextColumn("Date", width="small"),
                     "Headline": st.column_config.TextColumn("Headline", width="large"),
@@ -346,15 +299,10 @@ def render_visuals(engine):
 # --- 6. MAIN ---
 def main():
     style_app()
-    
-    # [CRITICAL] Connect using MotherDuck
     conn_ui = get_db_connection()
     engine_ai = get_sql_engine()
     
-    # [CRITICAL: Init Session State]
-    if 'llm_locked' not in st.session_state:
-        st.session_state['llm_locked'] = False
-        
+    if 'llm_locked' not in st.session_state: st.session_state['llm_locked'] = False
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to MotherDuck GDELT stream. Ask me anything."}]
 
@@ -387,7 +335,6 @@ def main():
     with c_chat:
         st.subheader("💬 AI Analyst")
         b1, b2 = st.columns(2)
-        # FIXED: use_container_width -> width="stretch"
         p = None
         if b1.button("🚨 Conflicts", width="stretch"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN Events", width="stretch"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
@@ -404,7 +351,6 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            # Direct AI processing (Manual Override Removed)
                             qe = get_query_engine(engine_ai)
                             if qe:
                                 resp = qe.query(prompt)
