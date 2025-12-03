@@ -88,35 +88,28 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [AGGRESSIVE HEADLINE CLEANER]
+# [HEADLINE CLEANER]
 def format_headline(url, actor):
     if not url: return f"Update on {actor}"
     try:
         path = urlparse(url).path
         slug = path.rstrip('/').split('/')[-1]
         
-        # Fallback to previous segment if slug is bad
         if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
             slug = path.rstrip('/').split('/')[-2]
 
         text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         text = re.sub(r'\.html?$', '', text)
         
-        # 1. KILL DATES (2025 11 19)
+        # Kill Dates & Junk IDs
         text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
         text = re.sub(r'\b\d{8}\b', '', text) 
+        if re.search(r'[A-Za-z0-9]{15,}', text): return f"Latest Intelligence: {actor}"
 
-        # 2. KILL JUNK (Pure numbers or Long Hashes like A745...)
-        if re.match(r'^\d+$', text) or re.search(r'[A-F0-9]{10,}', text):
-            return f"Intelligence Report: {actor}"
-
-        # 3. Clean Start Words
         text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
-
         headline = " ".join(text.split()).title()
         
         if len(headline) < 5: return f"Update on {actor}"
-        
         return headline
     except:
         return f"Briefing: {actor}"
@@ -125,6 +118,7 @@ def format_headline(url, actor):
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
     try:
+        # USING GEMINI AGAIN
         llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
         embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
         Settings.llm = llm
@@ -145,7 +139,7 @@ def get_query_engine(_engine):
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
             "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
             "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
-            "4. **DIALECT:** Use DuckDB syntax.\n"
+            "4. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
             "5. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
@@ -252,9 +246,9 @@ def render_hud(engine):
     except Exception: hotspot = "Offline"
 
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
+    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events.")
     with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Most active country.")
-    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Events with Impact Score > 6.")
+    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Events > 6 Impact.")
 
 def render_ticker(engine):
     df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
@@ -351,9 +345,12 @@ def render_visuals(engine):
 # --- 6. MAIN ---
 def main():
     style_app()
+    
+    # [CRITICAL] Connect using MotherDuck
     conn_ui = get_db_connection()
     engine_ai = get_sql_engine()
     
+    # [CRITICAL: Init Session State]
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
         
