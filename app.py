@@ -39,7 +39,6 @@ if missing:
     st.stop()
 
 # Constants
-# Reverted to the 2.5 Preview model as requested/originally used
 GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
@@ -126,7 +125,7 @@ def format_headline(url, actor):
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # 1. Init Models (Using the constant variable now)
+    # 1. Init Models
     llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
     embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
     Settings.llm = llm
@@ -146,14 +145,16 @@ def get_query_engine(_engine):
         sql_database = SQLDatabase(_engine, include_tables=[target_table])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
+        # ADDED RULE 6: ALWAYS SELECT MAIN_ACTOR
         update_str = (
             "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
             "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
-            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
-            "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
-            "4. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
-            "5. **Response:** Return SQL in metadata."
+            "2. **INCLUDE ACTOR:** ALWAYS select the `MAIN_ACTOR` column.\n"
+            "3. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "4. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
+            "5. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`).\n"
+            "6. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
@@ -173,7 +174,6 @@ def generate_briefing(engine):
     df = safe_read_sql(engine, sql)
     if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
-    # Corrected: Use variable GEMINI_MODEL instead of hardcoded string
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
     brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
@@ -348,7 +348,6 @@ def main():
         if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
-        # [NEW: 5 Proper Sample Questions]
         st.markdown("""
         <div class="example-box">
             <div class="example-item">1. List the last 5 events for the United States.</div>
@@ -380,21 +379,27 @@ def main():
                                         if not df_context.empty:
                                             df_context.columns = [c.upper() for c in df_context.columns]
                                             
-                                            # [Date & Formatting Fixes]
+                                            # [FIX 1: Date Formatting]
                                             if 'DATE' in df_context.columns:
                                                 try:
                                                     df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
                                                 except: pass
-                                            
-                                            if 'NEWS_LINK' in df_context.columns and 'MAIN_ACTOR' in df_context.columns:
-                                                try:
-                                                    df_context['Headline'] = df_context.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-                                                    # Reorder cols to put Headline first if possible
-                                                    cols = ['Headline'] + [c for c in df_context.columns if c != 'Headline']
-                                                    df_context = df_context[cols]
-                                                except: pass
 
+                                            # [FIX 2: Headline Generation for Chat]
                                             if 'NEWS_LINK' in df_context.columns:
+                                                # Determine actor column (handle if missing)
+                                                actor_col = 'MAIN_ACTOR' if 'MAIN_ACTOR' in df_context.columns else None
+                                                
+                                                def safe_format(row):
+                                                    actor = row[actor_col] if actor_col else "Global Event"
+                                                    return format_headline(row['NEWS_LINK'], actor)
+                                                
+                                                df_context['Headline'] = df_context.apply(safe_format, axis=1)
+                                                
+                                                # Reorder to put Headline first
+                                                cols = ['Headline'] + [c for c in df_context.columns if c != 'Headline' and c != 'NEWS_LINK'] + ['NEWS_LINK']
+                                                df_context = df_context[cols]
+
                                                 st.caption("Contextual Data:")
                                                 st.dataframe(
                                                     df_context, 
@@ -404,6 +409,9 @@ def main():
                                                     }, 
                                                     hide_index=True
                                                 )
+                                            else:
+                                                st.dataframe(df_context, hide_index=True)
+
                                         with st.expander("SQL Trace"): st.code(sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": resp.response})
                             else: st.error("AI Engine unavailable.")
