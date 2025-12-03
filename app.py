@@ -39,7 +39,8 @@ if missing:
     st.stop()
 
 # Constants
-GEMINI_MODEL = "models/gemini-1.5-flash"
+# Reverted to the 2.5 Preview model as requested/originally used
+GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
 # --- 2. STYLING ---
@@ -68,7 +69,6 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    # Removed invalid config, kept read_only for stability
     return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
 
 @st.cache_resource
@@ -126,14 +126,13 @@ def format_headline(url, actor):
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # 1. Init Models
-    llm = Gemini(model="models/gemini-1.5-flash", api_key=api_key)
+    # 1. Init Models (Using the constant variable now)
+    llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
     embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
     Settings.llm = llm
     Settings.embed_model = embed_model
     
     # 2. Verify Table Exists
-    # Removed the broad try/except so real errors bubble up to the UI
     try:
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
@@ -160,7 +159,6 @@ def get_query_engine(_engine):
         return query_engine
 
     except Exception as e:
-        # CRITICAL: Print the actual error to the UI
         st.error(f"🔥 AI Engine Crash: {str(e)}")
         return None
 
@@ -175,7 +173,8 @@ def generate_briefing(engine):
     df = safe_read_sql(engine, sql)
     if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
-    model = Gemini(model="models/gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
+    # Corrected: Use variable GEMINI_MODEL instead of hardcoded string
+    model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
     brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
 
@@ -203,7 +202,7 @@ def render_sidebar(engine):
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
         st.success("🦆 MotherDuck (Cloud)")
-        st.success("🧠 Google Gemini 1.5")
+        st.success("🧠 Google Gemini 2.5")
         
         if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
@@ -349,7 +348,6 @@ def main():
         if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
-        # [NEW: 5 Proper Sample Questions]
         st.markdown("""
         <div class="example-box">
             <div class="example-item">1. Summarize the most negative events involving NATO countries today.</div>
