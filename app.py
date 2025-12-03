@@ -444,13 +444,11 @@ def main():
     with cols[0]:
         if st.button("Chat"):
             st.session_state['active_tab'] = 'chat'
-            st.experimental_rerun()
 
     # Visuals button (next to it)
     with cols[1]:
         if st.button("Visuals"):
             st.session_state['active_tab'] = 'visuals'
-            st.experimental_rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
