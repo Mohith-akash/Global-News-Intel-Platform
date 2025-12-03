@@ -89,8 +89,10 @@ def is_safe_sql(sql: str) -> bool:
     return not any(b in low for b in banned)
 
 # [HEADLINE CLEANER - STRICT MODE]
-def format_headline(url, actor):
-    fallback = f"Update on {actor}" if actor else "Global Intelligence Update"
+def format_headline(url, actor=None):
+    # Default fallback if extraction fails entirely
+    fallback = "Global Incident Report"
+    
     if not url: return fallback
     try:
         parsed = urlparse(url)
@@ -98,28 +100,33 @@ def format_headline(url, actor):
         segments = [s for s in path.split('/') if s]
         if not segments: return fallback
 
+        # Scan path segments backwards for the best text candidate
         candidates = segments[-3:] 
         raw_text = ""
         for seg in reversed(candidates):
+            # Clean common extensions
             seg = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
+            # Skip if it's just digits, a date, or generic words
             if seg.isdigit() or re.search(r'\d{4}', seg): continue
-            if seg.lower() in ['index', 'default', 'article', 'news']: continue
+            if seg.lower() in ['index', 'default', 'article', 'news', 'story']: continue
             if len(seg) > 5:
                 raw_text = seg; break
         
         if not raw_text: return fallback
+        
+        # Clean up the text
         text = raw_text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         words = text.split()
         clean_words = []
         for w in words:
-            # Drop words with digits, too long, or specific junk
+            # Drop words with digits (IDs) or that are too long (hashes)
             if any(char.isdigit() for char in w) or len(w) > 14: continue
             if w.lower() in ['html', 'php', 'story', 'id', 'page']: continue
             clean_words.append(w)
             
         final_text = " ".join(clean_words).title()
         
-        # Validations
+        # Final validation
         if len(final_text) < 10 or len(clean_words) < 2: return fallback
         if not re.search(r'[a-zA-Z]', final_text): return fallback
         
@@ -171,8 +178,9 @@ def get_query_engine(_engine):
 # --- 4. LOGIC MODULES ---
 
 def generate_briefing(engine):
+    # Added DATE to selection to allow formatting in the report
     sql = """
-        SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
+        SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
         FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
         ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 10
     """
@@ -329,12 +337,40 @@ def main():
             st.markdown("<div class='report-box'>", unsafe_allow_html=True)
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
+            
+            # [IMPROVED BRIEFING SOURCES TABLE]
             if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
                 try:
                     src_df = st.session_state['report_sources']
                     src_df.columns = [c.upper() for c in src_df.columns]
-                    st.dataframe(src_df[['NEWS_LINK']], column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")}, hide_index=True)
-                except: pass
+                    
+                    # Format Dates
+                    if 'DATE' in src_df.columns:
+                        try:
+                            src_df['DATE'] = pd.to_datetime(src_df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
+                        except: pass
+                    
+                    # Format Headlines (Incident focused)
+                    if 'NEWS_LINK' in src_df.columns:
+                        src_df['Headline'] = src_df.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
+                        
+                        # Prepare Display
+                        disp_cols = ['DATE', 'Headline', 'IMPACT_SCORE', 'NEWS_LINK']
+                        disp_cols = [c for c in disp_cols if c in src_df.columns]
+                        
+                        st.caption("Intelligence Sources:")
+                        st.dataframe(
+                            src_df[disp_cols].rename(columns={'IMPACT_SCORE': 'Intensity'}),
+                            column_config={
+                                "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read"),
+                                "Headline": st.column_config.TextColumn("Incident / Headline", width="large"),
+                                "DATE": st.column_config.TextColumn("Date", width="small")
+                            }, 
+                            hide_index=True
+                        )
+                except Exception as e: 
+                    st.error(f"Error displaying sources: {e}")
+                    
             if st.button("Close"): 
                 del st.session_state['generated_report']
                 if 'report_sources' in st.session_state: del st.session_state['report_sources']
@@ -348,10 +384,8 @@ def main():
     c_chat, c_viz = st.columns([35, 65])
     with c_chat:
         st.subheader("💬 AI Analyst")
-        b1, b2 = st.columns(2)
+        # [REMOVED BUTTONS as requested]
         p = None
-        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
         st.markdown("""
         <div class="example-box">
@@ -390,33 +424,29 @@ def main():
                                                     df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
                                                 except: pass
 
-                                            # [FIX 2: Headline & Clean Table]
-                                            # Determine actor column (handle if missing)
-                                            actor_col = 'MAIN_ACTOR' if 'MAIN_ACTOR' in df_context.columns else None
-                                            
+                                            # [FIX 2: Incident Headline & Clean Table]
                                             if 'NEWS_LINK' in df_context.columns:
-                                                def safe_format(row):
-                                                    actor = row[actor_col] if actor_col else "Global Event"
-                                                    return format_headline(row['NEWS_LINK'], actor)
-                                                
-                                                df_context['Headline'] = df_context.apply(safe_format, axis=1)
+                                                # Use strict headline format (no actor fallback preferred)
+                                                df_context['Headline'] = df_context.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
                                                 
                                                 # Select & Order columns nicely
-                                                display_cols = ['Headline', 'DATE']
-                                                if 'ACTOR_COUNTRY_CODE' in df_context.columns: display_cols.append('ACTOR_COUNTRY_CODE')
-                                                if 'IMPACT_SCORE' in df_context.columns: display_cols.append('IMPACT_SCORE')
-                                                display_cols.append('NEWS_LINK')
+                                                # Requested columns: Date, Short Headline, Link Button, Intensity
+                                                target_cols = ['DATE', 'Headline', 'IMPACT_SCORE', 'NEWS_LINK']
                                                 
                                                 # Filter to only existing columns
-                                                display_cols = [c for c in display_cols if c in df_context.columns]
+                                                display_cols = [c for c in target_cols if c in df_context.columns]
                                                 df_show = df_context[display_cols]
+                                                
+                                                # Rename IMPACT_SCORE to Intensity
+                                                if 'IMPACT_SCORE' in df_show.columns:
+                                                    df_show = df_show.rename(columns={'IMPACT_SCORE': 'Intensity'})
 
                                                 st.caption("Contextual Data:")
                                                 st.dataframe(
                                                     df_show, 
                                                     column_config={
-                                                        "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read"),
-                                                        "Headline": st.column_config.TextColumn("Headline", width="large"),
+                                                        "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read"),
+                                                        "Headline": st.column_config.TextColumn("Incident", width="large"),
                                                         "DATE": st.column_config.TextColumn("Date", width="small")
                                                     }, 
                                                     hide_index=True
