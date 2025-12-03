@@ -416,6 +416,7 @@ def main():
                                     if is_safe_sql(sql):
                                         df_context = safe_read_sql(conn_ui, sql)
                                         if not df_context.empty:
+                                            # Normalize column names
                                             df_context.columns = [c.upper() for c in df_context.columns]
                                             
                                             # [FIX 1: Safe Date Formatting]
@@ -424,32 +425,31 @@ def main():
                                                     df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
                                                 except: pass
 
-                                            # [FIX 2: Incident Headline & Clean Table]
+                                            # [FIX 2: Incident Headline & Strict Column Selection]
                                             if 'NEWS_LINK' in df_context.columns:
-                                                # Use strict headline format (no actor fallback preferred)
+                                                # Use strict headline format
                                                 df_context['Headline'] = df_context.apply(lambda x: format_headline(x['NEWS_LINK']), axis=1)
                                                 
-                                                # Select & Order columns nicely
-                                                # Requested columns: Date, Short Headline, Link Button, Intensity
-                                                target_cols = ['DATE', 'Headline', 'IMPACT_SCORE', 'NEWS_LINK']
+                                                # Rename cols for cleaner display
+                                                col_map = {'DATE': 'Date', 'IMPACT_SCORE': 'Intensity', 'NEWS_LINK': 'Source'}
+                                                df_context = df_context.rename(columns=col_map)
                                                 
-                                                # Filter to only existing columns
-                                                display_cols = [c for c in target_cols if c in df_context.columns]
-                                                df_show = df_context[display_cols]
-                                                
-                                                # Rename IMPACT_SCORE to Intensity
-                                                if 'IMPACT_SCORE' in df_show.columns:
-                                                    df_show = df_show.rename(columns={'IMPACT_SCORE': 'Intensity'})
+                                                # Strict Column Selection (Exclude EVENT_ID, Codes, etc)
+                                                target_cols = ['Date', 'Headline', 'Intensity', 'Source']
+                                                final_cols = [c for c in target_cols if c in df_context.columns]
+                                                df_show = df_context[final_cols]
 
                                                 st.caption("Contextual Data:")
                                                 st.dataframe(
                                                     df_show, 
                                                     column_config={
-                                                        "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read"),
+                                                        "Source": st.column_config.LinkColumn("Link", display_text="🔗 Open"),
                                                         "Headline": st.column_config.TextColumn("Incident", width="large"),
-                                                        "DATE": st.column_config.TextColumn("Date", width="small")
+                                                        "Date": st.column_config.TextColumn("Date", width="small"),
+                                                        "Intensity": st.column_config.NumberColumn("Intensity", format="%.1f")
                                                     }, 
-                                                    hide_index=True
+                                                    hide_index=True,
+                                                    use_container_width=True
                                                 )
                                             else:
                                                 st.dataframe(df_context, hide_index=True)
