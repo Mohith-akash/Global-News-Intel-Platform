@@ -68,7 +68,7 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    # Kept read_only=True for stability
+    # Removed invalid config, kept read_only for stability
     return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
 
 @st.cache_resource
@@ -89,7 +89,7 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [HEADLINE CLEANER]
+# [HEADLINE CLEANER - STRICT MODE]
 def format_headline(url, actor):
     fallback = f"Update on {actor}" if actor else "Global Intelligence Update"
     if not url: return fallback
@@ -125,18 +125,25 @@ def format_headline(url, actor):
 @st.cache_resource
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
+    
+    # 1. Init Models
+    llm = Gemini(model="models/gemini-1.5-flash", api_key=api_key)
+    embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
+    Settings.llm = llm
+    Settings.embed_model = embed_model
+    
+    # 2. Verify Table Exists
+    # Removed the broad try/except so real errors bubble up to the UI
     try:
-        llm = Gemini(model="models/gemini-1.5-flash", api_key=api_key)
-        embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
-        Settings.llm = llm
-        Settings.embed_model = embed_model
-        
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
         target_table = next((t for t in combined_names if t.upper() == "EVENTS_DAGSTER"), None)
         
-        if not target_table: return None
-        
+        if not target_table:
+            st.error(f"❌ Table 'EVENTS_DAGSTER' not found. Found: {combined_names}")
+            return None
+            
+        # 3. Build Engine
         sql_database = SQLDatabase(_engine, include_tables=[target_table])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
@@ -151,7 +158,11 @@ def get_query_engine(_engine):
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
-    except: return None
+
+    except Exception as e:
+        # CRITICAL: Print the actual error to the UI
+        st.error(f"🔥 AI Engine Crash: {str(e)}")
+        return None
 
 # --- 4. LOGIC MODULES ---
 
@@ -174,7 +185,7 @@ def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.subheader("📋 Intelligence Report")
-        if st.button("📄 Generate Briefing", type="primary", width="stretch"):
+        if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
                 report, source_df = generate_briefing(engine)
                 st.session_state['generated_report'] = report
@@ -194,7 +205,7 @@ def render_sidebar(engine):
         st.success("🦆 MotherDuck (Cloud)")
         st.success("🧠 Google Gemini 1.5")
         
-        if st.button("Reset Session", width="stretch"):
+        if st.button("Reset Session", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
@@ -242,7 +253,7 @@ def render_visuals(engine):
             fig = px.choropleth(df, locations="Country", locationmode='ISO-3', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
         else: st.info("No Map Data")
 
     with t_trending:
@@ -260,7 +271,7 @@ def render_visuals(engine):
             df = df.drop_duplicates(subset=['Headline']).head(20)
             st.dataframe(
                 df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
-                width="stretch", hide_index=True,
+                use_container_width=True, hide_index=True,
                 column_config={
                     "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
                     "ACTOR_COUNTRY_CODE": st.column_config.TextColumn("Country", width="small"),
@@ -285,7 +296,7 @@ def render_visuals(engine):
 
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
-                width="stretch", hide_index=True, 
+                use_container_width=True, hide_index=True, 
                 column_config={
                     "Date": st.column_config.TextColumn("Date", width="small"),
                     "Headline": st.column_config.TextColumn("Headline", width="large"),
@@ -335,8 +346,8 @@ def main():
         st.subheader("💬 AI Analyst")
         b1, b2 = st.columns(2)
         p = None
-        if b1.button("🚨 Conflicts", width="stretch"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN Events", width="stretch"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
+        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
         # [NEW: 5 Proper Sample Questions]
         st.markdown("""
