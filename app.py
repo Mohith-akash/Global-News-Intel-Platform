@@ -15,7 +15,7 @@ import pycountry
 import logging
 import streamlit.components.v1 as components
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 import duckdb
 
 # --- 1. CONFIGURATION ---
@@ -88,31 +88,78 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [HEADLINE CLEANER]
+# [HEADLINE CLEANER - IMPROVED]
 def format_headline(url, actor):
-    if not url: return f"Update on {actor}"
+    """
+    Robust cleaning function to extract human-readable titles from URLs.
+    Removes random IDs, dates, and file extensions.
+    """
+    if not url: 
+        return f"Intelligence Update: {actor}" if actor else "Global Situation Update"
+    
     try:
-        path = urlparse(url).path
-        slug = path.rstrip('/').split('/')[-1]
+        # 1. Parse and Unquote (handles %20 etc)
+        parsed = urlparse(url)
+        path = unquote(parsed.path)
         
-        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
-            slug = path.rstrip('/').split('/')[-2]
+        # 2. Split path and filter empty strings
+        segments = [s for s in path.split('/') if s]
+        
+        if not segments:
+             return f"Latest Report: {actor}" if actor else "News Update"
 
-        text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        text = re.sub(r'\.html?$', '', text)
+        # 3. Find the best segment (Iterate backwards to find text)
+        # We generally want the last segment, but sometimes the last segment is just an ID or "index.html"
+        candidates = segments[-3:] # Look at last 3 parts
+        best_candidate = ""
         
-        # Kill Dates & Junk IDs
-        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
-        text = re.sub(r'\b\d{8}\b', '', text) 
-        if re.search(r'[A-Za-z0-9]{15,}', text): return f"Latest Intelligence: {actor}"
+        for seg in reversed(candidates):
+            # Clean extensions
+            seg_clean = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
+            
+            # Skip if it looks like a Date (2024-12-01 or 20241201)
+            if re.search(r'\d{4}[-/]?\d{2}[-/]?\d{2}', seg_clean):
+                continue
+            
+            # Skip if it is purely numeric (ID)
+            if re.match(r'^\d+$', seg_clean):
+                continue
+                
+            # Skip generic web terms
+            if seg_clean.lower() in ['index', 'default', 'home', 'article', 'story', 'news', 'show']:
+                continue
+                
+            # If segment is substantial, keep it
+            if len(seg_clean) > 4:
+                best_candidate = seg_clean
+                break
+        
+        # Fallback if no good path segment found
+        if not best_candidate:
+            return f"Strategic Update: {actor}" if actor else "International Report"
 
-        text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
-        headline = " ".join(text.split()).title()
+        # 4. Clean the Text
+        text = best_candidate
+        text = text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
         
-        if len(headline) < 5: return f"Update on {actor}"
+        # Remove specific junk patterns
+        text = re.sub(r'\b\d{8,}\b', '', text)       # Remove long digit IDs
+        text = re.sub(r'\b\d{1,4}\b', '', text)      # Remove isolated short numbers
+        text = re.sub(r'\b(html|php|asp)\b', '', text, flags=re.IGNORECASE) # Stray extensions
+        
+        # 5. Final Formatting
+        text = " ".join(text.split()) # Remove double spaces
+        headline = text.title()
+        
+        # 6. Quality Control
+        # If the result is too short or garbage, fallback to Actor
+        if len(headline) < 6 or not re.search(r'[a-zA-Z]', headline):
+            return f"New Development: {actor}" if actor else "Global Alert"
+            
         return headline
-    except:
-        return f"Briefing: {actor}"
+
+    except Exception:
+        return f"Briefing: {actor}" if actor else "Intelligence Alert"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -286,6 +333,7 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            # Remove duplicates based on the clean headline
             df = df.drop_duplicates(subset=['Headline']).head(20)
             
             st.dataframe(
