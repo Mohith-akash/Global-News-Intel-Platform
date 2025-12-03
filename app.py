@@ -42,11 +42,11 @@ if missing:
 GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
-# Calculate date strings once at startup
-TODAY = datetime.datetime.now().strftime('%Y%m%d')
-YESTERDAY = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y%m%d')
-TWO_DAYS_AGO = (datetime.datetime.now() - datetime.timedelta(days=2)).strftime('%Y%m%d')
-WEEK_AGO = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')
+# Calculate date strings once at startup (as quoted strings for VARCHAR comparison)
+TODAY = f"'{datetime.datetime.now().strftime('%Y%m%d')}'"
+YESTERDAY = f"'{(datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y%m%d')}'"
+TWO_DAYS_AGO = f"'{(datetime.datetime.now() - datetime.timedelta(days=2)).strftime('%Y%m%d')}'"
+WEEK_AGO = f"'{(datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')}'"
 
 # --- 2. STYLING ---
 def style_app():
@@ -169,7 +169,7 @@ def get_query_engine(_engine):
 **TABLE: EVENTS_DAGSTER**
 
 **COLUMNS:**
-- DATE (integer, format: YYYYMMDD, e.g., 20250104)
+- DATE (VARCHAR/text, format: 'YYYYMMDD', e.g., '20250104')
 - MAIN_ACTOR (text)
 - ACTOR_COUNTRY_CODE (text, ISO-2 codes like 'US', 'RU', 'CN')
 - IMPACT_SCORE (float, -10 to +10, negative=conflict)
@@ -185,11 +185,12 @@ def get_query_engine(_engine):
 - 7 days ago: {WEEK_AGO}
 
 **CRITICAL SQL RULES:**
-1. DATE is stored as INTEGER (YYYYMMDD format)
-2. NEVER use date functions like datetime(), datediff(), date_sub()
-3. Use simple integer comparison: DATE >= {WEEK_AGO} for "recent"
-4. Use DATE = {TODAY} for "today"
-5. Use DATE >= {TWO_DAYS_AGO} for "last 48 hours"
+1. DATE is stored as VARCHAR (text in YYYYMMDD format)
+2. ALWAYS use quotes in comparisons: DATE >= '20241127'
+3. NEVER use date functions - just string comparison
+4. Use DATE >= {WEEK_AGO} for "recent"
+5. Use DATE = {TODAY} for "today"
+6. Use DATE >= {TWO_DAYS_AGO} for "last 48 hours"
 6. Always include: DATE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, NEWS_LINK
 7. Always add: WHERE IMPACT_SCORE IS NOT NULL AND NEWS_LINK IS NOT NULL
 8. Default LIMIT: 10
@@ -447,7 +448,7 @@ def render_visuals(engine):
             df = df.drop_duplicates(subset=['Headline']).head(20)
             st.dataframe(
                 df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
-                use_container_width=True, hide_index=True,
+                hide_index=True,
                 column_config={
                     "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
                     "ACTOR_COUNTRY_CODE": st.column_config.TextColumn("Country", width="small"),
@@ -477,7 +478,7 @@ def render_visuals(engine):
 
             st.dataframe(
                 df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
-                use_container_width=True, hide_index=True, 
+                hide_index=True, 
                 column_config={
                     "Date": st.column_config.TextColumn("Date", width="small"),
                     "Headline": st.column_config.TextColumn("Headline", width="large"),
@@ -618,11 +619,10 @@ def main():
                                                     "Impact": st.column_config.NumberColumn("Impact", format="%.1f"),
                                                     "Coverage": st.column_config.NumberColumn("Media", format="%d 📰")
                                                 },
-                                                hide_index=True,
-                                                use_container_width=True
+                                                hide_index=True
                                             )
                                         else:
-                                            st.dataframe(df_context, hide_index=True, use_container_width=True)
+                                            st.dataframe(df_context, hide_index=True)
                                     
                                     if result['sql']:
                                         with st.expander("🔍 SQL Query"):
