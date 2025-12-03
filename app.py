@@ -348,13 +348,14 @@ def main():
         if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
         if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
+        # [NEW: 5 Proper Sample Questions]
         st.markdown("""
         <div class="example-box">
-            <div class="example-item">1. Summarize the most negative events involving NATO countries today.</div>
-            <div class="example-item">2. List the top 5 emerging diplomatic conflicts in Southeast Asia.</div>
-            <div class="example-item">3. Show me all events with an Impact Score > 5 regarding renewable energy.</div>
-            <div class="example-item">4. Which country has the highest volume of news coverage right now?</div>
-            <div class="example-item">5. Find recent protests (Conflict Index > 4) in South America.</div>
+            <div class="example-item">1. List the last 5 events for the United States.</div>
+            <div class="example-item">2. Which country has the most events today?</div>
+            <div class="example-item">3. Show me top 5 events with high Impact Score.</div>
+            <div class="example-item">4. What are the latest events involving China?</div>
+            <div class="example-item">5. List recent negative events (Impact < -5).</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -378,9 +379,31 @@ def main():
                                         df_context = safe_read_sql(conn_ui, sql)
                                         if not df_context.empty:
                                             df_context.columns = [c.upper() for c in df_context.columns]
+                                            
+                                            # [Date & Formatting Fixes]
+                                            if 'DATE' in df_context.columns:
+                                                try:
+                                                    df_context['DATE'] = pd.to_datetime(df_context['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
+                                                except: pass
+                                            
+                                            if 'NEWS_LINK' in df_context.columns and 'MAIN_ACTOR' in df_context.columns:
+                                                try:
+                                                    df_context['Headline'] = df_context.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+                                                    # Reorder cols to put Headline first if possible
+                                                    cols = ['Headline'] + [c for c in df_context.columns if c != 'Headline']
+                                                    df_context = df_context[cols]
+                                                except: pass
+
                                             if 'NEWS_LINK' in df_context.columns:
                                                 st.caption("Contextual Data:")
-                                                st.dataframe(df_context, column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")}, hide_index=True)
+                                                st.dataframe(
+                                                    df_context, 
+                                                    column_config={
+                                                        "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read"),
+                                                        "Headline": st.column_config.TextColumn("Headline", width="large")
+                                                    }, 
+                                                    hide_index=True
+                                                )
                                         with st.expander("SQL Trace"): st.code(sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": resp.response})
                             else: st.error("AI Engine unavailable.")
