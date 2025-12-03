@@ -2,14 +2,8 @@ name: 30-Min GDELT Refresh (MotherDuck)
 
 on:
   schedule:
-    # -------------------------------------------------------
-    # CRON BREAKDOWN: '*/30 * * * *'
-    # Runs at minute 0 and minute 30 of every hour.
-    # Total Runs/Day: 48
-    # Total Runs/Month: ~1,440 (Safe for Free Tier)
-    # -------------------------------------------------------
     - cron: '*/30 * * * *' 
-  workflow_dispatch:        # Allows you to click "Run Now" manually
+  workflow_dispatch:
 
 jobs:
   refresh-data:
@@ -34,6 +28,7 @@ jobs:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       run: |
-        echo "🚀 Starting 30-Min Ingestion..."
-        dagster job execute -f pipeline.py -j gdelt_ingestion_job
+        echo "🚀 Starting MotherDuck Ingestion..."
+        # USE PYTHON -M TO AVOID "COMMAND NOT FOUND" ERROR
+        python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
