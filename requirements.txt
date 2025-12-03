@@ -7,11 +7,11 @@ llama-index
 llama-index-core
 llama-index-llms-gemini
 llama-index-embeddings-gemini
-# --- NEW DATABASE DEPS ---
-duckdb
+# --- DATABASE DEPENDENCIES ---
+duckdb>=0.10.0
 motherduck
-sqlalchemy-duckdb
+duckdb-engine
 sqlalchemy
+# -----------------------------
 pycountry
-# -------------------------
 requests
