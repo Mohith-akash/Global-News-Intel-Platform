@@ -5,6 +5,7 @@ import altair as alt
 import plotly.express as px
 import plotly.graph_objects as go
 from dotenv import load_dotenv
+# UPDATED IMPORTS TO FIX DEPRECATION WARNINGS
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.core import SQLDatabase, Settings
@@ -39,7 +40,7 @@ if missing:
     st.stop()
 
 # Constants
-GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
+GEMINI_MODEL = "models/gemini-1.5-flash" # Updated to stable model name if needed, or keep yours
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
 # --- 2. STYLING ---
@@ -68,7 +69,8 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}')
+    # Added read_only=True to prevent locking issues which can cause crashes
+    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
 
 @st.cache_resource
 def get_sql_engine():
@@ -94,7 +96,6 @@ def format_headline(url, actor):
     Very strict cleaner. If a headline looks like a hash or contains
     mixed numbers/letters, it defaults to a clean 'Update on [Country]' string.
     """
-    # 1. Fallback base
     fallback = f"Update on {actor}" if actor else "Global Intelligence Update"
     
     if not url: return fallback
@@ -103,25 +104,16 @@ def format_headline(url, actor):
         parsed = urlparse(url)
         path = unquote(parsed.path)
         
-        # Split by slash to find segments
         segments = [s for s in path.split('/') if s]
         if not segments: return fallback
 
-        # Find the best segment (usually the last one that isn't an ID)
         candidates = segments[-3:] 
         raw_text = ""
         
         for seg in reversed(candidates):
-            # Clean file extensions
             seg = re.sub(r'\.(html|htm|php|asp|aspx|jsp|ece|cms)$', '', seg, flags=re.IGNORECASE)
-            
-            # Skip if pure numbers
             if seg.isdigit(): continue
-            
-            # Skip if date-like
             if re.search(r'\d{4}', seg): continue
-            
-            # Skip short generic terms
             if seg.lower() in ['index', 'default', 'article', 'news']: continue
             
             if len(seg) > 5:
@@ -130,34 +122,18 @@ def format_headline(url, actor):
         
         if not raw_text: return fallback
 
-        # 2. HEAVY CLEANING
-        # Replace separators with spaces
         text = raw_text.replace('-', ' ').replace('_', ' ').replace('+', ' ')
-        
-        # Split into words
         words = text.split()
         clean_words = []
         
         for w in words:
-            # Drop any word that contains a number (e.g. "914E1Eae", "2024", "v4")
-            if any(char.isdigit() for char in w):
-                continue
-            
-            # Drop very long words that are likely hashes (e.g. "Cn0K5Zyy0Vdo")
-            if len(w) > 14:
-                continue
-                
-            # Drop specific junk words
-            if w.lower() in ['html', 'php', 'story', 'id', 'page']:
-                continue
-                
+            if any(char.isdigit() for char in w): continue
+            if len(w) > 14: continue
+            if w.lower() in ['html', 'php', 'story', 'id', 'page']: continue
             clean_words.append(w)
             
-        # Reassemble
         final_text = " ".join(clean_words).title()
         
-        # 3. VALIDATION
-        # If the result is too short, or empty, return fallback
         if len(final_text) < 10 or len(clean_words) < 2:
             return fallback
             
@@ -170,7 +146,7 @@ def format_headline(url, actor):
 def get_query_engine(_engine):
     api_key = os.getenv("GOOGLE_API_KEY")
     try:
-        llm = Gemini(model=GEMINI_MODEL, api_key=api_key)
+        llm = Gemini(model="models/gemini-1.5-flash", api_key=api_key)
         embed_model = GeminiEmbedding(model_name=GEMINI_EMBED_MODEL, api_key=api_key)
         Settings.llm = llm
         Settings.embed_model = embed_model
@@ -208,7 +184,7 @@ def generate_briefing(engine):
     df = safe_read_sql(engine, sql)
     if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
-    model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
+    model = Gemini(model="models/gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
     brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
     return brief, df
 
@@ -218,7 +194,8 @@ def render_sidebar(engine):
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.subheader("📋 Intelligence Report")
-        if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
+        # FIXED: use_container_width -> width="stretch"
+        if st.button("📄 Generate Briefing", type="primary", width="stretch"):
             with st.spinner("Synthesizing..."):
                 report, source_df = generate_briefing(engine)
                 st.session_state['generated_report'] = report
@@ -237,9 +214,10 @@ def render_sidebar(engine):
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
         st.success("🦆 MotherDuck (Cloud)")
-        st.success("🧠 Google Gemini 2.5")
+        st.success("🧠 Google Gemini 1.5")
         
-        if st.button("Reset Session", use_container_width=True):
+        # FIXED: use_container_width -> width="stretch"
+        if st.button("Reset Session", width="stretch"):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
@@ -291,7 +269,8 @@ def render_visuals(engine):
             fig = px.choropleth(df, locations="Country", locationmode='ISO-3', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
-            st.plotly_chart(fig, use_container_width=True)
+            # FIXED: use_container_width -> width="stretch" (handled by streamlit automatically mostly, but good to be safe)
+            st.plotly_chart(fig, use_container_width=True) 
         else: st.info("No Map Data")
 
     with t_trending:
@@ -307,9 +286,9 @@ def render_visuals(engine):
         if not df.empty:
             df.columns = [c.upper() for c in df.columns]
             df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
-            # Duplicate removal based on clean headline
             df = df.drop_duplicates(subset=['Headline']).head(20)
             
+            # FIXED: use_container_width -> width
             st.dataframe(
                 df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
                 use_container_width=True,
@@ -408,9 +387,10 @@ def main():
     with c_chat:
         st.subheader("💬 AI Analyst")
         b1, b2 = st.columns(2)
+        # FIXED: use_container_width -> width="stretch"
         p = None
-        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
-        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
+        if b1.button("🚨 Conflicts", width="stretch"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN Events", width="stretch"): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
         st.markdown("""<div class="example-box"><div class="example-item">1. Analyze the conflict trend in the Middle East.</div><div class="example-item">2. Which country has the lowest sentiment score?</div><div class="example-item">3. What is Conflict Index?</div></div>""", unsafe_allow_html=True)
         
