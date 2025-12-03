@@ -59,6 +59,8 @@ SNOWFLAKE_CONFIG = {
 # --- 2. STYLING ---
 def style_app():
     st.markdown("""
+
+    
     <style>
         .stApp { background-color: #0b0f19; color: #e5e7eb; }
         section[data-testid="stSidebar"] .block-container { padding-top: 1rem; }
@@ -96,6 +98,11 @@ def style_app():
         .history-item { background:#0f1724; border:1px solid #1f2937; padding:10px; border-radius:8px; margin-bottom:8px; }
         .history-meta { color:#94a3b8; font-size:0.8rem; }
 
+
+        /* Reduce gap Streamlit adds between containers */
+        .block-container {
+            padding-top: 0.5rem !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -429,11 +436,10 @@ def main():
 
     render_hud(engine)
     render_ticker(engine)
-    st.divider()
 
     # NAVBAR-LIKE BUTTONS: horizontal rule above and buttons aligned right
-    st.markdown('<div class="nav-wrap">', unsafe_allow_html=True)
-    cols = st.columns([2, 2, 1, 5, 1])    # last columns are for buttons (right aligned)
+    st.markdown('<div class="nav-wrap" style="margin-bottom:-10px;', unsafe_allow_html=True)
+    cols = st.columns([1, 1, 12])
     # Using the last two columns for buttons so they're on the right side
     # Render button HTML to get custom styling and active state via session_state
     active = st.session_state['active_tab']
