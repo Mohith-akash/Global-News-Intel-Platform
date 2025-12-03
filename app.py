@@ -68,7 +68,7 @@ def style_app():
 @st.cache_resource
 def get_db_connection():
     token = os.getenv("MOTHERDUCK_TOKEN")
-    # REMOVED invalid config. Kept read_only=True for safety.
+    # Kept read_only=True for stability
     return duckdb.connect(f'md:gdelt_db?motherduck_token={token}', read_only=True)
 
 @st.cache_resource
@@ -89,7 +89,7 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-# [HEADLINE CLEANER - STRICT MODE]
+# [HEADLINE CLEANER]
 def format_headline(url, actor):
     fallback = f"Update on {actor}" if actor else "Global Intelligence Update"
     if not url: return fallback

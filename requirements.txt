@@ -4,6 +4,7 @@ plotly
 altair
 python-dotenv
 duckdb>=1.1.0
+duckdb-engine
 sqlalchemy
 llama-index-core
 llama-index-llms-gemini
