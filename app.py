@@ -14,6 +14,9 @@ import datetime
 import pycountry
 import logging
 import streamlit.components.v1 as components
+import re
+from urllib.parse import urlparse
+import duckdb
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(
@@ -29,11 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gip")
 
 # Validation
-REQUIRED_ENVS = [
-    "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "SNOWFLAKE_ACCOUNT", 
-    "SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_DATABASE", "SNOWFLAKE_SCHEMA", 
-    "GOOGLE_API_KEY"
-]
+REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "GOOGLE_API_KEY"]
 missing = [k for k in REQUIRED_ENVS if not os.getenv(k)]
 if missing:
     st.error(f"❌ CRITICAL ERROR: Missing env vars: {', '.join(missing)}")
@@ -43,86 +42,49 @@ if missing:
 GEMINI_MODEL = "models/gemini-2.5-flash-preview-09-2025"
 GEMINI_EMBED_MODEL = "models/embedding-001"
 
-# Snowflake Config
-SNOWFLAKE_CONFIG = {
-    "user": os.getenv("SNOWFLAKE_USER"),
-    "password": os.getenv("SNOWFLAKE_PASSWORD"),
-    "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-    "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-    "database": os.getenv("SNOWFLAKE_DATABASE"),
-    "schema": os.getenv("SNOWFLAKE_SCHEMA"),
-    "role": "ACCOUNTADMIN"
-}
-
 # --- 2. STYLING ---
 def style_app():
     st.markdown("""
     <style>
         .stApp { background-color: #0b0f19; }
-        
-        /* [FIX] Proper Padding for Main Content */
-        .block-container { 
-            padding-top: 2rem; 
-            padding-bottom: 2rem; 
-            padding-left: 3rem; 
-            padding-right: 3rem; 
-        }
-        
-        /* Sidebar Padding */
-        section[data-testid="stSidebar"] .block-container { 
-            padding-top: 2rem; 
-            padding-left: 1rem; 
-            padding-right: 1rem; 
-        }
-        
-        /* Cards */
+        header {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none;}
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; padding-left: 3rem; padding-right: 3rem; }
         div[data-testid="stMetric"] { background-color: #111827; border: 1px solid #374151; border-radius: 8px; padding: 15px; }
         div[data-testid="stMetric"] label { color: #9ca3af; font-size: 0.9rem; }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f3f4f6; font-size: 1.8rem; }
-        
-        /* Chat */
         div[data-testid="stChatMessage"] { background-color: #1f2937; border: 1px solid #374151; border-radius: 12px; }
         div[data-testid="stChatMessageUser"] { background-color: #2563eb; color: white; }
-        
-        /* Report Box */
         .report-box { background-color: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #475569; margin-bottom: 25px; }
-        
-        /* Example Box */
-        .example-box {
-            background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;
-        }
+        .example-box { background-color: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px; }
         .example-item { color: #94a3b8; font-size: 0.95em; margin-bottom: 8px; }
-        
-        /* Hiding Footer */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. BACKEND ---
-@st.cache_resource
-def get_db_engine():
-    url = (
-        f"snowflake://{SNOWFLAKE_CONFIG['user']}:{SNOWFLAKE_CONFIG['password']}"
-        f"@{SNOWFLAKE_CONFIG['account']}/{SNOWFLAKE_CONFIG['database']}/"
-        f"{SNOWFLAKE_CONFIG['schema']}?warehouse={SNOWFLAKE_CONFIG['warehouse']}"
-        f"&role={SNOWFLAKE_CONFIG['role']}"
-    )
-    return create_engine(url)
+# --- 3. BACKEND (MOTHERDUCK MIGRATION) ---
 
-@st.cache_data(ttl=300)
-def safe_read_sql(_engine, sql, params=None):
+# Native DuckDB Connection (For UI/Pandas)
+@st.cache_resource
+def get_db_connection():
+    token = os.getenv("MOTHERDUCK_TOKEN")
+    # Connects to the 'gdelt_db' database in MotherDuck
+    return duckdb.connect(f'md:gdelt_db?motherduck_token={token}')
+
+# SQLAlchemy Engine (For LlamaIndex AI)
+@st.cache_resource
+def get_sql_engine():
+    token = os.getenv("MOTHERDUCK_TOKEN")
+    return create_engine(f'duckdb:///md:gdelt_db?motherduck_token={token}')
+
+def safe_read_sql(conn, query):
     try:
-        with _engine.connect() as conn:
-            return pd.read_sql(text(sql), conn, params=params)
+        # DuckDB native execution
+        return conn.execute(query).df()
     except Exception as e:
         logger.error(f"SQL Error: {e}")
         return pd.DataFrame()
-
-def get_iso3(country_name):
-    try: return pycountry.countries.search_fuzzy(country_name)[0].alpha_3
-    except: return None
 
 def is_safe_sql(sql: str) -> bool:
     if not sql: return False
@@ -130,8 +92,38 @@ def is_safe_sql(sql: str) -> bool:
     banned = ["delete ", "update ", "drop ", "alter ", "insert ", "grant ", "revoke ", "--"]
     return not any(b in low for b in banned)
 
-def clean_key(text):
-    return text.lower().replace("_", " ").replace("-", " ").strip()
+# [RUTHLESS HEADLINE CLEANER]
+def format_headline(url, actor):
+    if not url: return f"Update on {actor}"
+    try:
+        path = urlparse(url).path
+        slug = path.rstrip('/').split('/')[-1]
+        
+        # If slug is useless, try previous path segment
+        if len(slug) < 5 or slug.isdigit() or 'index' in slug.lower():
+            slug = path.rstrip('/').split('/')[-2]
+
+        text = slug.replace('-', ' ').replace('_', ' ').replace('+', ' ')
+        text = re.sub(r'\.html?$', '', text)
+        
+        # 1. KILL GARBAGE IDS (The 30-digit junk)
+        if re.search(r'[A-Za-z0-9]{15,}', text): # If word has 15+ chars of mixed nonsense
+            return f"Latest Intelligence: {actor}"
+            
+        # 2. KILL DATES
+        text = re.sub(r'\b20\d{2}[\s/-]?\d{1,2}[\s/-]?\d{1,2}\b', '', text) 
+        text = re.sub(r'\b\d{8}\b', '', text) 
+
+        # 3. CLEAN START
+        text = re.sub(r'^(article|story|news|report|default)\s*', '', text, flags=re.IGNORECASE)
+
+        headline = " ".join(text.split()).title()
+        
+        if len(headline) < 5: return f"Report: {actor}"
+        
+        return headline
+    except:
+        return f"Intelligence Brief: {actor}"
 
 @st.cache_resource
 def get_query_engine(_engine):
@@ -144,21 +136,22 @@ def get_query_engine(_engine):
         
         inspector = inspect(_engine)
         combined_names = inspector.get_table_names() + inspector.get_view_names()
-        target_table = "STG_GDELT_EVENTS"
-        matched = next((t for t in combined_names if t.upper() == target_table), None)
+        # Ensure we look for the correct table name (DuckDB is usually lowercase, but we check both)
+        target_table = next((t for t in combined_names if t.upper() == "EVENTS_DAGSTER"), None)
         
-        if not matched: return None
+        if not target_table: return None
         
-        sql_database = SQLDatabase(_engine, include_tables=[matched])
+        sql_database = SQLDatabase(_engine, include_tables=[target_table])
         query_engine = NLSQLTableQueryEngine(sql_database=sql_database, llm=llm)
         
         update_str = (
-            "You are a Geopolitical Intelligence AI. Querying 'STG_GDELT_EVENTS'.\n"
+            "You are a Geopolitical Intelligence AI. Querying 'EVENTS_DAGSTER'.\n"
             "**RULES:**\n"
-            "1. **Exact Capitalized Names**: Countries should be written in their abbreviated forms, such as 'USA' will be United States, 'UK' will be United Kingdom, and so on.\n"
-            "2. **Nulls:** ALWAYS `WHERE ACTOR_COUNTRY_NAME IS NOT NULL`.\n"
-            "3. **Dates:** Use COUNT(*) grouped by date, NOT math.\n"
-            "4. **Response:** Return SQL in metadata."
+            "1. **INCLUDE LINKS:** ALWAYS select the `NEWS_LINK` column.\n"
+            "2. **NO NULLS:** Add `WHERE IMPACT_SCORE IS NOT NULL`.\n"
+            "3. **NULLS LAST:** Use `ORDER BY [col] DESC NULLS LAST`.\n"
+            "4. **DIALECT:** Use DuckDB/Postgres syntax (e.g. `LIMIT 5`, not `TOP 5`).\n"
+            "5. **Response:** Return SQL in metadata."
         )
         query_engine.update_prompts({"text_to_sql_prompt": update_str})
         return query_engine
@@ -168,34 +161,47 @@ def get_query_engine(_engine):
 
 def run_manual_override(prompt, engine):
     p = prompt.lower()
+    
+    definitions = {
+        "conflict index": "### 🛡️ Conflict Index Definition\nIntensity of negative events (Goldstein Scale).\n- **0-3:** Minor diplomatic comments.\n- **4-7:** Protests/Threats.\n- **8-10:** Military assault/War.",
+        "stability": "### ⚖️ Stability Score\nOverall tone of coverage.\n- **< 40:** High Instability.\n- **> 60:** High Stability.",
+        "impact score": "### 💥 Impact Score\nSignificance (-10 to 10).\n- **Negative:** Conflict.\n- **Positive:** Cooperation."
+    }
+    for key, explanation in definitions.items():
+        if key in p:
+            return True, None, explanation, "-- Knowledge Base Retrieval"
+
     if "compare" in p and "china" in p and ("usa" in p or "united states" in p):
+        # DuckDB Syntax
         sql = """
-            SELECT ACTOR_COUNTRY_NAME, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
-            FROM STG_GDELT_EVENTS 
-            WHERE ACTOR_COUNTRY_NAME IN ('United States', 'China')
+            SELECT ACTOR_COUNTRY_CODE, COUNT(*) as ARTICLE_COUNT, AVG(SENTIMENT_SCORE) as AVG_SENTIMENT
+            FROM EVENTS_DAGSTER 
+            WHERE ACTOR_COUNTRY_CODE IN ('US', 'CH') 
             GROUP BY 1 ORDER BY 2 DESC
         """
         df = safe_read_sql(engine, sql)
-        if not df.empty: df.columns = [c.upper() for c in df.columns]
-        summary = "### 🇨🇳 vs 🇺🇸 Direct Comparison\n"
-        if not df.empty:
+        if not df.empty: 
+            df.columns = [c.upper() for c in df.columns]
+            summary = "### 🇨🇳 vs 🇺🇸 Superpower Analysis\n"
             for _, row in df.iterrows():
-                summary += f"- **{row['ACTOR_COUNTRY_NAME']}**: {row['ARTICLE_COUNT']:,} articles (Sent: {row['AVG_SENTIMENT']:.2f})\n"
-        else: summary += "No data found."
+                summary += f"- **{row['ACTOR_COUNTRY_CODE']}**: {row['ARTICLE_COUNT']:,} events. (Sentiment: {row['AVG_SENTIMENT']:.2f})\n"
+        else: summary = "No comparative data found."
         return True, df, summary, sql
+        
     return False, None, None, None
 
 def generate_briefing(engine):
     sql = """
-        SELECT ACTOR_COUNTRY_NAME, ACTOR_NAME, IMPACT_SCORE 
-        FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL 
-        ORDER BY EVENT_DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 20
+        SELECT ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, NEWS_LINK 
+        FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL 
+        ORDER BY DATE DESC, ABS(IMPACT_SCORE) DESC LIMIT 10
     """
     df = safe_read_sql(engine, sql)
-    if df.empty: return "Insufficient data."
+    if df.empty: return "Insufficient data.", None
     data = df.to_string(index=False)
     model = Gemini(model=GEMINI_MODEL, api_key=os.getenv("GOOGLE_API_KEY"))
-    return model.complete(f"Write a 3-bullet Executive Intel Briefing based on this data:\n{data}").text
+    brief = model.complete(f"Write a 3-bullet Executive Briefing based on this data:\n{data}").text
+    return brief, df
 
 # --- 5. UI COMPONENTS ---
 
@@ -205,29 +211,34 @@ def render_sidebar(engine):
         st.subheader("📋 Intelligence Report")
         if st.button("📄 Generate Briefing", type="primary", use_container_width=True):
             with st.spinner("Synthesizing..."):
-                st.session_state['generated_report'] = generate_briefing(engine)
-                st.success("Report Generated! Check top of dashboard.")
+                report, source_df = generate_briefing(engine)
+                st.session_state['generated_report'] = report
+                st.session_state['report_sources'] = source_df
+                st.success("Report Ready!")
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Data Throughput")
-        count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM STG_GDELT_EVENTS")
-        count = count_df.iloc[0,0] if not count_df.empty else 0
-        st.metric("Total Events", f"{count:,}")
-        
-        # Connection Status Check
-        if count == 0:
-            st.error("⚠️ Database Disconnected. Check Secrets.")
         
         try:
-            with engine.connect() as conn:
-                res = conn.execute(text("SELECT MIN(EVENT_DATE), MAX(EVENT_DATE) FROM STG_GDELT_EVENTS")).fetchone()
-                if res and res[0]:
-                    st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
+            count_df = safe_read_sql(engine, "SELECT COUNT(*) as C FROM EVENTS_DAGSTER")
+            count = count_df.iloc[0,0] if not count_df.empty else 0
+            st.metric("Total Events", f"{count:,}")
+        except: st.metric("Total Events", "Connecting...")
+        
+        try:
+            # DuckDB Date query
+            res = engine.execute("SELECT MIN(DATE), MAX(DATE) FROM EVENTS_DAGSTER").fetchone()
+            if res and res[0]:
+                try:
+                    d_min = pd.to_datetime(str(res[0]), format='%Y%m%d').strftime('%d %b %Y')
+                    d_max = pd.to_datetime(str(res[1]), format='%Y%m%d').strftime('%d %b %Y')
+                    st.info(f"📅 **Window:**\n{d_min} to {d_max}")
+                except: st.info(f"📅 **Window:**\n{res[0]} to {res[1]}")
         except: pass
             
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Architecture")
-        st.success("☁️ Snowflake Data Cloud")
+        st.success("🦆 MotherDuck (Cloud DuckDB)")
         st.success("🧠 Google Gemini 2.5")
         
         st.markdown("<br>", unsafe_allow_html=True)
@@ -235,167 +246,210 @@ def render_sidebar(engine):
             st.session_state.clear(); st.rerun()
 
 def render_hud(engine):
-    metrics = safe_read_sql(engine, "SELECT COUNT(*) as T, AVG(SENTIMENT_SCORE) as S, AVG(CASE WHEN IMPACT_SCORE<0 THEN IMPACT_SCORE END) as C FROM STG_GDELT_EVENTS")
-    if metrics.empty: return
-    
-    vol = metrics.iloc[0,0]
-    sent = ((metrics.iloc[0,1] or 0) + 10) / 20 * 100
-    conf = abs(metrics.iloc[0,2] or 0)
-    
+    # DuckDB SQL
+    sql_vol = "SELECT COUNT(*) FROM EVENTS_DAGSTER"
+    sql_hotspot = "SELECT ACTOR_COUNTRY_CODE FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1"
+    sql_crit = "SELECT COUNT(*) FROM EVENTS_DAGSTER WHERE ABS(IMPACT_SCORE) > 6"
+
+    vol, hotspot, crit = 0, "Scanning...", 0
+
+    try:
+        df_vol = safe_read_sql(engine, sql_vol)
+        if not df_vol.empty: vol = df_vol.iloc[0,0]
+
+        df_hot = safe_read_sql(engine, sql_hotspot)
+        if not df_hot.empty: 
+            code = df_hot.iloc[0,0]
+            try:
+                c = pycountry.countries.get(alpha_2=code)
+                hotspot = c.name if c else code
+            except: hotspot = code
+
+        df_crit = safe_read_sql(engine, sql_crit)
+        if not df_crit.empty: crit = df_crit.iloc[0,0]
+
+    except Exception as e: hotspot = "Offline"
+
     c1, c2, c3 = st.columns(3)
-    with c1: st.metric("Signal Volume", f"{vol:,}", delta="Real-time")
-    with c2:
-        fig = go.Figure(go.Indicator(mode="gauge+number", value=sent, title={'text':"Stability"}, gauge={'axis':{'range':[0,100]}, 'bar':{'color':"#10b981" if sent>50 else "#ef4444"}}))
-        fig.update_layout(height=150, margin=dict(t=30,b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color':"white"})
-        st.plotly_chart(fig, use_container_width=True)
-    with c3: st.metric("Conflict Index", f"{conf:.2f} / 10", delta="Severity", delta_color="inverse")
+    with c1: st.metric("📡 Signal Volume", f"{vol:,}", help="Total events ingested.")
+    with c2: st.metric("🔥 Active Hotspot", f"{hotspot}", delta="High Activity", help="Most active country.")
+    with c3: st.metric("🚨 Critical Alerts", f"{crit}", delta="Extreme Impact", delta_color="inverse", help="Events with Impact Score > 6.")
 
 def render_ticker(engine):
-    df = safe_read_sql(engine, "SELECT ACTOR_NAME, ACTOR_COUNTRY_NAME, IMPACT_SCORE FROM STG_GDELT_EVENTS WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY EVENT_DATE DESC LIMIT 7")
-    
-    # [FIX] Default content if DB fails so ticker isn't "struck"
-    text_content = "⚠️ SYSTEM OFFLINE: CHECK DATABASE CONNECTION"
-    
+    df = safe_read_sql(engine, "SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM EVENTS_DAGSTER WHERE IMPACT_SCORE < -2 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY DATE DESC LIMIT 7")
+    text_content = "⚠️ SYSTEM INITIALIZING... SCANNING GLOBAL FEEDS..."
     if not df.empty:
         df.columns = [c.upper() for c in df.columns]
-        items = [f"⚠️ {r['ACTOR_NAME']} ({r['ACTOR_COUNTRY_NAME']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
+        items = [f"⚠️ {r['MAIN_ACTOR']} ({r['ACTOR_COUNTRY_CODE']}) IMPACT: {r['IMPACT_SCORE']}" for _, r in df.iterrows()]
         text_content = " &nbsp; | &nbsp; ".join(items)
         
-    # [FIX] Self-contained CSS for Iframe
     html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
-        .ticker-container {{
-            width: 100%; overflow: hidden; background-color: #450a0a; color: #fecaca;
-            padding: 10px; border-left: 5px solid #ef4444; margin-bottom: 0px;
-            white-space: nowrap; box-sizing: border-box; font-family: monospace; font-weight: bold; font-size: 14px;
-        }}
-        .ticker-content {{
-            display: inline-block; padding-left: 100%;
-            animation: ticker-anim 30s linear infinite;
-        }}
-        @keyframes ticker-anim {{
-            0% {{ transform: translate3d(0, 0, 0); }}
-            100% {{ transform: translate3d(-100%, 0, 0); }}
-        }}
-    </style>
-    </head>
-    <body style="margin:0;">
-        <div class="ticker-container">
-            <div class="ticker-content">{text_content}</div>
-        </div>
-    </body>
-    </html>
+    <!DOCTYPE html><html><head><style>
+        .ticker-wrap {{ width: 100%; overflow: hidden; background-color: #7f1d1d; border-left: 5px solid #ef4444; padding: 10px 0; margin-bottom: 10px; }}
+        .ticker {{ display: inline-block; white-space: nowrap; animation: marquee 35s linear infinite; font-family: monospace; font-weight: bold; font-size: 16px; color: #ffffff; }}
+        @keyframes marquee {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-100%); }} }}
+    </style></head><body style="margin:0;"><div class="ticker-wrap"><div class="ticker">{text_content}</div></div></body></html>
     """
-    components.html(html, height=50)
+    components.html(html, height=55)
 
 def render_visuals(engine):
-    t_map, t_trends, t_feed = st.tabs(["🌐 3D MAP", "📈 TRENDS", "📋 FEED"])
+    t_map, t_trending, t_feed = st.tabs(["🌐 3D MAP", "🔥 TRENDING NEWS", "📋 FEED"])
     
     with t_map:
-        df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_NAME as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL GROUP BY 1")
+        df = safe_read_sql(engine, "SELECT ACTOR_COUNTRY_CODE as \"Country\", COUNT(*) as \"Events\", AVG(IMPACT_SCORE) as \"Impact\" FROM EVENTS_DAGSTER WHERE ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1")
         if not df.empty:
-            fig = px.choropleth(df, locations="Country", locationmode='country names', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
+            fig = px.choropleth(df, locations="Country", locationmode='ISO-3', color="Events", hover_name="Country", hover_data=["Impact"], color_continuous_scale="Viridis", template="plotly_dark")
             fig.update_geos(projection_type="orthographic", showcoastlines=True, showland=True, landcolor="#0f172a", showocean=True, oceancolor="#1e293b")
             fig.update_layout(height=500, margin={"r":0,"t":0,"l":0,"b":0})
             st.plotly_chart(fig, use_container_width=True)
-        else: st.info("No Map Data - Check Database Connection")
+        else: st.info("No Map Data")
 
-    with t_trends:
-        sql_trend = """
-            SELECT EVENT_DATE, COUNT(*) as V 
-            FROM STG_GDELT_EVENTS 
-            WHERE EVENT_DATE >= DATEADD(day, -30, CURRENT_DATE()) 
-            GROUP BY 1 ORDER BY 1
+    # [TAB 2: VIRAL NEWS (LEADERBOARD)]
+    with t_trending:
+        sql = """
+            SELECT NEWS_LINK, ACTOR_COUNTRY_CODE, ARTICLE_COUNT, MAIN_ACTOR
+            FROM EVENTS_DAGSTER 
+            WHERE NEWS_LINK IS NOT NULL 
+            ORDER BY ARTICLE_COUNT DESC 
+            LIMIT 70
         """
-        df = safe_read_sql(engine, sql_trend)
-        if not df.empty:
-            df.columns = ["Date", "Volume"]
-            df['Date'] = pd.to_datetime(df['Date'])
-            st.altair_chart(alt.Chart(df).mark_area(line={'color':'#3b82f6'}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='rgba(59, 130, 246, 0.5)', offset=0), alt.GradientStop(color='rgba(59, 130, 246, 0.0)', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(x='Date', y='Volume').properties(height=350), use_container_width=True)
-        else: st.info("No trend data available.")
-
-    with t_feed:
-        countries = safe_read_sql(engine, "SELECT DISTINCT ACTOR_COUNTRY_NAME FROM STG_GDELT_EVENTS WHERE ACTOR_COUNTRY_NAME IS NOT NULL ORDER BY 1")
-        opts = ["Global Stream"] + countries.iloc[:,0].tolist() if not countries.empty else ["Global Stream"]
-        sel = st.selectbox("Target Selector:", opts)
+        df = safe_read_sql(engine, sql)
         
+        if not df.empty:
+            df.columns = [c.upper() for c in df.columns]
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            df = df.drop_duplicates(subset=['Headline']).head(20)
+            
+            st.dataframe(
+                df[['Headline', 'ACTOR_COUNTRY_CODE', 'ARTICLE_COUNT', 'NEWS_LINK']],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Headline": st.column_config.TextColumn("Trending Topic", width="large"),
+                    "ACTOR_COUNTRY_CODE": st.column_config.TextColumn("Country", width="small"),
+                    "ARTICLE_COUNT": st.column_config.NumberColumn("Reports", format="%d 📉"),
+                    "NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")
+                }
+            )
+        else:
+            st.info("No trending data available yet.")
+
+    # [TAB 3: GLOBAL FEED (FIXED & CLEAN)]
+    with t_feed:
+        # DuckDB deduplication via GROUP BY
         base_sql = """
             SELECT 
-                EVENT_DATE as "Date", ACTOR_COUNTRY_NAME as "Region", ACTOR_NAME as "Actor",
-                CAST(SENTIMENT_SCORE as FLOAT) as "Sentiment",
-                CASE 
-                    WHEN IMPACT_SCORE < -5 THEN '🔥 Conflict'
-                    WHEN IMPACT_SCORE BETWEEN -5 AND 2 THEN '😐 Neutral'
-                    WHEN IMPACT_SCORE > 2 THEN '🤝 Diplomacy'
-                END as "Type",
-                NEWS_LINK as "Source"
-            FROM STG_GDELT_EVENTS 
-            WHERE ACTOR_COUNTRY_NAME IS NOT NULL
+                DATE, 
+                NEWS_LINK, 
+                MAX(MAIN_ACTOR) as MAIN_ACTOR,
+                AVG(IMPACT_SCORE) as IMPACT_SCORE 
+            FROM EVENTS_DAGSTER 
+            WHERE NEWS_LINK IS NOT NULL
+            GROUP BY 1, 2
+            ORDER BY 1 DESC 
+            LIMIT 50
         """
-        params = {}
-        if sel != "Global Stream":
-            base_sql += " AND LOWER(REGEXP_REPLACE(ACTOR_COUNTRY_NAME, '[_-]', ' ')) = :c"
-            params = {"c": clean_key(sel)}
-        base_sql += " ORDER BY EVENT_DATE DESC LIMIT 50"
+        df = safe_read_sql(engine, base_sql)
         
-        df = safe_read_sql(engine, base_sql, params)
         if not df.empty:
-            st.dataframe(df, use_container_width=True, hide_index=True, column_config={
-                "Date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
-                "Sentiment": st.column_config.ProgressColumn("Sentiment", min_value=-10, max_value=10, format="%.1f"),
-                "Source": st.column_config.LinkColumn("Source", display_text="Read Report")
-            })
+            df.columns = [c.upper() for c in df.columns] 
+            
+            # 1. Clean Headlines
+            df['Headline'] = df.apply(lambda x: format_headline(x['NEWS_LINK'], x['MAIN_ACTOR']), axis=1)
+            
+            # 2. Format Date
+            try:
+                df['Date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
+            except:
+                df['Date'] = df['DATE']
+
+            # 3. Type (Impact Words)
+            def get_type(score):
+                if score < -3: return "🔥 Conflict"
+                if score > 3: return "🤝 Diplomacy"
+                return "📢 General"
+            
+            df['Type'] = df['IMPACT_SCORE'].apply(get_type)
+
+            # 4. Display 4 Clean Columns
+            st.dataframe(
+                df[['Date', 'Headline', 'Type', 'NEWS_LINK']], 
+                use_container_width=True, 
+                hide_index=True, 
+                column_config={
+                    "Date": st.column_config.TextColumn("Date", width="small"),
+                    "Headline": st.column_config.TextColumn("Headline", width="large"),
+                    "Type": st.column_config.TextColumn("Category", width="small"),
+                    "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read")
+                }
+            )
         else: st.info("No feed data.")
 
 # --- 6. MAIN ---
 def main():
     style_app()
-    engine = get_db_engine()
     
+    # [CRITICAL] Connect using MotherDuck
+    conn_ui = get_db_connection()
+    engine_ai = get_sql_engine()
+    
+    # [CRITICAL: Init Session State]
     if 'llm_locked' not in st.session_state:
         st.session_state['llm_locked'] = False
+        
+    if "messages" not in st.session_state:
+        st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to MotherDuck GDELT stream. Ask me anything."}]
 
-    render_sidebar(engine)
+    render_sidebar(conn_ui)
     st.title("Global Intelligence Command Center")
-    st.markdown("**Real-Time Geopolitical Signal Processing**")
+    st.markdown("**Real-Time Geopolitical Signal Processing (MotherDuck Engine)**")
     
     if 'generated_report' in st.session_state:
         with st.container():
             st.markdown("<div class='report-box'>", unsafe_allow_html=True)
             st.subheader("📄 Executive Briefing")
             st.markdown(st.session_state['generated_report'])
-            if st.button("Close"): del st.session_state['generated_report']; st.rerun()
+            
+            if 'report_sources' in st.session_state and st.session_state['report_sources'] is not None:
+                st.caption("Sources:")
+                try:
+                    src_df = st.session_state['report_sources']
+                    src_df.columns = [c.upper() for c in src_df.columns]
+                    st.dataframe(
+                        src_df[['NEWS_LINK']],
+                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                        hide_index=True
+                    )
+                except: pass
+
+            if st.button("Close"): 
+                del st.session_state['generated_report']
+                if 'report_sources' in st.session_state: del st.session_state['report_sources']
+                st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    render_hud(engine)
-    render_ticker(engine)
+    render_hud(conn_ui)
+    render_ticker(conn_ui)
     st.divider()
     
     c_chat, c_viz = st.columns([35, 65])
     with c_chat:
         st.subheader("💬 AI Analyst")
         
-        b1, b2, b3 = st.columns(3)
+        b1, b2 = st.columns(2)
         p = None
-        if b1.button("🚨 Conflicts"): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_NAME IS NOT NULL."
-        if b2.button("🇺🇳 UN"): p = "List events where ACTOR_COUNTRY_NAME = 'United Nations'."
-        if b3.button("📈 Trends"): p = "Which country (no nulls) has highest event count?"
+        if b1.button("🚨 Conflicts", use_container_width=True): p = "List 3 events with lowest IMPACT_SCORE where ACTOR_COUNTRY_CODE IS NOT NULL."
+        if b2.button("🇺🇳 UN Events", use_container_width=True): p = "List events where ACTOR_COUNTRY_CODE = 'US'."
         
         st.markdown("""
         <div class="example-box">
             <div class="example-item">1. Analyze the conflict trend in the Middle East.</div>
             <div class="example-item">2. Which country has the lowest sentiment score?</div>
-            <div class="example-item">3. Compare media coverage of USA vs China.</div>
-            <div class="example-item">4. List recent Diplomatic events involving UK.</div>
+            <div class="example-item">3. What is Conflict Index?</div>
+            <div class="example-item">4. Compare media coverage of USA vs China.</div>
             <div class="example-item">5. Summarize activity involving Russia.</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        if "messages" not in st.session_state: st.session_state.messages = [{"role":"assistant", "content":"Hello! I am connected to the live GDELT stream. Ask me anything."}]
-        for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
         
         if prompt := (st.chat_input("Directive...") or p):
             if st.session_state['llm_locked']:
@@ -408,21 +462,46 @@ def main():
                     with st.spinner("Processing..."):
                         st.session_state['llm_locked'] = True
                         try:
-                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, engine)
+                            # 1. Manual Override
+                            matched, m_df, m_txt, m_sql = run_manual_override(prompt, conn_ui)
                             if matched:
                                 st.markdown(m_txt)
-                                if m_df is not None and not m_df.empty: st.dataframe(m_df)
-                                with st.expander("Override Trace"): st.code(m_sql, language='sql')
+                                if m_df is not None and not m_df.empty: 
+                                    m_df.columns = [c.upper() for c in m_df.columns]
+                                    if 'NEWS_LINK' in m_df.columns:
+                                        st.caption("Top Trending Sources:")
+                                        st.dataframe(
+                                            m_df,
+                                            column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read Article")},
+                                            hide_index=True
+                                        )
+                                    else:
+                                        st.dataframe(m_df)
+                                if m_sql and "-- Knowledge" not in m_sql:
+                                    with st.expander("Override Trace"): st.code(m_sql, language='sql')
                                 st.session_state.messages.append({"role":"assistant", "content": m_txt})
                             else:
-                                qe = get_query_engine(engine)
+                                # 2. AI Fallback (Uses SQL Engine)
+                                qe = get_query_engine(engine_ai)
                                 if qe:
                                     resp = qe.query(prompt)
-                                    st.write(resp.response)
-                                    if hasattr(resp, 'metadata') and resp.metadata:
-                                        sql = resp.metadata.get('sql_query', '')
+                                    st.markdown(resp.response)
+                                    
+                                    if hasattr(resp, 'metadata') and 'sql_query' in resp.metadata:
+                                        sql = resp.metadata['sql_query']
                                         if is_safe_sql(sql):
+                                            df_context = safe_read_sql(conn_ui, sql)
+                                            if not df_context.empty:
+                                                df_context.columns = [c.upper() for c in df_context.columns]
+                                                if 'NEWS_LINK' in df_context.columns:
+                                                    st.caption("Contextual Data:")
+                                                    st.dataframe(
+                                                        df_context, 
+                                                        column_config={"NEWS_LINK": st.column_config.LinkColumn("Source", display_text="🔗 Read")},
+                                                        hide_index=True
+                                                    )
                                             with st.expander("SQL Trace"): st.code(sql, language='sql')
+                                    
                                     st.session_state.messages.append({"role":"assistant", "content": resp.response})
                                 else:
                                     st.error("AI Engine unavailable.")
@@ -431,7 +510,7 @@ def main():
                         finally:
                             st.session_state['llm_locked'] = False
 
-    with c_viz: render_visuals(engine)
+    with c_viz: render_visuals(conn_ui)
 
 if __name__ == "__main__":
     main()
