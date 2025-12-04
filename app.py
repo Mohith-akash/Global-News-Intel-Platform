@@ -141,7 +141,7 @@ def safe_query(conn, sql):
 # AI ENGINE - Fixed to auto-discover tables
 # ═══════════════════════════════════════════════════════════════════════════════
 
-GEMINI_MODEL = "gemini-1.5-flash-latest"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 @st.cache_resource
 def get_ai_engine(_engine):
@@ -163,7 +163,7 @@ def get_ai_engine(_engine):
     except Exception as e:
         logger.error(f"AI init failed: {e}")
         return None
-
+    
 @st.cache_resource
 def get_query_engine(_sql_db):
     if not _sql_db: return None
