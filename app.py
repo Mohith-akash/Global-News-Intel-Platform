@@ -343,7 +343,12 @@ def render_ticker(c, t):
         items = []
         for _, r in df.iterrows():
             actor = clean_headline(r.get('MAIN_ACTOR', '')) or "Event"
-            country = get_country(r.get('ACTOR_COUNTRY_CODE', '')) or r.get('ACTOR_COUNTRY_CODE', 'Global')
+            # Ensure we always have a valid string for country
+            country_code = r.get('ACTOR_COUNTRY_CODE', '')
+            country = get_country(country_code) or country_code or 'Global'
+            # Additional safety check to ensure they're strings
+            actor = str(actor) if actor else "Event"
+            country = str(country) if country else "Global"
             items.append(f"⚠️ {actor[:25]} ({country[:12]}) • {r.get('IMPACT_SCORE', 0):.1f}")
         txt = " │ ".join(items) + " │ "
     st.markdown(f'<div class="ticker"><div class="ticker-label"><span class="ticker-dot"></span> LIVE</div><div class="ticker-text">{txt + txt}</div></div>', unsafe_allow_html=True)
