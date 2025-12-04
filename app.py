@@ -141,38 +141,27 @@ def safe_query(conn, sql):
 # AI ENGINE - Fixed to auto-discover tables
 # ═══════════════════════════════════════════════════════════════════════════════
 
+GEMINI_MODEL = "gemini-1.5-flash-latest"
+
 @st.cache_resource
 def get_ai_engine(_engine):
     try:
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            logger.error("GOOGLE_API_KEY not found in environment!")
-            st.error("❌ GOOGLE_API_KEY not set! Check your .env file or Streamlit secrets.")
+            logger.error("GOOGLE_API_KEY not found!")
             return None
-            
-        logger.info(f"API Key found: {api_key[:10]}...")
-        logger.info(f"Initializing Gemini with model: {GEMINI_MODEL}")
         
         llm = Gemini(api_key=api_key, model=GEMINI_MODEL, temperature=0.1)
-        logger.info("LLM initialized successfully")
-        
-        embed = GoogleGenAIEmbedding(api_key=api_key, model_name="text-embedding-004")
-        logger.info("Embedding model initialized successfully")
+        embed = GoogleGenAIEmbedding(api_key=api_key, model_name="models/text-embedding-004")
         
         Settings.llm = llm
         Settings.embed_model = embed
         
-        # Let SQLDatabase auto-discover tables - no include_tables!
         sql_db = SQLDatabase(_engine)
         logger.info(f"AI Engine OK. Tables: {sql_db.get_usable_table_names()}")
         return sql_db
     except Exception as e:
         logger.error(f"AI init failed: {e}")
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Model attempted: {GEMINI_MODEL}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        st.error(f"❌ AI Engine Error: {str(e)}")
         return None
 
 @st.cache_resource
