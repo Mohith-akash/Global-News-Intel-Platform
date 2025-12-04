@@ -452,7 +452,7 @@ def render_ai_chat(c, sql_db):
     if "msgs" not in st.session_state:
         st.session_state.msgs = [{"role": "assistant", "content": "🌐 **GDELT Analyst Ready** - Ask me about global news events!"}]
     
-    st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;"><span style="color:#94a3b8;font-size:0.75rem;">💡 Try: "Top 10 countries with negative news"</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;"><span style="color:#94a3b8;font-size:0.75rem;">💡Try the following questions:\n"Top 10 countries with negative news"\n"Analyze the conflict trend in the Middle East."\n"Which country has the lowest sentiment score?"\n"Compare media coverage of USA vs China"</span></div>', unsafe_allow_html=True)
     
     for msg in st.session_state.msgs[-6:]:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
