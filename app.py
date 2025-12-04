@@ -53,6 +53,10 @@ NOW = datetime.datetime.now()
 WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
 MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')
 
+# Initialize session state for tab persistence
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CSS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -172,9 +176,9 @@ def get_query_engine(_sql_db):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_country(code):
-    if not code or not isinstance(code, str) or len(code) != 2: return None
+    if not code or not isinstance(code, str) or len(code) < 2: return None
     try:
-        c = pycountry.countries.get(alpha_2=code.upper())
+        c = pycountry.countries.get(alpha_2=code[:2].upper())
         return c.name if c else None
     except: return None
 
@@ -182,18 +186,32 @@ def clean_headline(text):
     if not text: return None
     text = str(text).strip()
     
+    # Strip leading numbers/codes
     text = re.sub(r'^[\dA-Fa-f]{5,}[\.\s\-_]*', '', text)
     text = re.sub(r'^\d+[\.\s\-_]+', '', text)
+    
+    # Strip ALL date patterns
     text = re.sub(r'^20\d{2}[\s\-_/]?\d{0,2}[\s\-_/]?\d{0,2}[\s\-_]*', '', text)
-    text = re.sub(r'\b\d{1,2}\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b', '', text, flags=re.I)
+    text = re.sub(r'\b\d{1,2}\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b', '', text, flags=re.I)
+    text = re.sub(r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{1,2}\b', '', text, flags=re.I)
+    text = re.sub(r'\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b', '', text)
+    text = re.sub(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b', '', text)
+    
+    # Remove file extensions
     text = re.sub(r'\.(html?|php|aspx?|jsp|shtml|htm)$', '', text, flags=re.I)
+    
+    # Replace separators with spaces
     text = re.sub(r'[-_]+', ' ', text)
+    
+    # Clean up whitespace
     text = ' '.join(text.split())
     
+    # Title case if needed
     if text and (text.isupper() or text.islower()):
         text = text.title()
     
-    if not text or len(text) < 8: return None
+    # Validate
+    if not text or len(text) < 10: return None
     
     nums = sum(c.isdigit() for c in text.replace(' ', ''))
     if nums > len(text) * 0.3: return None
@@ -203,7 +221,7 @@ def clean_headline(text):
     if text.lower() in garbage or any(g in text.lower() for g in garbage): return None
     if ' ' not in text and len(text) < 15: return None
     
-    return text[:120]
+    return text[:100]
 
 def extract_headline(url, actor=None):
     if not url:
@@ -247,7 +265,7 @@ def process_df(df):
             if actor and len(str(actor)) > 5:
                 cleaned = clean_headline(str(actor))
                 if cleaned:
-                    headlines.append(f"News: {cleaned[:50]}")
+                    headlines.append(cleaned[:60])
                 else:
                     headlines.append(None)
             else:
@@ -279,7 +297,7 @@ def get_metrics(_c, t):
 @st.cache_data(ttl=600)
 def get_alerts(_c, t):
     d = (NOW - datetime.timedelta(days=3)).strftime('%Y%m%d')
-    return safe_query(_c, f"SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t} WHERE DATE >= '{d}' AND IMPACT_SCORE < -4 AND MAIN_ACTOR IS NOT NULL AND LENGTH(MAIN_ACTOR) > 5 ORDER BY IMPACT_SCORE ASC LIMIT 15")
+    return safe_query(_c, f"SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t} WHERE DATE >= '{d}' AND IMPACT_SCORE < -4 AND MAIN_ACTOR IS NOT NULL AND LENGTH(MAIN_ACTOR) > 5 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY IMPACT_SCORE ASC LIMIT 15")
 
 @st.cache_data(ttl=600)
 def get_headlines(_c, t):
@@ -339,19 +357,14 @@ def render_ticker(c, t):
         items = []
         for _, r in df.iterrows():
             actor = r.get('MAIN_ACTOR', '')
-            if actor and len(str(actor)) > 3:
-                actor = str(actor)[:30]
-            else:
-                continue
+            if not actor or len(str(actor)) <= 3: continue
+            actor = str(actor)[:30]
             country_code = r.get('ACTOR_COUNTRY_CODE', '')
             country = get_country(country_code) if country_code else None
             country = country[:15] if country else (country_code if country_code else 'Global')
             impact = r.get('IMPACT_SCORE', 0) or 0
-            items.append(f"⚠️ {actor} ({country}) • Impact: {impact:.1f}")
-        if items:
-            txt = " │ ".join(items[:10]) + " │ "
-        else:
-            txt = "⚡ Monitoring global news for critical events │ Real-time GDELT analysis │ "
+            items.append(f"⚠️ {actor} ({country}) • {impact:.1f}")
+        txt = " │ ".join(items[:10]) + " │ " if items else "⚡ Monitoring global news │ "
     st.markdown(f'<div class="ticker"><div class="ticker-label"><span class="ticker-dot"></span> LIVE</div><div class="ticker-text">{txt + txt}</div></div>', unsafe_allow_html=True)
 
 def render_headlines(c, t):
@@ -360,7 +373,7 @@ def render_headlines(c, t):
     df = process_df(df).head(12)
     if df.empty: st.info("📰 No headlines available"); return
     st.dataframe(df[['TONE', 'DATE_FMT', 'HEADLINE', 'REGION', 'NEWS_LINK']], hide_index=True, height=350,
-        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Headline", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", width="small")}, width="stretch")
+        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Headline", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", display_text="Open", width="small")}, use_container_width=True)
 
 def render_sentiment(c, t):
     df = get_sentiment(c, t)
@@ -380,10 +393,7 @@ def render_actors(c, t):
     for _, r in df.iterrows():
         actor = clean_headline(r['MAIN_ACTOR']) or 'Unknown'
         cc = r.get('ACTOR_COUNTRY_CODE', '')
-        if cc:
-            labels.append(f"{actor[:18]} ({cc})")
-        else:
-            labels.append(actor[:20])
+        labels.append(f"{actor[:18]} ({cc})" if cc else actor[:20])
     colors = ['#ef4444' if x and x < -3 else ('#f59e0b' if x and x < 0 else ('#10b981' if x and x > 3 else '#06b6d4')) for x in df['avg_impact']]
     fig = go.Figure(go.Bar(x=df['events'], y=labels, orientation='h', marker_color=colors, text=df['events'].apply(lambda x: f'{x:,}'), textposition='outside', textfont=dict(color='#94a3b8', size=10)))
     fig.update_layout(height=350, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=0,r=50,t=10,b=0), xaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')), yaxis=dict(showgrid=False, tickfont=dict(color='#e2e8f0', size=11), autorange='reversed'), bargap=0.3)
@@ -413,7 +423,7 @@ def render_trending(c, t):
     df = process_df(df).head(15)
     if df.empty: st.info("🔥 No stories"); return
     st.dataframe(df[['DATE_FMT', 'HEADLINE', 'REGION', 'ARTICLE_COUNT', 'NEWS_LINK']], hide_index=True, height=400,
-        column_config={"DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Story", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "ARTICLE_COUNT": st.column_config.NumberColumn("📰", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", width="small")}, use_container_width=True)
+        column_config={"DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Story", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "ARTICLE_COUNT": st.column_config.NumberColumn("📰", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", display_text="Open", width="small")}, use_container_width=True)
 
 def render_feed(c, t):
     df = get_feed(c, t)
@@ -421,7 +431,7 @@ def render_feed(c, t):
     df = process_df(df).head(15)
     if df.empty: st.info("📋 No events"); return
     st.dataframe(df[['TONE', 'DATE_FMT', 'HEADLINE', 'REGION', 'NEWS_LINK']], hide_index=True, height=400,
-        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Event", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", width="small")}, use_container_width=True)
+        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Event", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", display_text="Open", width="small")}, use_container_width=True)
 
 def render_timeseries(c, t):
     df = get_timeseries(c, t)
@@ -440,41 +450,42 @@ def render_timeseries(c, t):
 
 def render_ai_chat(c, sql_db):
     if "msgs" not in st.session_state:
-        st.session_state.msgs = [{"role": "assistant", "content": "🌐 **GDELT Analyst Ready**\n\nI can help you explore global news data. Try asking:\n- \"Show top 10 crisis events this week\"\n- \"Which countries have the most negative news?\"\n- \"What's happening in Ukraine?\"\n- \"List recent events with high media coverage\""}]
+        st.session_state.msgs = [{"role": "assistant", "content": "🌐 **GDELT Analyst Ready** - Ask me about global news events!"}]
     
-    st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;margin-bottom:1rem;"><span style="color:#64748b;font-size:0.7rem;">💡 TRY:</span> <span style="color:#94a3b8;font-size:0.75rem;">"Top 10 negative events" • "Events in Russia this week" • "Countries with most coverage"</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;"><span style="color:#94a3b8;font-size:0.75rem;">💡 Try: "Top 10 countries with negative news"</span></div>', unsafe_allow_html=True)
     
-    prompt = st.chat_input("Ask about global news events...")
-    for msg in st.session_state.msgs[-8:]:
+    for msg in st.session_state.msgs[-6:]:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
+    
+    prompt = st.chat_input("Ask about global news...")
     
     if prompt:
         st.session_state.msgs.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Analyzing GDELT data..."):
+            with st.spinner("🔍 Analyzing..."):
                 qe = get_query_engine(sql_db)
                 if qe:
                     try:
-                        enhanced_prompt = f"""You are a GDELT news analyst. The user asked: "{prompt}"
+                        enhanced_prompt = f"""You are a GDELT news analyst. User asked: "{prompt}"
 
-The database table has these columns:
-- DATE (integer format YYYYMMDD, e.g. 20251205)
-- MAIN_ACTOR (person or organization name)
-- ACTOR_COUNTRY_CODE (2-letter code like US, RU, CN, UA)
-- IMPACT_SCORE (float: negative values mean conflict/crisis, positive means cooperation)
-- ARTICLE_COUNT (integer: number of articles, higher = more media coverage)
-- NEWS_LINK (URL to the news source)
+Table columns:
+- DATE (YYYYMMDD integer)
+- MAIN_ACTOR (person/org)
+- ACTOR_COUNTRY_CODE (2-letter: US, RU, CN)
+- IMPACT_SCORE (negative=conflict, positive=cooperation)
+- ARTICLE_COUNT (media coverage count)
+- NEWS_LINK (URL)
 
-Important rules:
-- Use LIMIT 20 maximum
-- For recent data filter by DATE >= '{WEEK_AGO}'
-- For negative/crisis events filter by IMPACT_SCORE < -3
-- For positive events filter by IMPACT_SCORE > 3
-- Order by IMPACT_SCORE ASC for worst events, DESC for best
-- Order by ARTICLE_COUNT DESC for trending/popular stories
+IMPORTANT RULES:
+1. ALWAYS filter NULL values: WHERE column IS NOT NULL
+2. For country queries: WHERE ACTOR_COUNTRY_CODE IS NOT NULL
+3. Use LIMIT 15 max
+4. Recent data: DATE >= '{WEEK_AGO}'
+5. Negative events: IMPACT_SCORE < -3
+6. Positive events: IMPACT_SCORE > 3
 
-Generate a SQL query to answer the user's question."""
+Generate SQL to answer the question."""
                         
                         response = qe.query(enhanced_prompt)
                         answer = str(response)
@@ -483,15 +494,13 @@ Generate a SQL query to answer the user's question."""
                         if sql:
                             data = safe_query(c, sql)
                             if not data.empty:
-                                st.dataframe(data.head(20), hide_index=True, use_container_width=True)
-                            with st.expander("🔍 Generated SQL"): st.code(sql, language='sql')
+                                st.dataframe(data.head(15), hide_index=True, use_container_width=True)
+                            with st.expander("SQL"): st.code(sql, language='sql')
                         st.session_state.msgs.append({"role": "assistant", "content": answer})
                     except Exception as e:
-                        error_msg = str(e)[:150]
-                        st.error(f"Query error: {error_msg}")
-                        st.info("💡 Try simpler queries like: 'Show 10 recent events' or 'Top countries by event count'")
+                        st.error(f"Error: {str(e)[:100]}")
                 else:
-                    st.warning("⚠️ AI engine initializing... Please refresh the page.")
+                    st.warning("⚠️ AI initializing... Refresh page.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ARCHITECTURE & ABOUT
@@ -528,7 +537,9 @@ def main():
     sql_db = get_ai_engine(get_engine())
     
     render_header()
-    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🤖 AI", "🏗️ TECH", "👤 ABOUT"])
+    
+    tab_names = ["📊 HOME", "📈 TRENDS", "🤖 AI", "🏗️ TECH", "👤 ABOUT"]
+    tabs = st.tabs(tab_names)
     
     with tabs[0]:
         render_metrics(conn, tbl)
@@ -570,12 +581,12 @@ def main():
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
             render_ai_chat(conn, sql_db)
         with c2:
-            st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;"><h4 style="color:#06b6d4;font-size:0.85rem;">ℹ️ HOW IT WORKS</h4><p style="color:#94a3b8;font-size:0.8rem;">Your question → Gemini AI → SQL → Results</p><p style="font-size:0.75rem;color:#94a3b8;margin-top:1rem;">📅 Dates • 👤 Actors • 📊 Scores • 🔗 Links</p></div>', unsafe_allow_html=True)
+            st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;"><h4 style="color:#06b6d4;font-size:0.8rem;">ℹ️ HOW IT WORKS</h4><p style="color:#94a3b8;font-size:0.75rem;">Question → Gemini AI → SQL → Results</p></div>', unsafe_allow_html=True)
     
     with tabs[3]: render_arch()
     with tabs[4]: render_about()
     
-    st.markdown('<div style="text-align:center;padding:2rem 0 1rem;border-top:1px solid #1e3a5f;margin-top:2rem;"><p style="color:#64748b;font-size:0.8rem;"><b>GDELT</b> monitors worldwide news in real-time.</p><p style="color:#475569;font-size:0.75rem;">Built by <a href="https://www.linkedin.com/in/mohith-akash/" style="color:#06b6d4;">Mohith Akash</a></p></div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center;padding:2rem 0 1rem;border-top:1px solid #1e3a5f;margin-top:2rem;"><p style="color:#475569;font-size:0.75rem;">Built by <a href="https://www.linkedin.com/in/mohith-akash/" style="color:#06b6d4;">Mohith Akash</a> • GDELT Real-Time Analytics</p></div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
