@@ -2,38 +2,45 @@ name: 30-Min GDELT Refresh (MotherDuck)
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Runs every 30 minutes
-  workflow_dispatch:        # Allows manual "Run Now" button
+    # Runs at minute 0 and minute 30 of every hour
+    - cron: '*/30 * * * *' 
+  workflow_dispatch:        # Allows you to click "Run Now" manually
 
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Get code
+    # 1. Check out your code
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # 2. Set up Python (3.10 is great for DuckDB)
+    # 2. Set up Python 3.10
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
 
-    # 3. Install Dependencies (Reads your updated requirements.txt)
+    # 3. Install Dependencies
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
+        # This installs dagster, duckdb, motherduck, etc. from your file
         pip install -r requirements.txt
 
     # 4. EXECUTION: Run the Pipeline
     - name: Execute Dagster Job
       env:
-        # [CRITICAL] New MotherDuck Token
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-        # Keep Google Key for any embedding logic if needed
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       run: |
         echo "🚀 Starting MotherDuck Ingestion..."
-        dagster job execute -f pipeline.py -j gdelt_ingestion_job
+        
+        # ---------------------------------------------------------
+        # THE FIX IS HERE:
+        # We use 'python -m dagster' instead of just 'dagster'.
+        # This ensures the runner finds the package we just installed.
+        # ---------------------------------------------------------
+        python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
+        
         echo "✅ Data Refresh Complete."
