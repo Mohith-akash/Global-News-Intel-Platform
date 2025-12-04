@@ -31,13 +31,33 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gdelt")
 
+# Load from .env or Streamlit secrets
+def get_secret(key):
+    """Get secret from environment or Streamlit secrets"""
+    # Try environment variable first
+    val = os.getenv(key)
+    if val:
+        return val
+    # Try Streamlit secrets
+    try:
+        return st.secrets.get(key)
+    except:
+        return None
+
 REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "GOOGLE_API_KEY"]
-missing = [k for k in REQUIRED_ENVS if not os.getenv(k)]
+missing = [k for k in REQUIRED_ENVS if not get_secret(k)]
 if missing:
     st.error(f"❌ Missing: {', '.join(missing)}")
     st.stop()
 
-GEMINI_MODEL = "models/gemini-2.5-flash-preview-05-20"
+# Set environment variables for libraries that expect them
+for key in REQUIRED_ENVS:
+    val = get_secret(key)
+    if val:
+        os.environ[key] = val
+
+GEMINI_MODEL = "models/gemini-1.5-flash"  # Free tier, fast and efficient
+# Other options: "models/gemini-1.5-pro", "models/gemini-2.0-flash-exp"
 NOW = datetime.datetime.now()
 WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
 MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')
@@ -124,8 +144,10 @@ def safe_query(conn, sql):
 @st.cache_resource
 def get_ai_engine(_engine):
     try:
-        llm = Gemini(api_key=os.getenv("GOOGLE_API_KEY"), model=GEMINI_MODEL, temperature=0.1)
-        embed = GeminiEmbedding(api_key=os.getenv("GOOGLE_API_KEY"), model_name="models/embedding-001")
+        api_key = os.getenv("GOOGLE_API_KEY")
+        logger.info(f"Initializing Gemini with model: {GEMINI_MODEL}")
+        llm = Gemini(api_key=api_key, model=GEMINI_MODEL, temperature=0.1)
+        embed = GeminiEmbedding(api_key=api_key, model_name="models/embedding-001")
         Settings.llm = llm
         Settings.embed_model = embed
         # Let SQLDatabase auto-discover tables - no include_tables!
@@ -133,7 +155,8 @@ def get_ai_engine(_engine):
         logger.info(f"AI Engine OK. Tables: {sql_db.get_usable_table_names()}")
         return sql_db
     except Exception as e:
-        logger.error(f"AI init: {e}")
+        logger.error(f"AI init failed: {e}")
+        logger.error(f"Model attempted: {GEMINI_MODEL}")
         return None
 
 @st.cache_resource
