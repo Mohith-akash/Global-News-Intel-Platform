@@ -38,8 +38,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
     menu_items={
-        'Get Help': 'https://github.com/yourusername/gdelt-intelligence',
-        'Report a bug': 'https://github.com/yourusername/gdelt-intelligence/issues',
+        'Get Help': 'https://github.com/Mohith-akash/global-news-intel-platform',
+        'Report a bug': 'https://github.com/Mohith-akash/global-news-intel-platform/issues',
         'About': "Real-time geopolitical intelligence powered by GDELT, MotherDuck & Gemini AI"
     }
 )
@@ -1082,8 +1082,7 @@ def render_globe_map(conn):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         coloraxis_colorbar=dict(
-            title="Events",
-            titlefont=dict(color="#94a3b8", size=11),
+            title=dict(text="Events", font=dict(color="#94a3b8", size=11)),
             tickfont=dict(color="#94a3b8", size=10),
             bgcolor="rgba(17, 24, 39, 0.8)",
             bordercolor="#1e3a5f",
@@ -1266,29 +1265,272 @@ def render_impact_distribution(conn):
     )])
     
     fig.update_layout(
-        height=300,
+        height=250,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=20, b=20),
         showlegend=True,
         legend=dict(
-            font=dict(size=10, color='#94a3b8'),
+            font=dict(size=9, color='#94a3b8'),
             bgcolor='rgba(0,0,0,0)',
             orientation='h',
             yanchor='bottom',
-            y=-0.2,
+            y=-0.3,
             xanchor='center',
             x=0.5
         ),
         annotations=[dict(
             text='<b>IMPACT</b>',
             x=0.5, y=0.5,
-            font=dict(size=14, color='#94a3b8', family='JetBrains Mono'),
+            font=dict(size=12, color='#94a3b8', family='JetBrains Mono'),
             showarrow=False
         )]
     )
     
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def render_conflict_gauge(conn):
+    """Render a conflict vs cooperation gauge meter"""
+    week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    
+    df = safe_query(conn, f"""
+        SELECT 
+            AVG(IMPACT_SCORE) as avg_impact,
+            SUM(CASE WHEN IMPACT_SCORE < -3 THEN 1 ELSE 0 END) as conflicts,
+            SUM(CASE WHEN IMPACT_SCORE > 3 THEN 1 ELSE 0 END) as cooperations,
+            COUNT(*) as total
+        FROM EVENTS_DAGSTER
+        WHERE DATE >= '{week_ago}'
+        AND IMPACT_SCORE IS NOT NULL
+    """)
+    
+    if df.empty:
+        st.info("Loading gauge data...")
+        return
+    
+    avg_impact = df.iloc[0]['avg_impact'] or 0
+    conflicts = df.iloc[0]['conflicts'] or 0
+    cooperations = df.iloc[0]['cooperations'] or 0
+    total = df.iloc[0]['total'] or 1
+    
+    # Normalize to 0-100 scale (impact is -10 to +10)
+    gauge_value = ((avg_impact + 10) / 20) * 100
+    
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=gauge_value,
+        number={'suffix': '%', 'font': {'size': 40, 'color': '#e2e8f0', 'family': 'JetBrains Mono'}},
+        delta={'reference': 50, 'increasing': {'color': '#10b981'}, 'decreasing': {'color': '#ef4444'}},
+        gauge={
+            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': '#1e3a5f', 'tickfont': {'color': '#64748b', 'size': 10}},
+            'bar': {'color': '#06b6d4', 'thickness': 0.7},
+            'bgcolor': '#1e293b',
+            'borderwidth': 2,
+            'bordercolor': '#1e3a5f',
+            'steps': [
+                {'range': [0, 30], 'color': 'rgba(239, 68, 68, 0.3)'},
+                {'range': [30, 50], 'color': 'rgba(245, 158, 11, 0.3)'},
+                {'range': [50, 70], 'color': 'rgba(107, 114, 128, 0.2)'},
+                {'range': [70, 100], 'color': 'rgba(16, 185, 129, 0.3)'}
+            ],
+            'threshold': {
+                'line': {'color': '#f59e0b', 'width': 3},
+                'thickness': 0.8,
+                'value': 50
+            }
+        },
+        title={'text': "Global Stability Index", 'font': {'size': 14, 'color': '#94a3b8', 'family': 'JetBrains Mono'}}
+    ))
+    
+    fig.update_layout(
+        height=200,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=30, r=30, t=60, b=20),
+        font=dict(family='JetBrains Mono')
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    
+    # Stats below gauge
+    stat_col1, stat_col2, stat_col3 = st.columns(3)
+    with stat_col1:
+        st.markdown(f"""
+        <div style="text-align: center; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.3);">
+            <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444; font-family: 'JetBrains Mono';">{int(conflicts):,}</div>
+            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Conflicts</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with stat_col2:
+        st.markdown(f"""
+        <div style="text-align: center; padding: 0.5rem; background: rgba(107, 114, 128, 0.1); border-radius: 8px; border: 1px solid rgba(107, 114, 128, 0.3);">
+            <div style="font-size: 1.5rem; font-weight: bold; color: #9ca3af; font-family: 'JetBrains Mono';">{int(total):,}</div>
+            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Total Events</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with stat_col3:
+        st.markdown(f"""
+        <div style="text-align: center; padding: 0.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <div style="font-size: 1.5rem; font-weight: bold; color: #10b981; font-family: 'JetBrains Mono';">{int(cooperations):,}</div>
+            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Cooperations</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def render_sparkline_trend(conn):
+    """Render a compact 7-day activity sparkline"""
+    week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    
+    df = safe_query(conn, f"""
+        SELECT 
+            DATE,
+            COUNT(*) as events,
+            SUM(CASE WHEN IMPACT_SCORE < -3 THEN 1 ELSE 0 END) as conflicts
+        FROM EVENTS_DAGSTER
+        WHERE DATE >= '{week_ago}'
+        GROUP BY 1
+        ORDER BY 1
+    """)
+    
+    if df.empty or len(df) < 2:
+        st.info("Loading trend data...")
+        return
+    
+    df['date_parsed'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
+    
+    fig = go.Figure()
+    
+    # Events area
+    fig.add_trace(go.Scatter(
+        x=df['date_parsed'],
+        y=df['events'],
+        fill='tozeroy',
+        fillcolor='rgba(6, 182, 212, 0.2)',
+        line=dict(color='#06b6d4', width=2),
+        name='Events',
+        hovertemplate='%{x|%b %d}: %{y:,} events<extra></extra>'
+    ))
+    
+    # Conflicts line
+    fig.add_trace(go.Scatter(
+        x=df['date_parsed'],
+        y=df['conflicts'],
+        line=dict(color='#ef4444', width=2, dash='dot'),
+        name='Conflicts',
+        hovertemplate='%{x|%b %d}: %{y:,} conflicts<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        height=150,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=0, r=0, t=10, b=0),
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1,
+            xanchor='right',
+            x=1,
+            font=dict(size=10, color='#64748b'),
+            bgcolor='rgba(0,0,0,0)'
+        ),
+        xaxis=dict(
+            showgrid=False,
+            showticklabels=True,
+            tickfont=dict(size=9, color='#64748b'),
+            tickformat='%d %b'
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='rgba(30, 58, 95, 0.2)',
+            showticklabels=False
+        ),
+        hovermode='x unified'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def render_top_actors(conn):
+    """Render top actors with activity breakdown"""
+    week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    
+    df = safe_query(conn, f"""
+        SELECT 
+            MAIN_ACTOR,
+            ACTOR_COUNTRY_CODE,
+            COUNT(*) as events,
+            AVG(IMPACT_SCORE) as avg_impact,
+            SUM(ARTICLE_COUNT) as media_coverage
+        FROM EVENTS_DAGSTER
+        WHERE DATE >= '{week_ago}'
+        AND MAIN_ACTOR IS NOT NULL
+        AND LENGTH(MAIN_ACTOR) > 2
+        GROUP BY 1, 2
+        ORDER BY events DESC
+        LIMIT 12
+    """)
+    
+    if df.empty:
+        st.info("Loading actor data...")
+        return
+    
+    # Create a horizontal bar chart with diverging colors based on impact
+    df['color'] = df['avg_impact'].apply(
+        lambda x: '#ef4444' if x < -3 else ('#f59e0b' if x < 0 else ('#10b981' if x > 3 else '#06b6d4'))
+    )
+    df['actor_label'] = df.apply(
+        lambda x: f"{x['MAIN_ACTOR'][:20]}... ({x['ACTOR_COUNTRY_CODE']})" if len(str(x['MAIN_ACTOR'])) > 20 
+        else f"{x['MAIN_ACTOR']} ({x['ACTOR_COUNTRY_CODE']})", axis=1
+    )
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        y=df['actor_label'],
+        x=df['events'],
+        orientation='h',
+        marker=dict(
+            color=df['color'],
+            line=dict(width=0)
+        ),
+        text=df['events'].apply(lambda x: f'{x:,}'),
+        textposition='outside',
+        textfont=dict(size=10, color='#94a3b8', family='JetBrains Mono'),
+        hovertemplate='<b>%{y}</b><br>Events: %{x:,}<br>Avg Impact: %{customdata:.2f}<extra></extra>',
+        customdata=df['avg_impact']
+    ))
+    
+    fig.update_layout(
+        height=400,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=10, r=50, t=10, b=10),
+        xaxis=dict(
+            showgrid=True,
+            gridcolor='rgba(30, 58, 95, 0.2)',
+            showticklabels=False
+        ),
+        yaxis=dict(
+            showgrid=False,
+            tickfont=dict(size=10, color='#94a3b8'),
+            autorange='reversed'
+        )
+    )
+    
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    
+    # Legend
+    st.markdown("""
+    <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
+        <span style="font-size: 0.7rem; color: #ef4444;">● Conflict</span>
+        <span style="font-size: 0.7rem; color: #f59e0b;">● Tension</span>
+        <span style="font-size: 0.7rem; color: #06b6d4;">● Neutral</span>
+        <span style="font-size: 0.7rem; color: #10b981;">● Positive</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_trending_table(conn):
     """Render trending news table"""
@@ -1503,11 +1745,15 @@ def render_architecture():
                 🗄️ DATA STORAGE
             </h4>
             <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; padding-left: 1.2rem;">
-                <li><strong>Database:</strong> MotherDuck (Cloud DuckDB)</li>
-                <li><strong>Previous:</strong> Migrated from Snowflake</li>
-                <li><strong>Benefits:</strong> Serverless, cost-effective</li>
+                <li><strong>Current:</strong> MotherDuck (Cloud DuckDB)</li>
+                <li><strong>Originally:</strong> Built on Snowflake</li>
+                <li><strong>Migration:</strong> Moved to MotherDuck for cost optimization</li>
+                <li><strong>Benefits:</strong> Serverless, free tier, same SQL</li>
                 <li><strong>Query Engine:</strong> SQLAlchemy + DuckDB</li>
             </ul>
+            <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 6px; border-left: 3px solid #10b981;">
+                <span style="color: #10b981; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">💡 COST SAVINGS: Migrated from Snowflake → MotherDuck free tier</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -1519,11 +1765,14 @@ def render_architecture():
             </h4>
             <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; padding-left: 1.2rem;">
                 <li><strong>LLM:</strong> Google Gemini 2.5 Flash</li>
+                <li><strong>Tier:</strong> Free API (cost-optimized)</li>
                 <li><strong>Framework:</strong> LlamaIndex</li>
                 <li><strong>Feature:</strong> Natural Language to SQL</li>
-                <li><strong>Capability:</strong> Contextual query synthesis</li>
                 <li><strong>Embeddings:</strong> Gemini Embedding-001</li>
             </ul>
+            <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(139, 92, 246, 0.1); border-radius: 6px; border-left: 3px solid #8b5cf6;">
+                <span style="color: #8b5cf6; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">🆓 Using Gemini Free Tier API</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1549,6 +1798,7 @@ def render_architecture():
         </p>
         <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem;">
             <span class="tech-badge">🐍 Python</span>
+            <span class="tech-badge">❄️ Snowflake</span>
             <span class="tech-badge">🦆 DuckDB</span>
             <span class="tech-badge">☁️ MotherDuck</span>
             <span class="tech-badge">⚙️ Dagster</span>
@@ -1613,10 +1863,12 @@ def render_about():
         <h2 style="font-family: 'JetBrains Mono', monospace; color: #e2e8f0; margin-bottom: 1rem;">
             👋 About This Project
         </h2>
-        <p style="color: #94a3b8; font-size: 1rem; max-width: 600px; margin: 0 auto 2rem auto; line-height: 1.7;">
+        <p style="color: #94a3b8; font-size: 1rem; max-width: 700px; margin: 0 auto 2rem auto; line-height: 1.7;">
             This real-time geopolitical intelligence platform demonstrates end-to-end 
-            data engineering and AI capabilities. Built as a portfolio project showcasing 
-            modern data stack expertise.
+            data engineering and AI capabilities. Originally built on <strong>Snowflake</strong>, 
+            then strategically migrated to <strong>MotherDuck</strong> for cost optimization while 
+            maintaining performance. Uses <strong>Gemini AI free tier</strong> for intelligent queries — 
+            showcasing how to build production-grade systems on a budget.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1634,7 +1886,8 @@ def render_about():
                 <li>Showcase cloud-native architecture</li>
                 <li>Implement AI/ML integration</li>
                 <li>Build production-grade UI/UX</li>
-                <li>Handle real-world data at scale</li>
+                <li>Optimize costs (Snowflake → MotherDuck)</li>
+                <li>Leverage free tiers effectively</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -1648,9 +1901,10 @@ def render_about():
             <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; padding-left: 1.2rem;">
                 <li>Python, SQL, Data Engineering</li>
                 <li>ETL/ELT Pipeline Development</li>
-                <li>Cloud Data Platforms (DuckDB, Snowflake)</li>
+                <li>Cloud Platforms (Snowflake, DuckDB, MotherDuck)</li>
                 <li>LLM Integration (Gemini, LlamaIndex)</li>
                 <li>Data Visualization & Dashboards</li>
+                <li>Cost Optimization & Migration</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -1661,32 +1915,23 @@ def render_about():
             Interested in discussing this project or opportunities?
         </p>
         <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
-            <a href="https://github.com/yourusername" target="_blank" style="
+            <a href="https://github.com/Mohith-akash" target="_blank" style="
                 display: inline-flex; align-items: center; gap: 0.5rem;
                 background: #1e293b; border: 1px solid #334155; border-radius: 8px;
                 padding: 0.6rem 1.2rem; color: #94a3b8; text-decoration: none;
                 font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
                 transition: all 0.3s ease;
             ">
-                GitHub
+                ⭐ GitHub
             </a>
-            <a href="https://linkedin.com/in/yourusername" target="_blank" style="
+            <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="
                 display: inline-flex; align-items: center; gap: 0.5rem;
                 background: #1e293b; border: 1px solid #334155; border-radius: 8px;
                 padding: 0.6rem 1.2rem; color: #94a3b8; text-decoration: none;
                 font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
                 transition: all 0.3s ease;
             ">
-                LinkedIn
-            </a>
-            <a href="mailto:your.email@example.com" style="
-                display: inline-flex; align-items: center; gap: 0.5rem;
-                background: #1e293b; border: 1px solid #334155; border-radius: 8px;
-                padding: 0.6rem 1.2rem; color: #94a3b8; text-decoration: none;
-                font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
-                transition: all 0.3s ease;
-            ">
-                Email
+                💼 LinkedIn
             </a>
         </div>
     </div>
@@ -1728,23 +1973,54 @@ def main():
         
         st.markdown("---")
         
-        # Main content
-        col_left, col_right = st.columns([6, 4])
+        # Row 1: Main visualizations
+        col_left, col_right = st.columns([5, 5])
         
         with col_left:
             st.markdown("""
             <div class="card-header">
-                <span class="card-icon">🌍</span>
-                <span class="card-title">Global Activity Map</span>
+                <span class="card-icon">⚡</span>
+                <span class="card-title">Real-Time Conflict Monitor</span>
             </div>
             """, unsafe_allow_html=True)
-            render_globe_map(conn)
+            render_conflict_gauge(conn)
+            
+            st.markdown("""
+            <div class="card-header" style="margin-top: 1.5rem;">
+                <span class="card-icon">📈</span>
+                <span class="card-title">7-Day Activity Trend</span>
+            </div>
+            """, unsafe_allow_html=True)
+            render_sparkline_trend(conn)
         
         with col_right:
             st.markdown("""
             <div class="card-header">
+                <span class="card-icon">🎯</span>
+                <span class="card-title">Top Active Actors</span>
+            </div>
+            """, unsafe_allow_html=True)
+            render_top_actors(conn)
+        
+        st.markdown("---")
+        
+        # Row 2: Map and Distribution
+        col_map, col_dist = st.columns([6, 4])
+        
+        with col_map:
+            st.markdown("""
+            <div class="card-header">
+                <span class="card-icon">🌍</span>
+                <span class="card-title">Global Activity Heatmap</span>
+            </div>
+            """, unsafe_allow_html=True)
+            render_globe_map(conn)
+        
+        with col_dist:
+            st.markdown("""
+            <div class="card-header">
                 <span class="card-icon">📊</span>
-                <span class="card-title">Impact Distribution</span>
+                <span class="card-title">Event Classification</span>
             </div>
             """, unsafe_allow_html=True)
             render_impact_distribution(conn)
@@ -1752,7 +2028,7 @@ def main():
             st.markdown("""
             <div class="card-header" style="margin-top: 1rem;">
                 <span class="card-icon">🏆</span>
-                <span class="card-title">Top Active Regions</span>
+                <span class="card-title">Regional Leaderboard</span>
             </div>
             """, unsafe_allow_html=True)
             render_country_bar_chart(conn)
@@ -1854,7 +2130,10 @@ def main():
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0 1rem 0; border-top: 1px solid #1e3a5f; margin-top: 2rem;">
         <p style="color: #475569; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">
-            SIGINT COMMAND CENTER v2.0 | Powered by GDELT, MotherDuck & Gemini AI
+            SIGINT COMMAND CENTER v2.0 | Built by <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="color: #06b6d4; text-decoration: none;">Mohith Akash</a>
+        </p>
+        <p style="color: #374151; font-size: 0.65rem; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem;">
+            Snowflake → MotherDuck | Gemini AI Free Tier | Zero Infrastructure Cost
         </p>
     </div>
     """, unsafe_allow_html=True)
