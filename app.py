@@ -460,27 +460,13 @@ def render_ai_chat(c, sql_db):
             padding:0.5rem 0.75rem;
             margin-bottom:0.75rem;
         ">
-
             <span style="display:block;color:#94a3b8;font-size:0.75rem;">
                 💡 Try the following questions:<br>
+                - "Top 10 countries with negative news"
+                - "Analyze the conflict trend in the Middle East"
+                - "Compare media coverage of USA vs China"
+                - "Which country has the lowest sentiment score?"
             </span>
-            
-            <span style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:0.4rem;">
-                "Top 10 countries with negative news"
-            </span>
-            
-            <span style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:0.4rem;">
-                "Analyze the conflict trend in the Middle East."
-            </span>
-            
-            <span style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:0.4rem;">
-                "Compare media coverage of USA vs China"
-            </span>
-            
-            <span style="display:block;color:#94a3b8;font-size:0.75rem;margin-top:0.4rem;">
-                "Which country has the lowest sentiment score?"
-            </span>
-
         </div>
         ''', unsafe_allow_html=True)
     for msg in st.session_state.msgs[-6:]:
@@ -523,6 +509,7 @@ Generate SQL to answer the question."""
                         if sql:
                             data = safe_query(c, sql)
                             if not data.empty:
+                                data['DATE'] = pd.to_datetime(data['DATA'], format="%d/%m/%Y")
                                 st.dataframe(data.head(15), hide_index=True, use_container_width=True)
                             with st.expander("SQL"): st.code(sql, language='sql')
                         st.session_state.msgs.append({"role": "assistant", "content": answer})
