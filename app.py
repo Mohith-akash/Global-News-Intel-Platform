@@ -56,8 +56,8 @@ for key in REQUIRED_ENVS:
     if val:
         os.environ[key] = val
 
-GEMINI_MODEL = "models/gemini-1.5-flash"  # Free tier, fast and efficient
-# Other options: "models/gemini-1.5-pro", "models/gemini-2.0-flash-exp"
+GEMINI_MODEL = "gemini-1.5-flash"  # Free tier, fast and efficient
+# Other options: "gemini-1.5-pro", "gemini-2.0-flash-exp"
 NOW = datetime.datetime.now()
 WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
 MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')
@@ -145,18 +145,34 @@ def safe_query(conn, sql):
 def get_ai_engine(_engine):
     try:
         api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            logger.error("GOOGLE_API_KEY not found in environment!")
+            st.error("❌ GOOGLE_API_KEY not set! Check your .env file or Streamlit secrets.")
+            return None
+            
+        logger.info(f"API Key found: {api_key[:10]}...")
         logger.info(f"Initializing Gemini with model: {GEMINI_MODEL}")
+        
         llm = Gemini(api_key=api_key, model=GEMINI_MODEL, temperature=0.1)
-        embed = GoogleGenAIEmbedding(api_key=api_key, model_name="models/text-embedding-004")
+        logger.info("LLM initialized successfully")
+        
+        embed = GoogleGenAIEmbedding(api_key=api_key, model_name="text-embedding-004")
+        logger.info("Embedding model initialized successfully")
+        
         Settings.llm = llm
         Settings.embed_model = embed
+        
         # Let SQLDatabase auto-discover tables - no include_tables!
         sql_db = SQLDatabase(_engine)
         logger.info(f"AI Engine OK. Tables: {sql_db.get_usable_table_names()}")
         return sql_db
     except Exception as e:
         logger.error(f"AI init failed: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
         logger.error(f"Model attempted: {GEMINI_MODEL}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        st.error(f"❌ AI Engine Error: {str(e)}")
         return None
 
 @st.cache_resource
