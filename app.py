@@ -927,8 +927,14 @@ def get_country_name(code):
     Returns:
         str: Full country name, or original code if lookup fails
     """
-    if not code or len(code) != 2:
+    if not code:
+        return "Unknown"
+    
+    code = str(code)
+    
+    if len(code) != 2:
         return code
+        
     try:
         country = pycountry.countries.get(alpha_2=code)
         return country.name if country else code
