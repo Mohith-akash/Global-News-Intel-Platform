@@ -161,8 +161,7 @@ def get_ai_engine(_engine):
         logger.info(f"AI Engine OK. Tables: {sql_db.get_usable_table_names()}")
         return sql_db
     except Exception as e:
-        logger.error(f"AI init failed: {e}")
-        return None
+        raise e
     
 @st.cache_resource
 def get_query_engine(_sql_db):
