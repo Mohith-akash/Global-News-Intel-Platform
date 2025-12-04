@@ -509,7 +509,9 @@ Generate SQL to answer the question."""
                         if sql:
                             data = safe_query(c, sql)
                             if not data.empty:
-                                data['DATE'] = pd.to_datetime(data['DATE'], format="%d/%m/%Y")
+                                if 'DATE' in data.columns:
+                                    data['DATE'] = pd.to_datetime(data['DATE'], 
+                                format="%Y%m%d").dt.strftime("%d/%m/%Y")
                                 st.dataframe(data.head(15), hide_index=True, use_container_width=True)
                             with st.expander("SQL"): st.code(sql, language='sql')
                         st.session_state.msgs.append({"role": "assistant", "content": answer})
