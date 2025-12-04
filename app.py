@@ -56,8 +56,9 @@ for key in REQUIRED_ENVS:
     if val:
         os.environ[key] = val
 
-GEMINI_MODEL = "gemini-1.5-flash"  # Free tier, fast and efficient
-# Other options: "gemini-1.5-pro", "gemini-2.0-flash-exp"
+# ✅ Using your specified model
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+
 NOW = datetime.datetime.now()
 WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
 MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')
@@ -138,10 +139,8 @@ def safe_query(conn, sql):
         return pd.DataFrame()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AI ENGINE - Fixed to auto-discover tables
+# AI ENGINE - FIXED VERSION
 # ═══════════════════════════════════════════════════════════════════════════════
-
-GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 @st.cache_resource
 def get_ai_engine(_engine):
@@ -149,19 +148,41 @@ def get_ai_engine(_engine):
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             logger.error("GOOGLE_API_KEY not found!")
+            st.error("❌ GOOGLE_API_KEY not set! Check your .env file or Streamlit secrets.")
             return None
+            
+        logger.info(f"API Key found: {api_key[:10]}...")
+        logger.info(f"Initializing Gemini with model: {GEMINI_MODEL}")
         
+        # ✅ FIXED: NO "models/" prefix in model name
         llm = Gemini(api_key=api_key, model=GEMINI_MODEL, temperature=0.1)
-        embed = GoogleGenAIEmbedding(api_key=api_key, model_name="models/text-embedding-004")
+        logger.info("✅ LLM initialized successfully")
+        
+        # ✅ FIXED: NO "models/" prefix in embedding model
+        embed = GoogleGenAIEmbedding(api_key=api_key, model_name="text-embedding-004")
+        logger.info("✅ Embedding model initialized successfully")
         
         Settings.llm = llm
         Settings.embed_model = embed
         
-        sql_db = SQLDatabase(_engine)
-        logger.info(f"AI Engine OK. Tables: {sql_db.get_usable_table_names()}")
+        # ✅ FIXED: Use explicit table to avoid "rideshare" error
+        logger.info("Initializing SQLDatabase...")
+        conn = get_db()
+        main_table = detect_table(conn)
+        logger.info(f"Using main table: {main_table}")
+        
+        sql_db = SQLDatabase(_engine, include_tables=[main_table])
+        logger.info(f"✅ AI Engine initialized with table: {main_table}")
+        
         return sql_db
+        
     except Exception as e:
-        raise e
+        logger.error(f"❌ AI init failed: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        st.error(f"❌ AI Engine Error: {str(e)}")
+        return None
     
 @st.cache_resource
 def get_query_engine(_sql_db):
@@ -500,7 +521,7 @@ def render_arch():
     c1, c2 = st.columns(2)
     with c1:
         st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;"><h4 style="color:#06b6d4;font-size:0.9rem;">📥 DATA: GDELT</h4><p style="color:#94a3b8;font-size:0.8rem;">Global Database of Events - monitors news worldwide in 100+ languages.</p><ul style="color:#94a3b8;font-size:0.85rem;"><li>Updates every 15 min</li><li>Dagster + dbt pipeline</li><li>GitHub Actions</li></ul></div>', unsafe_allow_html=True)
-        st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 GEN AI</h4><ul style="color:#94a3b8;font-size:0.85rem;"><li>Google Gemini 2.5</li><li>LlamaIndex</li><li>Text-to-SQL</li><li>Free Tier</li></ul></div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 GEN AI</h4><ul style="color:#94a3b8;font-size:0.85rem;"><li>Google Gemini 1.5</li><li>LlamaIndex</li><li>Text-to-SQL</li><li>Free Tier</li></ul></div>', unsafe_allow_html=True)
     with c2:
         st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;"><h4 style="color:#10b981;font-size:0.9rem;">🗄️ STORAGE</h4><p style="color:#94a3b8;font-size:0.8rem;">Snowflake → MotherDuck migration</p><ul style="color:#94a3b8;font-size:0.85rem;"><li>DuckDB (columnar)</li><li>Serverless</li><li>Sub-second queries</li></ul><div style="margin-top:0.5rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;border-left:3px solid #10b981;"><span style="color:#10b981;font-size:0.75rem;">💡 COST: $0/month</span></div></div>', unsafe_allow_html=True)
         st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#f59e0b;font-size:0.9rem;">📊 VISUALIZATION</h4><ul style="color:#94a3b8;font-size:0.85rem;"><li>Streamlit</li><li>Plotly</li><li>Cloud hosting</li></ul></div>', unsafe_allow_html=True)
