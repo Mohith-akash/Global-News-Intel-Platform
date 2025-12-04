@@ -1,7 +1,10 @@
 """
-🦅 GLOBAL INTELLIGENCE COMMAND CENTER
-A Real-Time Geopolitical Analytics Platform
-Built by: [Your Name] | Portfolio Project for AI/ML Engineering Roles
+🌐 GLOBAL NEWS INTELLIGENCE PLATFORM
+Real-Time Analytics Dashboard for GDELT (Global Database of Events, Language & Tone)
+Built by: Mohith Akash | Portfolio Project for AI/Data Engineering Roles
+
+GDELT monitors news media worldwide, translating and processing articles to identify
+events, emotions, and themes. This platform visualizes that data in real-time.
 
 Architecture: GDELT → GitHub Actions → MotherDuck → Gemini AI → Streamlit
 """
@@ -21,32 +24,29 @@ from sqlalchemy import create_engine, inspect
 import datetime
 import pycountry
 import logging
-import streamlit.components.v1 as components
 import re
 from urllib.parse import urlparse, unquote
 import duckdb
-import time
-import json
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. CONFIGURATION & SETUP
 # ═══════════════════════════════════════════════════════════════════════════════
 
 st.set_page_config(
-    page_title="SIGINT Command Center | Global Intelligence Platform",
-    page_icon="🦅",
+    page_title="Global News Intelligence | GDELT Analytics Platform",
+    page_icon="🌐",
     layout="wide",
     initial_sidebar_state="collapsed",
     menu_items={
         'Get Help': 'https://github.com/Mohith-akash/global-news-intel-platform',
         'Report a bug': 'https://github.com/Mohith-akash/global-news-intel-platform/issues',
-        'About': "Real-time geopolitical intelligence powered by GDELT, MotherDuck & Gemini AI"
+        'About': "Real-time global news analytics powered by GDELT, MotherDuck & Gemini AI"
     }
 )
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("sigint")
+logger = logging.getLogger("gdelt_platform")
 
 # Validate environment
 REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "GOOGLE_API_KEY"]
@@ -208,8 +208,8 @@ def inject_custom_css():
         }
         
         @keyframes pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-            50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
         
         /* ═══════════════ METRIC CARDS ═══════════════ */
@@ -750,7 +750,7 @@ def execute_ai_query(query_engine, prompt, conn):
 # 5. DATA FETCHING FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_dashboard_metrics(_conn):
     """Fetch key metrics for dashboard"""
     metrics = {}
@@ -797,7 +797,7 @@ def get_dashboard_metrics(_conn):
     
     return metrics
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_alert_events(_conn):
     """Fetch recent high-impact events for ticker"""
     week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
@@ -811,7 +811,7 @@ def get_alert_events(_conn):
         LIMIT 10
     """)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_country_data(_conn):
     """Fetch country-level aggregations"""
     return safe_query(_conn, """
@@ -826,7 +826,7 @@ def get_country_data(_conn):
         ORDER BY 2 DESC
     """)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_time_series(_conn):
     """Fetch daily event counts"""
     month_ago = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')
@@ -842,7 +842,7 @@ def get_time_series(_conn):
         ORDER BY 1
     """)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_trending_news(_conn):
     """Fetch trending stories by media coverage"""
     week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
@@ -861,7 +861,7 @@ def get_trending_news(_conn):
         LIMIT 30
     """)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def get_recent_feed(_conn):
     """Fetch recent events feed"""
     week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
@@ -880,7 +880,7 @@ def get_recent_feed(_conn):
         LIMIT 50
     """)
 
-@st.cache_data(ttl=300)  
+@st.cache_data(ttl=600)  
 def get_actor_network(_conn):
     """Fetch actor co-occurrence data for network viz"""
     week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
@@ -903,21 +903,21 @@ def get_actor_network(_conn):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def render_header():
-    """Render the command center header"""
+    """Render the platform header"""
     st.markdown("""
     <div class="command-header">
         <div class="header-grid">
             <div class="logo-container">
-                <span class="logo-icon">🦅</span>
+                <span class="logo-icon">🌐</span>
                 <div class="logo-text">
-                    <span class="logo-title">SIGINT Command</span>
-                    <span class="logo-subtitle">Global Intelligence Platform</span>
+                    <span class="logo-title">Global News Intelligence</span>
+                    <span class="logo-subtitle">Powered by GDELT • Real-Time Media Analytics</span>
                 </div>
             </div>
             <div></div>
             <div class="status-badge">
                 <span class="status-dot"></span>
-                <span>SYSTEM ONLINE</span>
+                <span>LIVE DATA</span>
             </div>
         </div>
     </div>
@@ -971,63 +971,45 @@ def render_metrics(conn):
         )
 
 def render_alert_ticker(conn):
-    """Render scrolling alert ticker"""
+    """Render lightweight alert ticker"""
     df = get_alert_events(conn)
     
     if df.empty:
-        ticker_text = "⚠️ INITIALIZING THREAT DETECTION... SCANNING GLOBAL FEEDS..."
+        ticker_text = "⚠️ SCANNING GLOBAL FEEDS..."
     else:
         items = []
-        for _, row in df.iterrows():
-            actor = row['MAIN_ACTOR'][:30] if row['MAIN_ACTOR'] else 'Unknown'
+        for _, row in df.head(5).iterrows():  # Limit to 5 items
+            actor = str(row['MAIN_ACTOR'])[:25] if row['MAIN_ACTOR'] else 'Unknown'
             country = row['ACTOR_COUNTRY_CODE']
             impact = row['IMPACT_SCORE']
-            items.append(f"⚠️ {actor} ({country}) • Impact: {impact:.1f}")
-        ticker_text = " &nbsp;&nbsp;│&nbsp;&nbsp; ".join(items)
+            items.append(f"⚠️ {actor} ({country}) • {impact:.1f}")
+        ticker_text = " │ ".join(items)
     
-    components.html(f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ margin: 0; padding: 0; overflow: hidden; background: transparent; }}
-            .ticker-wrap {{
-                width: 100%;
-                overflow: hidden;
-                background: linear-gradient(90deg, 
-                    rgba(239, 68, 68, 0.12) 0%, 
-                    rgba(239, 68, 68, 0.05) 50%,
-                    rgba(239, 68, 68, 0.12) 100%);
-                border-left: 4px solid #ef4444;
-                border-radius: 0 8px 8px 0;
-                padding: 12px 0;
-            }}
-            .ticker {{
-                display: inline-block;
-                white-space: nowrap;
-                animation: scroll 45s linear infinite;
-                font-family: 'JetBrains Mono', 'SF Mono', monospace;
-                font-size: 13px;
-                font-weight: 500;
-                color: #fca5a5;
-                letter-spacing: 0.02em;
-            }}
-            @keyframes scroll {{
-                0% {{ transform: translateX(100%); }}
-                100% {{ transform: translateX(-100%); }}
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="ticker-wrap">
-            <div class="ticker">{ticker_text}</div>
+    # Use simple HTML/CSS instead of heavy animation
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.05) 100%);
+        border-left: 3px solid #ef4444;
+        border-radius: 0 6px 6px 0;
+        padding: 0.6rem 1rem;
+        margin: 0.5rem 0;
+        overflow: hidden;
+    ">
+        <div style="
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #fca5a5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        ">
+            🔴 LIVE ALERTS: {ticker_text}
         </div>
-    </body>
-    </html>
-    """, height=50)
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_globe_map(conn):
-    """Render 3D globe visualization"""
+    """Render lightweight 2D world map visualization"""
     df = get_country_data(conn)
     
     if df.empty:
@@ -1062,35 +1044,34 @@ def render_globe_map(conn):
         }
     )
     
+    # Use lighter 2D natural earth projection instead of 3D globe
     fig.update_geos(
-        projection_type="orthographic",
+        projection_type="natural earth",
         showcoastlines=True,
         coastlinecolor="#1e3a5f",
         showland=True,
-        landcolor="#0d1320",
+        landcolor="#111827",
         showocean=True,
         oceancolor="#0a0e17",
         showlakes=False,
         showcountries=True,
         countrycolor="#1e3a5f",
-        bgcolor="rgba(0,0,0,0)"
+        bgcolor="rgba(0,0,0,0)",
+        showframe=False
     )
     
     fig.update_layout(
-        height=500,
+        height=350,
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         coloraxis_colorbar=dict(
-            title=dict(text="Events", font=dict(color="#94a3b8", size=11)),
-            tickfont=dict(color="#94a3b8", size=10),
-            bgcolor="rgba(17, 24, 39, 0.8)",
-            bordercolor="#1e3a5f",
-            borderwidth=1
+            title=dict(text="Events", font=dict(color="#94a3b8", size=10)),
+            tickfont=dict(color="#94a3b8", size=9),
+            len=0.6,
+            thickness=12
         ),
-        geo=dict(
-            bgcolor="rgba(0,0,0,0)"
-        )
+        geo=dict(bgcolor="rgba(0,0,0,0)")
     )
     
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
@@ -1291,7 +1272,7 @@ def render_impact_distribution(conn):
 
 
 def render_conflict_gauge(conn):
-    """Render a conflict vs cooperation gauge meter"""
+    """Render a lightweight conflict vs cooperation indicator"""
     week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
     
     df = safe_query(conn, f"""
@@ -1310,70 +1291,58 @@ def render_conflict_gauge(conn):
         return
     
     avg_impact = df.iloc[0]['avg_impact'] or 0
-    conflicts = df.iloc[0]['conflicts'] or 0
-    cooperations = df.iloc[0]['cooperations'] or 0
-    total = df.iloc[0]['total'] or 1
+    conflicts = int(df.iloc[0]['conflicts'] or 0)
+    cooperations = int(df.iloc[0]['cooperations'] or 0)
+    total = int(df.iloc[0]['total'] or 1)
     
-    # Normalize to 0-100 scale (impact is -10 to +10)
-    gauge_value = ((avg_impact + 10) / 20) * 100
+    # Calculate percentages
+    conflict_pct = (conflicts / total * 100) if total > 0 else 0
+    coop_pct = (cooperations / total * 100) if total > 0 else 0
     
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
-        value=gauge_value,
-        number={'suffix': '%', 'font': {'size': 40, 'color': '#e2e8f0', 'family': 'JetBrains Mono'}},
-        delta={'reference': 50, 'increasing': {'color': '#10b981'}, 'decreasing': {'color': '#ef4444'}},
-        gauge={
-            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': '#1e3a5f', 'tickfont': {'color': '#64748b', 'size': 10}},
-            'bar': {'color': '#06b6d4', 'thickness': 0.7},
-            'bgcolor': '#1e293b',
-            'borderwidth': 2,
-            'bordercolor': '#1e3a5f',
-            'steps': [
-                {'range': [0, 30], 'color': 'rgba(239, 68, 68, 0.3)'},
-                {'range': [30, 50], 'color': 'rgba(245, 158, 11, 0.3)'},
-                {'range': [50, 70], 'color': 'rgba(107, 114, 128, 0.2)'},
-                {'range': [70, 100], 'color': 'rgba(16, 185, 129, 0.3)'}
-            ],
-            'threshold': {
-                'line': {'color': '#f59e0b', 'width': 3},
-                'thickness': 0.8,
-                'value': 50
-            }
-        },
-        title={'text': "Global Stability Index", 'font': {'size': 14, 'color': '#94a3b8', 'family': 'JetBrains Mono'}}
-    ))
+    # Determine status
+    if avg_impact < -2:
+        status = "⚠️ ELEVATED TENSIONS"
+        status_color = "#ef4444"
+    elif avg_impact < 0:
+        status = "🟡 MODERATE ACTIVITY"
+        status_color = "#f59e0b"
+    elif avg_impact < 2:
+        status = "🟢 STABLE"
+        status_color = "#10b981"
+    else:
+        status = "✨ POSITIVE TREND"
+        status_color = "#06b6d4"
     
-    fig.update_layout(
-        height=200,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=30, r=30, t=60, b=20),
-        font=dict(family='JetBrains Mono')
-    )
+    # Display as styled cards instead of heavy gauge
+    st.markdown(f"""
+    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%); border-radius: 12px; border: 1px solid #1e3a5f; margin-bottom: 1rem;">
+        <div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem;">Weekly News Sentiment</div>
+        <div style="font-size: 2rem; font-weight: 700; color: {status_color}; font-family: 'JetBrains Mono', monospace;">{status}</div>
+        <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.5rem;">Avg Tone Score: <span style="color: {status_color}; font-weight: 600;">{avg_impact:.2f}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-    
-    # Stats below gauge
-    stat_col1, stat_col2, stat_col3 = st.columns(3)
-    with stat_col1:
+    # Stats row
+    col1, col2, col3 = st.columns(3)
+    with col1:
         st.markdown(f"""
-        <div style="text-align: center; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.3);">
-            <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444; font-family: 'JetBrains Mono';">{int(conflicts):,}</div>
-            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Conflicts</div>
+        <div style="text-align: center; padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.3);">
+            <div style="font-size: 1.25rem; font-weight: 700; color: #ef4444; font-family: 'JetBrains Mono';">{conflicts:,}</div>
+            <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Conflicts ({conflict_pct:.1f}%)</div>
         </div>
         """, unsafe_allow_html=True)
-    with stat_col2:
+    with col2:
         st.markdown(f"""
-        <div style="text-align: center; padding: 0.5rem; background: rgba(107, 114, 128, 0.1); border-radius: 8px; border: 1px solid rgba(107, 114, 128, 0.3);">
-            <div style="font-size: 1.5rem; font-weight: bold; color: #9ca3af; font-family: 'JetBrains Mono';">{int(total):,}</div>
-            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Total Events</div>
+        <div style="text-align: center; padding: 0.75rem; background: rgba(107, 114, 128, 0.1); border-radius: 8px; border: 1px solid rgba(107, 114, 128, 0.3);">
+            <div style="font-size: 1.25rem; font-weight: 700; color: #9ca3af; font-family: 'JetBrains Mono';">{total:,}</div>
+            <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Total (7 Days)</div>
         </div>
         """, unsafe_allow_html=True)
-    with stat_col3:
+    with col3:
         st.markdown(f"""
-        <div style="text-align: center; padding: 0.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
-            <div style="font-size: 1.5rem; font-weight: bold; color: #10b981; font-family: 'JetBrains Mono';">{int(cooperations):,}</div>
-            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">Cooperations</div>
+        <div style="text-align: center; padding: 0.75rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <div style="font-size: 1.25rem; font-weight: 700; color: #10b981; font-family: 'JetBrains Mono';">{cooperations:,}</div>
+            <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase;">Positive ({coop_pct:.1f}%)</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1470,7 +1439,7 @@ def render_top_actors(conn):
         AND LENGTH(MAIN_ACTOR) > 2
         GROUP BY 1, 2
         ORDER BY events DESC
-        LIMIT 12
+        LIMIT 10
     """)
     
     if df.empty:
@@ -1605,7 +1574,7 @@ def render_ai_chat(conn, engine):
     if "messages" not in st.session_state:
         st.session_state.messages = [{
             "role": "assistant",
-            "content": "🦅 **SIGINT Analyst Online**\n\nI'm your AI intelligence analyst with access to real-time GDELT data. Ask me about:\n- Recent conflicts and crises\n- Regional activity patterns\n- Country comparisons\n- Trending news stories"
+            "content": "🌐 **GDELT Analyst Online**\n\nI can query the GDELT database to answer questions about global news events. Try asking about:\n- Recent conflicts or crises\n- Regional news activity\n- Country comparisons\n- Trending stories by media coverage"
         }]
     
     # Example queries
@@ -1689,7 +1658,7 @@ def render_architecture():
             🏗️ System Architecture
         </h2>
         <p style="color: #64748b; font-size: 0.9rem;">
-            End-to-end data engineering pipeline with AI-powered analytics
+            End-to-end data pipeline: Ingesting GDELT news data with AI-powered analytics
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1727,13 +1696,15 @@ def render_architecture():
         st.markdown("""
         <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.5rem; height: 100%;">
             <h4 style="font-family: 'JetBrains Mono', monospace; color: #06b6d4; font-size: 0.9rem; margin-bottom: 1rem;">
-                📥 DATA INGESTION
+                📥 DATA SOURCE: GDELT
             </h4>
+            <p style="color: #94a3b8; font-size: 0.8rem; line-height: 1.6; margin-bottom: 0.75rem;">
+                <strong>GDELT</strong> (Global Database of Events, Language & Tone) monitors broadcast, print, and web news worldwide in 100+ languages, translating and processing them to identify events, people, organizations, themes, and emotions.
+            </p>
             <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; padding-left: 1.2rem;">
-                <li><strong>Source:</strong> GDELT Project (Global Database of Events)</li>
+                <li><strong>Updates:</strong> Every 15 minutes</li>
                 <li><strong>Pipeline:</strong> Dagster orchestration</li>
-                <li><strong>Schedule:</strong> GitHub Actions (30-min intervals)</li>
-                <li><strong>Format:</strong> CSV → Parquet optimization</li>
+                <li><strong>Automation:</strong> GitHub Actions (30-min)</li>
                 <li><strong>Volume:</strong> ~10M+ events processed</li>
             </ul>
         </div>
@@ -1816,7 +1787,7 @@ def render_architecture():
     st.markdown("---")
     st.markdown("""
     <h3 style="font-family: 'JetBrains Mono', monospace; color: #e2e8f0; text-align: center; margin: 2rem 0 1.5rem 0;">
-        ✨ Key Engineering Highlights
+        ✨ Key Features
     </h3>
     """, unsafe_allow_html=True)
     
@@ -1828,7 +1799,7 @@ def render_architecture():
             <span style="font-size: 2rem;">🔄</span>
             <h4 style="color: #e2e8f0; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;">Automated Pipeline</h4>
             <p style="color: #64748b; font-size: 0.8rem; margin: 0;">
-                30-minute automated data refresh using GitHub Actions + Dagster orchestration
+                GDELT data refreshed every 30 mins via GitHub Actions + Dagster
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -1837,9 +1808,9 @@ def render_architecture():
         st.markdown("""
         <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.5rem; text-align: center;">
             <span style="font-size: 2rem;">🧠</span>
-            <h4 style="color: #e2e8f0; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;">AI-Powered Queries</h4>
+            <h4 style="color: #e2e8f0; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;">Natural Language Queries</h4>
             <p style="color: #64748b; font-size: 0.8rem; margin: 0;">
-                Natural language to SQL conversion using Gemini + LlamaIndex
+                Ask questions in English, get SQL results via Gemini AI
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -1847,10 +1818,10 @@ def render_architecture():
     with feat_col3:
         st.markdown("""
         <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.5rem; text-align: center;">
-            <span style="font-size: 2rem;">📈</span>
-            <h4 style="color: #e2e8f0; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;">Scale & Performance</h4>
+            <span style="font-size: 2rem;">💰</span>
+            <h4 style="color: #e2e8f0; font-size: 1rem; margin: 0.75rem 0 0.5rem 0;">Zero-Cost Infrastructure</h4>
             <p style="color: #64748b; font-size: 0.8rem; margin: 0;">
-                10M+ events with sub-second query response via MotherDuck
+                MotherDuck free tier + Gemini free API = $0/month
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -1863,12 +1834,14 @@ def render_about():
         <h2 style="font-family: 'JetBrains Mono', monospace; color: #e2e8f0; margin-bottom: 1rem;">
             👋 About This Project
         </h2>
-        <p style="color: #94a3b8; font-size: 1rem; max-width: 700px; margin: 0 auto 2rem auto; line-height: 1.7;">
-            This real-time geopolitical intelligence platform demonstrates end-to-end 
-            data engineering and AI capabilities. Originally built on <strong>Snowflake</strong>, 
-            then strategically migrated to <strong>MotherDuck</strong> for cost optimization while 
-            maintaining performance. Uses <strong>Gemini AI free tier</strong> for intelligent queries — 
-            showcasing how to build production-grade systems on a budget.
+        <p style="color: #94a3b8; font-size: 1rem; max-width: 750px; margin: 0 auto 1.5rem auto; line-height: 1.7;">
+            This platform analyzes data from <strong>GDELT</strong> (Global Database of Events, Language & Tone) — 
+            the world's largest open database of human society, monitoring news media from every country in 100+ languages.
+        </p>
+        <p style="color: #64748b; font-size: 0.9rem; max-width: 700px; margin: 0 auto 2rem auto; line-height: 1.7;">
+            Originally built on <strong>Snowflake</strong>, then strategically migrated to <strong>MotherDuck</strong> 
+            for cost optimization. Uses <strong>Gemini AI free tier</strong> for natural language queries — 
+            demonstrating how to build production-grade analytics on a $0 budget.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1957,9 +1930,9 @@ def main():
     # Main navigation tabs
     tab_dashboard, tab_analytics, tab_ai, tab_arch, tab_about = st.tabs([
         "📊 DASHBOARD",
-        "📈 ANALYTICS", 
-        "🤖 AI ANALYST",
-        "🏗️ ARCHITECTURE",
+        "📈 TRENDS & FEED", 
+        "🤖 ASK AI",
+        "🏗️ HOW IT WORKS",
         "👤 ABOUT"
     ])
     
@@ -1980,7 +1953,7 @@ def main():
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">⚡</span>
-                <span class="card-title">Real-Time Conflict Monitor</span>
+                <span class="card-title">News Sentiment This Week</span>
             </div>
             """, unsafe_allow_html=True)
             render_conflict_gauge(conn)
@@ -1997,7 +1970,7 @@ def main():
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">🎯</span>
-                <span class="card-title">Top Active Actors</span>
+                <span class="card-title">Most Mentioned in News</span>
             </div>
             """, unsafe_allow_html=True)
             render_top_actors(conn)
@@ -2011,7 +1984,7 @@ def main():
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">🌍</span>
-                <span class="card-title">Global Activity Heatmap</span>
+                <span class="card-title">News Coverage by Country</span>
             </div>
             """, unsafe_allow_html=True)
             render_globe_map(conn)
@@ -2020,7 +1993,7 @@ def main():
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">📊</span>
-                <span class="card-title">Event Classification</span>
+                <span class="card-title">News Tone Breakdown</span>
             </div>
             """, unsafe_allow_html=True)
             render_impact_distribution(conn)
@@ -2028,7 +2001,7 @@ def main():
             st.markdown("""
             <div class="card-header" style="margin-top: 1rem;">
                 <span class="card-icon">🏆</span>
-                <span class="card-title">Regional Leaderboard</span>
+                <span class="card-title">Top Countries by Coverage</span>
             </div>
             """, unsafe_allow_html=True)
             render_country_bar_chart(conn)
@@ -2073,7 +2046,7 @@ def main():
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">🤖</span>
-                <span class="card-title">Intelligence Query Interface</span>
+                <span class="card-title">AI-Powered GDELT Query</span>
             </div>
             """, unsafe_allow_html=True)
             render_ai_chat(conn, engine)
@@ -2085,20 +2058,20 @@ def main():
                     ℹ️ HOW IT WORKS
                 </h4>
                 <p style="color: #94a3b8; font-size: 0.8rem; line-height: 1.7;">
-                    The AI analyst uses <strong>Google Gemini 2.5</strong> with <strong>LlamaIndex</strong> 
-                    to convert your natural language questions into SQL queries against the GDELT database.
+                    Ask questions in plain English and the AI converts them to SQL queries against the GDELT database.
+                    Powered by <strong>Google Gemini 2.5</strong> + <strong>LlamaIndex</strong>.
                 </p>
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #1e3a5f;">
                     <p style="color: #64748b; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; margin-bottom: 0.5rem;">
-                        DATA SCHEMA
+                        GDELT DATA FIELDS
                     </p>
                     <code style="font-size: 0.7rem; color: #94a3b8; display: block; line-height: 1.6;">
-                        • DATE (YYYYMMDD)<br>
-                        • MAIN_ACTOR<br>
+                        • DATE (when event occurred)<br>
+                        • MAIN_ACTOR (who was involved)<br>
                         • ACTOR_COUNTRY_CODE<br>
                         • IMPACT_SCORE (-10 to +10)<br>
-                        • ARTICLE_COUNT<br>
-                        • NEWS_LINK
+                        • ARTICLE_COUNT (media coverage)<br>
+                        • NEWS_LINK (source URL)
                     </code>
                 </div>
             </div>
@@ -2129,11 +2102,13 @@ def main():
     # Footer
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0 1rem 0; border-top: 1px solid #1e3a5f; margin-top: 2rem;">
-        <p style="color: #475569; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">
-            SIGINT COMMAND CENTER v2.0 | Built by <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="color: #06b6d4; text-decoration: none;">Mohith Akash</a>
+        <p style="color: #64748b; font-size: 0.8rem; margin-bottom: 0.5rem;">
+            <strong>GDELT</strong> (Global Database of Events, Language & Tone) monitors worldwide news media, 
+            identifying events, emotions, and themes in real-time.
         </p>
-        <p style="color: #374151; font-size: 0.65rem; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem;">
-            Snowflake → MotherDuck | Gemini AI Free Tier | Zero Infrastructure Cost
+        <p style="color: #475569; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">
+            Built by <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="color: #06b6d4; text-decoration: none;">Mohith Akash</a> | 
+            Snowflake → MotherDuck | Gemini AI Free Tier
         </p>
     </div>
     """, unsafe_allow_html=True)
