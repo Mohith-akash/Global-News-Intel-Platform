@@ -296,24 +296,33 @@ def inject_custom_css():
             margin: 0;
         }
         
-        /* ═══════════════ TABS ═══════════════ */
+        /* ═══════════════ TABS - MOBILE OPTIMIZED ═══════════════ */
         .stTabs [data-baseweb="tab-list"] {
             gap: 0;
             background: var(--bg-secondary);
             border-radius: 8px;
             padding: 4px;
             border: 1px solid var(--border-color);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {
+            display: none;
         }
         
         .stTabs [data-baseweb="tab"] {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 500;
             color: var(--text-secondary);
             background: transparent;
             border-radius: 6px;
-            padding: 0.6rem 1.2rem;
+            padding: 0.5rem 0.9rem;
             letter-spacing: 0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         
         .stTabs [aria-selected="true"] {
@@ -358,12 +367,30 @@ def inject_custom_css():
             color: var(--text-muted);
         }
         
-        /* ═══════════════ DATAFRAMES ═══════════════ */
+        /* ═══════════════ DATAFRAMES - WITH SCROLL HINT ═══════════════ */
         div[data-testid="stDataFrame"] {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 12px;
             overflow: hidden;
+            position: relative;
+        }
+        
+        /* Scroll shadow at bottom */
+        div[data-testid="stDataFrame"]::after {
+            content: '↓ scroll';
+            position: absolute;
+            bottom: 6px;
+            right: 10px;
+            font-size: 0.65rem;
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(17, 24, 39, 0.9);
+            padding: 2px 8px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            pointer-events: none;
+            z-index: 10;
         }
         
         div[data-testid="stDataFrame"] table {
@@ -559,11 +586,132 @@ def inject_custom_css():
             font-size: 0.75rem;
             color: var(--text-secondary);
             margin: 0.25rem;
+            transition: all 0.2s ease;
         }
         
         .tech-badge:hover {
             border-color: var(--accent-cyan);
             color: var(--accent-cyan);
+            transform: translateY(-2px);
+        }
+        
+        /* ═══════════════ MOBILE RESPONSIVE ═══════════════ */
+        @media (max-width: 768px) {
+            .block-container {
+                padding: 1rem 0.75rem 2rem 0.75rem;
+            }
+            
+            .logo-title {
+                font-size: 1rem !important;
+            }
+            
+            .logo-subtitle {
+                display: none;
+            }
+            
+            .card-title {
+                font-size: 0.7rem !important;
+            }
+            
+            div[data-testid="stMetric"] {
+                padding: 0.6rem !important;
+            }
+            
+            div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+                font-size: 1.1rem !important;
+            }
+            
+            div[data-testid="stMetric"] label {
+                font-size: 0.6rem !important;
+            }
+            
+            .header-grid {
+                gap: 0.5rem !important;
+            }
+            
+            .status-badge {
+                padding: 0.25rem 0.5rem !important;
+                font-size: 0.65rem !important;
+            }
+        }
+        
+        /* ═══════════════ ANIMATED TICKER ═══════════════ */
+        .ticker-container {
+            background: linear-gradient(90deg, 
+                rgba(239, 68, 68, 0.15) 0%, 
+                rgba(239, 68, 68, 0.05) 50%,
+                rgba(239, 68, 68, 0.15) 100%);
+            border-left: 4px solid #ef4444;
+            border-radius: 0 8px 8px 0;
+            padding: 0.6rem 0;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .ticker-label {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, rgba(127, 29, 29, 0.95) 0%, rgba(127, 29, 29, 0.9) 70%, transparent 100%);
+            padding: 0.6rem 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #ef4444;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            z-index: 2;
+            min-width: 90px;
+        }
+        
+        .ticker-dot {
+            width: 6px;
+            height: 6px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: ticker-pulse 1s infinite;
+        }
+        
+        @keyframes ticker-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.7); }
+        }
+        
+        .ticker-content {
+            display: inline-block;
+            white-space: nowrap;
+            padding-left: 100px;
+            animation: ticker-scroll 35s linear infinite;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #fca5a5;
+        }
+        
+        .ticker-content:hover {
+            animation-play-state: paused;
+        }
+        
+        @keyframes ticker-scroll {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        
+        /* ═══════════════ TAB SCROLL HINT ═══════════════ */
+        .swipe-hint {
+            text-align: center;
+            padding: 0.4rem;
+            color: var(--accent-cyan);
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .swipe-hint {
+                display: block;
+            }
         }
     </style>
     """, unsafe_allow_html=True)
@@ -971,40 +1119,28 @@ def render_metrics(conn):
         )
 
 def render_alert_ticker(conn):
-    """Render lightweight alert ticker"""
+    """Render animated alert ticker with CSS animation"""
     df = get_alert_events(conn)
     
     if df.empty:
-        ticker_text = "⚠️ SCANNING GLOBAL FEEDS..."
+        ticker_text = "⚠️ SCANNING GLOBAL NEWS FEEDS FOR CRITICAL EVENTS..."
     else:
         items = []
-        for _, row in df.head(5).iterrows():  # Limit to 5 items
-            actor = str(row['MAIN_ACTOR'])[:25] if row['MAIN_ACTOR'] else 'Unknown'
+        for _, row in df.head(8).iterrows():
+            actor = str(row['MAIN_ACTOR'])[:20] if row['MAIN_ACTOR'] else 'Unknown'
             country = row['ACTOR_COUNTRY_CODE']
             impact = row['IMPACT_SCORE']
-            items.append(f"⚠️ {actor} ({country}) • {impact:.1f}")
-        ticker_text = " │ ".join(items)
+            items.append(f"⚠️ {actor} ({country}) Impact: {impact:.1f}")
+        ticker_text = " &nbsp;&nbsp;│&nbsp;&nbsp; ".join(items)
     
-    # Use simple HTML/CSS instead of heavy animation
+    # Animated ticker with CSS
     st.markdown(f"""
-    <div style="
-        background: linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.05) 100%);
-        border-left: 3px solid #ef4444;
-        border-radius: 0 6px 6px 0;
-        padding: 0.6rem 1rem;
-        margin: 0.5rem 0;
-        overflow: hidden;
-    ">
-        <div style="
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            color: #fca5a5;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        ">
-            🔴 LIVE ALERTS: {ticker_text}
+    <div class="ticker-container">
+        <div class="ticker-label">
+            <span class="ticker-dot"></span>
+            LIVE
         </div>
+        <div class="ticker-content">{ticker_text}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1843,14 +1979,17 @@ def main():
     # Render header
     render_header()
     
-    # Main navigation tabs
+    # Main navigation tabs (short names for mobile)
     tab_dashboard, tab_analytics, tab_ai, tab_arch, tab_about = st.tabs([
-        "📊 DASHBOARD",
-        "📈 TRENDS & FEED", 
-        "🤖 ASK AI",
-        "🏗️ HOW IT WORKS",
+        "📊 HOME",
+        "📈 TRENDS", 
+        "🤖 AI",
+        "🏗️ TECH",
         "👤 ABOUT"
     ])
+    
+    # Mobile swipe hint
+    st.markdown('<div class="swipe-hint">👆 Swipe for more tabs →</div>', unsafe_allow_html=True)
     
     # ═══════════════ DASHBOARD TAB ═══════════════
     with tab_dashboard:
