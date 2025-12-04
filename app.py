@@ -1008,73 +1008,61 @@ def render_alert_ticker(conn):
     </div>
     """, unsafe_allow_html=True)
 
-def render_globe_map(conn):
-    """Render lightweight 2D world map visualization"""
-    df = get_country_data(conn)
+
+def render_quick_briefing(conn):
+    """Render quick briefing with clickable news links"""
+    week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    
+    df = safe_query(conn, f"""
+        SELECT 
+            DATE,
+            NEWS_LINK,
+            MAIN_ACTOR,
+            ACTOR_COUNTRY_CODE,
+            IMPACT_SCORE,
+            ARTICLE_COUNT
+        FROM EVENTS_DAGSTER 
+        WHERE NEWS_LINK IS NOT NULL 
+        AND ARTICLE_COUNT > 5
+        AND DATE >= '{week_ago}'
+        ORDER BY DATE DESC, ARTICLE_COUNT DESC
+        LIMIT 25
+    """)
     
     if df.empty:
-        st.info("🌍 Loading geospatial data...")
+        st.info("📰 Loading headlines...")
         return
     
-    # Convert ISO-2 to ISO-3 for plotly
-    df['iso3'] = df['country'].apply(lambda x: pycountry.countries.get(alpha_2=x).alpha_3 if pycountry.countries.get(alpha_2=x) else None)
-    df = df.dropna(subset=['iso3'])
-    df['country_name'] = df['country'].apply(get_country_name)
+    df.columns = [c.upper() for c in df.columns]
+    df['HEADLINE'] = df.apply(lambda x: format_headline(x.get('NEWS_LINK', ''), x.get('MAIN_ACTOR', '')), axis=1)
+    df['COUNTRY'] = df['ACTOR_COUNTRY_CODE'].apply(get_country_name)
     
-    fig = px.choropleth(
-        df,
-        locations="iso3",
-        color="events",
-        hover_name="country_name",
-        hover_data={
-            "events": ":,",
-            "avg_impact": ":.2f",
-            "iso3": False
-        },
-        color_continuous_scale=[
-            [0, "#0d1320"],
-            [0.2, "#164e63"],
-            [0.4, "#0891b2"],
-            [0.7, "#06b6d4"],
-            [1, "#22d3ee"]
-        ],
-        labels={
-            "events": "Event Count",
-            "avg_impact": "Avg Impact"
-        }
+    # Remove duplicates by headline
+    df = df.drop_duplicates(subset=['HEADLINE']).head(12)
+    
+    try:
+        df['DATE_FMT'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
+    except:
+        df['DATE_FMT'] = df['DATE']
+    
+    # Tone indicator
+    df['TONE'] = df['IMPACT_SCORE'].apply(
+        lambda x: "🔴" if x < -4 else ("🟡" if x < -1 else ("🟢" if x > 2 else "⚪"))
     )
     
-    # Use lighter 2D natural earth projection instead of 3D globe
-    fig.update_geos(
-        projection_type="natural earth",
-        showcoastlines=True,
-        coastlinecolor="#1e3a5f",
-        showland=True,
-        landcolor="#111827",
-        showocean=True,
-        oceancolor="#0a0e17",
-        showlakes=False,
-        showcountries=True,
-        countrycolor="#1e3a5f",
-        bgcolor="rgba(0,0,0,0)",
-        showframe=False
-    )
-    
-    fig.update_layout(
+    st.dataframe(
+        df[['TONE', 'DATE_FMT', 'HEADLINE', 'COUNTRY', 'NEWS_LINK']],
+        hide_index=True,
         height=350,
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        coloraxis_colorbar=dict(
-            title=dict(text="Events", font=dict(color="#94a3b8", size=10)),
-            tickfont=dict(color="#94a3b8", size=9),
-            len=0.6,
-            thickness=12
-        ),
-        geo=dict(bgcolor="rgba(0,0,0,0)")
+        column_config={
+            "TONE": st.column_config.TextColumn("", width="small"),
+            "DATE_FMT": st.column_config.TextColumn("Date", width="small"),
+            "HEADLINE": st.column_config.TextColumn("Headline", width="large"),
+            "COUNTRY": st.column_config.TextColumn("Region", width="small"),
+            "NEWS_LINK": st.column_config.LinkColumn("Link", display_text="🔗 Read")
+        },
+        use_container_width=True
     )
-    
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 def render_time_series_chart(conn):
     """Render time series analysis"""
@@ -1347,79 +1335,6 @@ def render_conflict_gauge(conn):
         """, unsafe_allow_html=True)
 
 
-def render_sparkline_trend(conn):
-    """Render a compact 7-day activity sparkline"""
-    week_ago = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
-    
-    df = safe_query(conn, f"""
-        SELECT 
-            DATE,
-            COUNT(*) as events,
-            SUM(CASE WHEN IMPACT_SCORE < -3 THEN 1 ELSE 0 END) as conflicts
-        FROM EVENTS_DAGSTER
-        WHERE DATE >= '{week_ago}'
-        GROUP BY 1
-        ORDER BY 1
-    """)
-    
-    if df.empty or len(df) < 2:
-        st.info("Loading trend data...")
-        return
-    
-    df['date_parsed'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
-    
-    fig = go.Figure()
-    
-    # Events area
-    fig.add_trace(go.Scatter(
-        x=df['date_parsed'],
-        y=df['events'],
-        fill='tozeroy',
-        fillcolor='rgba(6, 182, 212, 0.2)',
-        line=dict(color='#06b6d4', width=2),
-        name='Events',
-        hovertemplate='%{x|%b %d}: %{y:,} events<extra></extra>'
-    ))
-    
-    # Conflicts line
-    fig.add_trace(go.Scatter(
-        x=df['date_parsed'],
-        y=df['conflicts'],
-        line=dict(color='#ef4444', width=2, dash='dot'),
-        name='Conflicts',
-        hovertemplate='%{x|%b %d}: %{y:,} conflicts<extra></extra>'
-    ))
-    
-    fig.update_layout(
-        height=150,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=10, b=0),
-        showlegend=True,
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1,
-            xanchor='right',
-            x=1,
-            font=dict(size=10, color='#64748b'),
-            bgcolor='rgba(0,0,0,0)'
-        ),
-        xaxis=dict(
-            showgrid=False,
-            showticklabels=True,
-            tickfont=dict(size=9, color='#64748b'),
-            tickformat='%d %b'
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor='rgba(30, 58, 95, 0.2)',
-            showticklabels=False
-        ),
-        hovermode='x unified'
-    )
-    
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 
 def render_top_actors(conn):
@@ -1577,77 +1492,73 @@ def render_ai_chat(conn, engine):
             "content": "🌐 **GDELT Analyst Online**\n\nI can query the GDELT database to answer questions about global news events. Try asking about:\n- Recent conflicts or crises\n- Regional news activity\n- Country comparisons\n- Trending stories by media coverage"
         }]
     
-    # Example queries
+    # Example queries in a compact format
     st.markdown("""
-    <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-        <p style="color: #94a3b8; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; margin: 0 0 0.5rem 0; text-transform: uppercase; letter-spacing: 0.05em;">💡 Example Queries</p>
-        <p style="color: #64748b; font-size: 0.85rem; margin: 0.25rem 0;">• Show crisis events from the last 48 hours</p>
-        <p style="color: #64748b; font-size: 0.85rem; margin: 0.25rem 0;">• What's happening in the Middle East?</p>
-        <p style="color: #64748b; font-size: 0.85rem; margin: 0.25rem 0;">• Compare Russia and China activity this week</p>
-        <p style="color: #64748b; font-size: 0.85rem; margin: 0.25rem 0;">• Show trending high-coverage stories</p>
+    <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem;">
+        <span style="color: #64748b; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">💡 TRY:</span>
+        <span style="color: #94a3b8; font-size: 0.8rem;"> "Show crisis events from last 48 hours" • "What's happening in Middle East?" • "Compare US and China activity"</span>
     </div>
     """, unsafe_allow_html=True)
     
-    # Chat container
-    chat_container = st.container(height=400)
+    # Chat input FIRST (at top, more accessible)
+    prompt = st.chat_input("Ask about global news events...")
     
-    with chat_container:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+    # Chat messages display
+    for msg in st.session_state.messages[-10:]:  # Show last 10 messages only
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
     
-    # Chat input
-    if prompt := st.chat_input("Ask about global events..."):
+    # Process new input
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        with chat_container:
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            with st.chat_message("assistant"):
-                with st.spinner("🔍 Analyzing intelligence data..."):
-                    qe = get_query_engine(engine)
-                    if qe:
-                        result = execute_ai_query(qe, prompt, conn)
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        with st.chat_message("assistant"):
+            with st.spinner("🔍 Querying GDELT database..."):
+                qe = get_query_engine(engine)
+                if qe:
+                    result = execute_ai_query(qe, prompt, conn)
+                    
+                    if result['success']:
+                        response = result['response']
+                        st.markdown(response)
                         
-                        if result['success']:
-                            response = result['response']
-                            st.markdown(response)
+                        if result['data'] is not None and not result['data'].empty:
+                            df = result['data']
+                            df.columns = [c.upper() for c in df.columns]
                             
-                            if result['data'] is not None and not result['data'].empty:
-                                df = result['data']
-                                df.columns = [c.upper() for c in df.columns]
-                                
-                                if 'DATE' in df.columns:
-                                    try:
-                                        df['DATE'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
-                                    except:
-                                        pass
-                                
-                                if 'NEWS_LINK' in df.columns:
-                                    df['HEADLINE'] = df.apply(lambda x: format_headline(x.get('NEWS_LINK', '')), axis=1)
-                                    cols = [c for c in ['DATE', 'HEADLINE', 'ACTOR_COUNTRY_CODE', 'IMPACT_SCORE', 'NEWS_LINK'] if c in df.columns]
-                                    st.dataframe(
-                                        df[cols],
-                                        hide_index=True,
-                                        column_config={
-                                            "NEWS_LINK": st.column_config.LinkColumn("🔗"),
-                                            "HEADLINE": st.column_config.TextColumn("Event", width="large")
-                                        }
-                                    )
-                                else:
-                                    st.dataframe(df, hide_index=True)
+                            if 'DATE' in df.columns:
+                                try:
+                                    df['DATE'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b %Y')
+                                except:
+                                    pass
                             
-                            if result['sql']:
-                                with st.expander("🔍 View SQL Query"):
-                                    st.code(result['sql'], language='sql')
-                            
-                            st.session_state.messages.append({"role": "assistant", "content": response})
-                        else:
-                            st.error(f"❌ {result.get('error', 'Query failed')}")
-                            st.info("💡 Try: 'Show recent high-impact events'")
+                            if 'NEWS_LINK' in df.columns:
+                                df['HEADLINE'] = df.apply(lambda x: format_headline(x.get('NEWS_LINK', '')), axis=1)
+                                cols = [c for c in ['DATE', 'HEADLINE', 'ACTOR_COUNTRY_CODE', 'IMPACT_SCORE', 'NEWS_LINK'] if c in df.columns]
+                                st.dataframe(
+                                    df[cols],
+                                    hide_index=True,
+                                    column_config={
+                                        "NEWS_LINK": st.column_config.LinkColumn("🔗"),
+                                        "HEADLINE": st.column_config.TextColumn("Event", width="large")
+                                    }
+                                )
+                            else:
+                                st.dataframe(df, hide_index=True)
+                        
+                        if result['sql']:
+                            with st.expander("🔍 View SQL Query"):
+                                st.code(result['sql'], language='sql')
+                        
+                        st.session_state.messages.append({"role": "assistant", "content": response})
                     else:
-                        st.error("AI Engine unavailable")
+                        st.error(f"❌ {result.get('error', 'Query failed')}")
+                        st.info("💡 Try: 'Show recent high-impact events'")
+                else:
+                    st.error("AI Engine unavailable")
 
 def render_architecture():
     """Render architecture documentation for portfolio"""
@@ -1732,17 +1643,17 @@ def render_architecture():
         st.markdown("""
         <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.5rem; height: 100%;">
             <h4 style="font-family: 'JetBrains Mono', monospace; color: #8b5cf6; font-size: 0.9rem; margin-bottom: 1rem;">
-                🤖 AI LAYER
+                🤖 GENERATIVE AI LAYER
             </h4>
             <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; padding-left: 1.2rem;">
                 <li><strong>LLM:</strong> Google Gemini 2.5 Flash</li>
-                <li><strong>Tier:</strong> Free API (cost-optimized)</li>
-                <li><strong>Framework:</strong> LlamaIndex</li>
-                <li><strong>Feature:</strong> Natural Language to SQL</li>
+                <li><strong>Framework:</strong> LlamaIndex (RAG)</li>
+                <li><strong>Feature:</strong> Text-to-SQL Generation</li>
                 <li><strong>Embeddings:</strong> Gemini Embedding-001</li>
+                <li><strong>Cost:</strong> Free Tier API</li>
             </ul>
             <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(139, 92, 246, 0.1); border-radius: 6px; border-left: 3px solid #8b5cf6;">
-                <span style="color: #8b5cf6; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">🆓 Using Gemini Free Tier API</span>
+                <span style="color: #8b5cf6; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;">🧠 Natural Language → SQL queries</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1773,12 +1684,16 @@ def render_architecture():
             <span class="tech-badge">🦆 DuckDB</span>
             <span class="tech-badge">☁️ MotherDuck</span>
             <span class="tech-badge">⚙️ Dagster</span>
-            <span class="tech-badge">🤖 Gemini AI</span>
+            <span class="tech-badge">🔧 dbt</span>
+            <span class="tech-badge">🤖 Gen AI</span>
             <span class="tech-badge">🦙 LlamaIndex</span>
+            <span class="tech-badge">✨ Gemini API</span>
             <span class="tech-badge">📊 Plotly</span>
             <span class="tech-badge">🎨 Streamlit</span>
-            <span class="tech-badge">🔄 GitHub Actions</span>
+            <span class="tech-badge">🔄 CI/CD</span>
+            <span class="tech-badge">⚡ GitHub Actions</span>
             <span class="tech-badge">🐼 Pandas</span>
+            <span class="tech-badge">🗃️ SQL</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1873,11 +1788,12 @@ def render_about():
             </h4>
             <ul style="color: #94a3b8; font-size: 0.85rem; line-height: 1.8; padding-left: 1.2rem;">
                 <li>Python, SQL, Data Engineering</li>
-                <li>ETL/ELT Pipeline Development</li>
-                <li>Cloud Platforms (Snowflake, DuckDB, MotherDuck)</li>
-                <li>LLM Integration (Gemini, LlamaIndex)</li>
+                <li>ETL/ELT Pipelines (Dagster, dbt)</li>
+                <li>Cloud Platforms (Snowflake → MotherDuck)</li>
+                <li>Generative AI / LLM Integration</li>
+                <li>CI/CD (GitHub Actions automation)</li>
                 <li>Data Visualization & Dashboards</li>
-                <li>Cost Optimization & Migration</li>
+                <li>Cost Optimization & Cloud Migration</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -1946,10 +1862,19 @@ def main():
         
         st.markdown("---")
         
-        # Row 1: Main visualizations
-        col_left, col_right = st.columns([5, 5])
+        # Quick Briefing Section
+        col_briefing, col_sentiment = st.columns([6, 4])
         
-        with col_left:
+        with col_briefing:
+            st.markdown("""
+            <div class="card-header">
+                <span class="card-icon">📰</span>
+                <span class="card-title">Latest Headlines</span>
+            </div>
+            """, unsafe_allow_html=True)
+            render_quick_briefing(conn)
+        
+        with col_sentiment:
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">⚡</span>
@@ -1957,16 +1882,13 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             render_conflict_gauge(conn)
-            
-            st.markdown("""
-            <div class="card-header" style="margin-top: 1.5rem;">
-                <span class="card-icon">📈</span>
-                <span class="card-title">7-Day Activity Trend</span>
-            </div>
-            """, unsafe_allow_html=True)
-            render_sparkline_trend(conn)
         
-        with col_right:
+        st.markdown("---")
+        
+        # Row 2: Charts
+        col_actors, col_dist = st.columns([6, 4])
+        
+        with col_actors:
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">🎯</span>
@@ -1974,20 +1896,6 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             render_top_actors(conn)
-        
-        st.markdown("---")
-        
-        # Row 2: Map and Distribution
-        col_map, col_dist = st.columns([6, 4])
-        
-        with col_map:
-            st.markdown("""
-            <div class="card-header">
-                <span class="card-icon">🌍</span>
-                <span class="card-title">News Coverage by Country</span>
-            </div>
-            """, unsafe_allow_html=True)
-            render_globe_map(conn)
         
         with col_dist:
             st.markdown("""
@@ -2008,23 +1916,14 @@ def main():
     
     # ═══════════════ ANALYTICS TAB ═══════════════
     with tab_analytics:
-        st.markdown("""
-        <div class="card-header">
-            <span class="card-icon">📈</span>
-            <span class="card-title">Temporal Analysis (30 Days)</span>
-        </div>
-        """, unsafe_allow_html=True)
-        render_time_series_chart(conn)
-        
-        st.markdown("---")
-        
+        # Tables First (at top)
         col_trend, col_feed = st.columns(2)
         
         with col_trend:
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">🔥</span>
-                <span class="card-title">Trending Stories</span>
+                <span class="card-title">Trending Stories (by Media Coverage)</span>
             </div>
             """, unsafe_allow_html=True)
             render_trending_table(conn)
@@ -2037,6 +1936,17 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             render_feed_table(conn)
+        
+        st.markdown("---")
+        
+        # Chart Below
+        st.markdown("""
+        <div class="card-header">
+            <span class="card-icon">📈</span>
+            <span class="card-title">30-Day Activity Trend</span>
+        </div>
+        """, unsafe_allow_html=True)
+        render_time_series_chart(conn)
     
     # ═══════════════ AI ANALYST TAB ═══════════════
     with tab_ai:
@@ -2046,48 +1956,47 @@ def main():
             st.markdown("""
             <div class="card-header">
                 <span class="card-icon">🤖</span>
-                <span class="card-title">AI-Powered GDELT Query</span>
+                <span class="card-title">Ask Questions in Plain English</span>
             </div>
             """, unsafe_allow_html=True)
             render_ai_chat(conn, engine)
         
         with col_info:
             st.markdown("""
-            <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.5rem;">
+            <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.25rem;">
                 <h4 style="font-family: 'JetBrains Mono', monospace; color: #06b6d4; font-size: 0.85rem; margin-bottom: 1rem;">
                     ℹ️ HOW IT WORKS
                 </h4>
-                <p style="color: #94a3b8; font-size: 0.8rem; line-height: 1.7;">
-                    Ask questions in plain English and the AI converts them to SQL queries against the GDELT database.
-                    Powered by <strong>Google Gemini 2.5</strong> + <strong>LlamaIndex</strong>.
+                <p style="color: #94a3b8; font-size: 0.8rem; line-height: 1.6;">
+                    Your question is converted to SQL using <strong>Gemini AI</strong>, 
+                    then executed against the GDELT database.
                 </p>
                 <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #1e3a5f;">
-                    <p style="color: #64748b; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; margin-bottom: 0.5rem;">
-                        GDELT DATA FIELDS
+                    <p style="color: #64748b; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace; margin-bottom: 0.5rem;">
+                        DATA AVAILABLE
                     </p>
-                    <code style="font-size: 0.7rem; color: #94a3b8; display: block; line-height: 1.6;">
-                        • DATE (when event occurred)<br>
-                        • MAIN_ACTOR (who was involved)<br>
-                        • ACTOR_COUNTRY_CODE<br>
-                        • IMPACT_SCORE (-10 to +10)<br>
-                        • ARTICLE_COUNT (media coverage)<br>
-                        • NEWS_LINK (source URL)
-                    </code>
+                    <p style="font-size: 0.75rem; color: #94a3b8; line-height: 1.5;">
+                        📅 Event dates<br>
+                        👤 Actors & countries<br>
+                        📊 Impact scores (-10 to +10)<br>
+                        📰 Media coverage count<br>
+                        🔗 Source news links
+                    </p>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
             st.markdown("""
-            <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.5rem; margin-top: 1rem;">
-                <h4 style="font-family: 'JetBrains Mono', monospace; color: #f59e0b; font-size: 0.85rem; margin-bottom: 1rem;">
-                    ⚡ QUERY TIPS
+            <div style="background: #111827; border: 1px solid #1e3a5f; border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+                <h4 style="font-family: 'JetBrains Mono', monospace; color: #f59e0b; font-size: 0.85rem; margin-bottom: 0.75rem;">
+                    ⚡ TIPS
                 </h4>
-                <ul style="color: #94a3b8; font-size: 0.8rem; line-height: 1.8; padding-left: 1rem;">
-                    <li>Use country names (Russia, China, US)</li>
-                    <li>Specify timeframes (today, this week)</li>
-                    <li>Ask about "crisis" or "conflict" events</li>
-                    <li>Request "trending" for high-coverage</li>
-                </ul>
+                <p style="color: #94a3b8; font-size: 0.8rem; line-height: 1.6;">
+                    • Use country names (Russia, China)<br>
+                    • Specify time (today, this week)<br>
+                    • Ask for "crisis" or "conflict"<br>
+                    • Request "trending" stories
+                </p>
             </div>
             """, unsafe_allow_html=True)
     
