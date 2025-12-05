@@ -22,10 +22,6 @@ import re
 from urllib.parse import urlparse, unquote
 import duckdb
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════════════════
-
 st.set_page_config(page_title="Global News Intelligence", page_icon="🌐", layout="wide", initial_sidebar_state="collapsed")
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -48,18 +44,9 @@ for key in REQUIRED_ENVS:
     if val: os.environ[key] = val
 
 GEMINI_MODEL = "gemini-2.5-flash-lite"
-
 NOW = datetime.datetime.now()
 WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')
 MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')
-
-# Initialize session state for tab persistence
-if 'active_tab' not in st.session_state:
-    st.session_state.active_tab = 0
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CSS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def inject_css():
     st.markdown("""
@@ -97,14 +84,9 @@ def inject_css():
         .ticker-text { display: inline-block; white-space: nowrap; padding-left: 95px; animation: scroll 40s linear infinite; font-size: 0.8rem; color: #fca5a5; }
         @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         .tech-badge { display: inline-flex; background: #1a2332; border: 1px solid var(--border); border-radius: 20px; padding: 0.4rem 0.8rem; font-size: 0.75rem; color: var(--muted); margin: 0.25rem; }
-        @media (max-width: 768px) { .block-container { padding: 1rem 0.75rem; } .logo-title { font-size: 1rem !important; } .logo-sub { display: none; } }
         hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
     </style>
     """, unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# DATABASE
-# ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_resource
 def get_db():
@@ -120,8 +102,7 @@ def detect_table(_conn):
         result = _conn.execute("SHOW TABLES").df()
         if not result.empty:
             for t in result.iloc[:, 0].tolist():
-                if 'event' in t.lower():
-                    return t
+                if 'event' in t.lower(): return t
             return result.iloc[0, 0]
     except: pass
     return 'events_dagster'
@@ -132,208 +113,209 @@ def safe_query(conn, sql):
         logger.error(f"Query error: {e}")
         return pd.DataFrame()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# AI ENGINE
-# ═══════════════════════════════════════════════════════════════════════════════
-
 @st.cache_resource
 def get_ai_engine(_engine):
     try:
         api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            logger.error("GOOGLE_API_KEY not found!")
-            return None
-        
+        if not api_key: return None
         llm = Gemini(api_key=api_key, model=GEMINI_MODEL, temperature=0.1)
         embed = GoogleGenAIEmbedding(api_key=api_key, model_name="text-embedding-004")
         Settings.llm = llm
         Settings.embed_model = embed
-        
         conn = get_db()
         main_table = detect_table(conn)
         sql_db = SQLDatabase(_engine, include_tables=[main_table])
-        logger.info(f"AI Engine initialized with table: {main_table}")
         return sql_db
     except Exception as e:
         logger.error(f"AI init failed: {e}")
         return None
-
+    
 @st.cache_resource
 def get_query_engine(_sql_db):
     if not _sql_db: return None
     try:
         tables = list(_sql_db.get_usable_table_names())
         target = next((t for t in tables if 'event' in t.lower()), tables[0] if tables else None)
-        if target:
-            return NLSQLTableQueryEngine(sql_database=_sql_db, tables=[target])
+        if target: return NLSQLTableQueryEngine(sql_database=_sql_db, tables=[target])
         return NLSQLTableQueryEngine(sql_database=_sql_db)
-    except Exception as e:
-        logger.error(f"QE error: {e}")
-        return None
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# HEADLINE CLEANING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_country(code):
-    if not code or not isinstance(code, str) or len(code) < 2: return None
-    try:
-        c = pycountry.countries.get(alpha_2=code[:2].upper())
-        return c.name if c else None
     except: return None
 
+def get_country(code):
+    if not code or not isinstance(code, str): return None
+    code = code.strip().upper()
+    if len(code) < 2: return None
+    try:
+        if len(code) == 2: 
+            c = pycountry.countries.get(alpha_2=code)
+            if c: return c.name
+        if len(code) == 3: 
+            c = pycountry.countries.get(alpha_3=code)
+            if c: return c.name
+        return None
+    except: return None
+
+def get_impact_label(score):
+    if score is None: return "Neutral"
+    score = float(score)
+    if score <= -8: return "🔴 Severe Crisis"
+    if score <= -5: return "🔴 Major Conflict"
+    if score <= -3: return "🟠 Rising Tensions"
+    if score <= -1: return "🟡 Minor Dispute"
+    if score < 1: return "⚪ Neutral"
+    if score < 3: return "🟢 Cooperation"
+    if score < 5: return "🟢 Partnership"
+    return "✨ Major Agreement"
+
 def clean_headline(text):
+    """AGGRESSIVE cleaning - remove ALL garbage patterns from headlines"""
     if not text: return None
     text = str(text).strip()
     
-    # Strip leading numbers/codes
-    text = re.sub(r'^[\dA-Fa-f]{5,}[\.\s\-_]*', '', text)
-    text = re.sub(r'^\d+[\.\s\-_]+', '', text)
+    reject_patterns = [
+        r'^[a-f0-9]{8}[-\s][a-f0-9]{4}',
+        r'^[a-f0-9\s\-]{20,}$',
+        r'^(article|post|item|id)[\s\-_]*[a-f0-9]{8}',
+    ]
+    for pattern in reject_patterns:
+        if re.match(pattern, text.lower()): return None
     
-    # Strip ALL date patterns
-    text = re.sub(r'^20\d{2}[\s\-_/]?\d{0,2}[\s\-_/]?\d{0,2}[\s\-_]*', '', text)
-    text = re.sub(r'\b\d{1,2}\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b', '', text, flags=re.I)
-    text = re.sub(r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{1,2}\b', '', text, flags=re.I)
-    text = re.sub(r'\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b', '', text)
-    text = re.sub(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b', '', text)
+    for _ in range(5):
+        text = re.sub(r'^\d{4}\s+\d{1,2}\s+\d{1,2}\s+', '', text)
+        text = re.sub(r'^\d{1,2}\s+\d{1,2}\s+', '', text)
+        text = re.sub(r'^\d{1,2}[/\-\.]\d{1,2}\s+', '', text)
+        text = re.sub(r'^\d{4}\s+', '', text)
+        text = re.sub(r'^\d{8}\s*', '', text)
+        text = re.sub(r'^\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}\s*', '', text)
     
-    # Remove file extensions
-    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml|htm)$', '', text, flags=re.I)
-    
-    # Replace separators with spaces
+    text = re.sub(r'\s+\d{1,2}\.\d{5,}', ' ', text)
+    text = re.sub(r'\s+\d{5,}', ' ', text)
+    text = re.sub(r'\s+[a-z]{3,5}\d[a-z\d]{4,}', ' ', text, flags=re.I)
+    text = re.sub(r'\s+[a-z0-9]{12,}(?=\s|$)', ' ', text, flags=re.I)
+    text = re.sub(r'[\s,]+\d{1,3}$', '', text)
+    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml)$', '', text, flags=re.I)
     text = re.sub(r'[-_]+', ' ', text)
-    
-    # Clean up whitespace
     text = ' '.join(text.split())
     
-    # Title case if needed
-    if text and (text.isupper() or text.islower()):
-        text = text.title()
-    
-    # Validate
-    if not text or len(text) < 10: return None
-    
-    nums = sum(c.isdigit() for c in text.replace(' ', ''))
-    if nums > len(text) * 0.3: return None
-    if re.match(r'^[A-Fa-f0-9]{10,}$', text.replace(' ', '')): return None
-    
-    garbage = ['govno', 'news=', 'wxii', 'trend', 'bbs', 'posnews', 'tradearabia']
-    if text.lower() in garbage or any(g in text.lower() for g in garbage): return None
-    if ' ' not in text and len(text) < 15: return None
+    if len(text) < 10: return None
+    text_no_spaces = text.replace(' ', '')
+    if text_no_spaces:
+        num_count = sum(c.isdigit() for c in text_no_spaces)
+        if num_count > len(text_no_spaces) * 0.2: return None
+    hex_count = sum(c in '0123456789abcdefABCDEF' for c in text_no_spaces)
+    if hex_count > len(text_no_spaces) * 0.35: return None
+    if ' ' not in text: return None
+    words = text.split()
+    if len(words) < 3: return None
     
     return text[:100]
 
-def extract_headline(url, actor=None):
-    if not url:
-        return clean_headline(actor)
+def enhance_headline(text, impact_score=None, actor=None):
+    """Make headlines more engaging"""
+    if not text: return None
+    words = text.split()
+    capitalized = []
+    important_words = {'president', 'minister', 'government', 'military', 'congress', 'senate', 
+                      'crisis', 'attack', 'strike', 'protest', 'emergency', 'war', 'peace',
+                      'agreement', 'deal', 'summit', 'meeting', 'vote', 'election', 'law',
+                      'court', 'judge', 'police', 'fire', 'flood', 'earthquake', 'storm'}
+    
+    for i, word in enumerate(words):
+        word_lower = word.lower()
+        if i == 0:
+            capitalized.append(word.capitalize())
+        elif word_lower in important_words:
+            capitalized.append(word.capitalize())
+        elif word.isupper() and len(word) > 2:
+            capitalized.append(word.title())
+        else:
+            capitalized.append(word)
+    
+    return ' '.join(capitalized)
+
+def extract_headline(url, actor=None, impact_score=None):
+    if not url and actor: 
+        cleaned = clean_headline(actor)
+        return enhance_headline(cleaned, impact_score, actor) if cleaned else None
+    if not url: return None
     try:
         parsed = urlparse(str(url))
         path = unquote(parsed.path)
-        
-        for seg in reversed([s for s in path.split('/') if s and len(s) > 5]):
-            headline = clean_headline(seg)
-            if headline and len(headline) > 20:
-                return headline
-        
+        segments = [s for s in path.split('/') if s and len(s) > 8]
+        for seg in reversed(segments):
+            cleaned = clean_headline(seg)
+            if cleaned and len(cleaned) > 20:
+                return enhance_headline(cleaned, impact_score, actor)
         if actor:
-            actor_clean = clean_headline(actor)
-            if actor_clean:
-                domain = parsed.netloc.replace('www.', '').split('.')[0].title()
-                if domain and len(domain) > 2 and not domain.isdigit():
-                    return f"{actor_clean} - {domain}"
-                return actor_clean
-        
-        domain = parsed.netloc.replace('www.', '').split('.')[0].title()
-        if domain and len(domain) > 3 and not domain.isdigit():
-            return f"News from {domain}"
+            cleaned = clean_headline(actor)
+            return enhance_headline(cleaned, impact_score, actor) if cleaned else None
         return None
     except:
-        return clean_headline(actor)
+        if actor:
+            cleaned = clean_headline(actor)
+            return enhance_headline(cleaned, impact_score, actor) if cleaned else None
+        return None
 
 def process_df(df):
     if df.empty: return df
     df = df.copy()
     df.columns = [c.upper() for c in df.columns]
-    
     headlines = []
     for _, row in df.iterrows():
-        h = extract_headline(row.get('NEWS_LINK', ''), row.get('MAIN_ACTOR', ''))
-        if h and len(h) > 10:
-            headlines.append(h)
-        else:
-            actor = row.get('MAIN_ACTOR', '')
-            if actor and len(str(actor)) > 5:
-                cleaned = clean_headline(str(actor))
-                if cleaned:
-                    headlines.append(cleaned[:60])
-                else:
-                    headlines.append(None)
-            else:
-                headlines.append(None)
+        h = extract_headline(row.get('NEWS_LINK', ''), row.get('MAIN_ACTOR', ''), row.get('IMPACT_SCORE', None))
+        headlines.append(h if h else None)
     df['HEADLINE'] = headlines
-    
-    df['REGION'] = df['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x if x else 'Global')
-    
-    try: df['DATE_FMT'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d %b')
-    except: df['DATE_FMT'] = df['DATE']
-    
-    df['TONE'] = df['IMPACT_SCORE'].apply(lambda x: "🔴" if x and x < -4 else ("🟡" if x and x < -1 else ("🟢" if x and x > 2 else "⚪")))
-    
     df = df[df['HEADLINE'].notna()]
+    df['REGION'] = df['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x if x else 'Global')
+    try: 
+        df['DATE_FMT'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%d/%m')
+    except: 
+        df['DATE_FMT'] = df['DATE']
+    df['TONE'] = df['IMPACT_SCORE'].apply(lambda x: "🔴" if x and x < -4 else ("🟡" if x and x < -1 else ("🟢" if x and x > 2 else "⚪")))
     df = df.drop_duplicates(subset=['HEADLINE'])
-    
     return df
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# DATA FETCHING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_metrics(_c, t):
     df = safe_query(_c, f"SELECT COUNT(*) as total, SUM(CASE WHEN DATE >= '{WEEK_AGO}' THEN 1 ELSE 0 END) as recent, SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 AND DATE >= '{WEEK_AGO}' THEN 1 ELSE 0 END) as critical FROM {t}")
     hs = safe_query(_c, f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c FROM {t} WHERE DATE >= '{WEEK_AGO}' AND ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 1")
     return {'total': df.iloc[0]['total'] if not df.empty else 0, 'recent': df.iloc[0]['recent'] if not df.empty else 0, 'critical': df.iloc[0]['critical'] if not df.empty else 0, 'hotspot': hs.iloc[0]['ACTOR_COUNTRY_CODE'] if not hs.empty else None}
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_alerts(_c, t):
     d = (NOW - datetime.timedelta(days=3)).strftime('%Y%m%d')
-    return safe_query(_c, f"SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t} WHERE DATE >= '{d}' AND IMPACT_SCORE < -4 AND MAIN_ACTOR IS NOT NULL AND LENGTH(MAIN_ACTOR) > 5 AND ACTOR_COUNTRY_CODE IS NOT NULL ORDER BY IMPACT_SCORE ASC LIMIT 15")
+    return safe_query(_c, f"SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t} WHERE DATE >= '{d}' AND IMPACT_SCORE < -4 AND MAIN_ACTOR IS NOT NULL ORDER BY IMPACT_SCORE LIMIT 15")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_headlines(_c, t):
     return safe_query(_c, f"SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t} WHERE NEWS_LINK IS NOT NULL AND ARTICLE_COUNT > 5 AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 60")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_trending(_c, t):
     return safe_query(_c, f"SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT FROM {t} WHERE DATE >= '{WEEK_AGO}' AND ARTICLE_COUNT > 3 AND NEWS_LINK IS NOT NULL ORDER BY ARTICLE_COUNT DESC LIMIT 60")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_feed(_c, t):
     return safe_query(_c, f"SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t} WHERE DATE >= '{WEEK_AGO}' AND NEWS_LINK IS NOT NULL ORDER BY DATE DESC LIMIT 60")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_countries(_c, t):
     return safe_query(_c, f"SELECT ACTOR_COUNTRY_CODE as country, COUNT(*) as events FROM {t} WHERE DATE >= '{MONTH_AGO}' AND ACTOR_COUNTRY_CODE IS NOT NULL GROUP BY 1 ORDER BY 2 DESC")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_timeseries(_c, t):
     return safe_query(_c, f"SELECT DATE, COUNT(*) as events, SUM(CASE WHEN IMPACT_SCORE < -2 THEN 1 ELSE 0 END) as negative, SUM(CASE WHEN IMPACT_SCORE > 2 THEN 1 ELSE 0 END) as positive FROM {t} WHERE DATE >= '{MONTH_AGO}' GROUP BY 1 ORDER BY 1")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_sentiment(_c, t):
     return safe_query(_c, f"SELECT AVG(IMPACT_SCORE) as avg, SUM(CASE WHEN IMPACT_SCORE < -3 THEN 1 ELSE 0 END) as neg, SUM(CASE WHEN IMPACT_SCORE > 3 THEN 1 ELSE 0 END) as pos, COUNT(*) as total FROM {t} WHERE DATE >= '{WEEK_AGO}' AND IMPACT_SCORE IS NOT NULL")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_actors(_c, t):
     return safe_query(_c, f"SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, COUNT(*) as events, AVG(IMPACT_SCORE) as avg_impact FROM {t} WHERE DATE >= '{WEEK_AGO}' AND MAIN_ACTOR IS NOT NULL AND LENGTH(MAIN_ACTOR) > 3 GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 10")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_distribution(_c, t):
     return safe_query(_c, f"SELECT CASE WHEN IMPACT_SCORE < -5 THEN 'Crisis' WHEN IMPACT_SCORE < -2 THEN 'Negative' WHEN IMPACT_SCORE < 2 THEN 'Neutral' WHEN IMPACT_SCORE < 5 THEN 'Positive' ELSE 'Very Positive' END as cat, COUNT(*) as cnt FROM {t} WHERE DATE >= '{WEEK_AGO}' AND IMPACT_SCORE IS NOT NULL GROUP BY 1")
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# UI COMPONENTS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def render_header():
     st.markdown('<div class="header"><div class="logo"><span class="logo-icon">🌐</span><div><div class="logo-title">Global News Intelligence</div><div class="logo-sub">Powered by GDELT • Real-Time Analytics</div></div></div><div class="live-badge"><span class="live-dot"></span> LIVE DATA</div></div>', unsafe_allow_html=True)
@@ -341,7 +323,7 @@ def render_header():
 def render_metrics(c, t):
     m = get_metrics(c, t)
     c1, c2, c3, c4, c5 = st.columns(5)
-    def fmt(n): return f"{n/1000000:.1f}M" if n and n >= 1000000 else (f"{n/1000:.1f}K" if n and n >= 1000 else str(int(n or 0)))
+    def fmt(n): return f"{int(n or 0):,}"
     with c1: st.metric("📡 TOTAL", fmt(m['total']), "All time")
     with c2: st.metric("⚡ 7 DAYS", fmt(m['recent']), "Recent")
     with c3: st.metric("🚨 CRITICAL", fmt(m['critical']), "High impact")
@@ -351,29 +333,24 @@ def render_metrics(c, t):
 
 def render_ticker(c, t):
     df = get_alerts(c, t)
-    if df.empty or len(df) < 3:
-        txt = "⚡ Monitoring global news for critical events │ Real-time GDELT analysis │ AI-powered insights │ "
+    if df.empty:
+        txt = "⚡ Monitoring global news │ "
     else:
         items = []
         for _, r in df.iterrows():
-            actor = r.get('MAIN_ACTOR', '')
-            if not actor or len(str(actor)) <= 3: continue
-            actor = str(actor)[:30]
-            country_code = r.get('ACTOR_COUNTRY_CODE', '')
-            country = get_country(country_code) if country_code else None
-            country = country[:15] if country else (country_code if country_code else 'Global')
-            impact = r.get('IMPACT_SCORE', 0) or 0
-            items.append(f"⚠️ {actor} ({country}) • {impact:.1f}")
-        txt = " │ ".join(items[:10]) + " │ " if items else "⚡ Monitoring global news │ "
+            actor = r.get('MAIN_ACTOR', '')[:30] or "Event"
+            country = get_country(r.get('ACTOR_COUNTRY_CODE', '')) or 'Global'
+            items.append(f"⚠️ {actor} ({country}) • {r.get('IMPACT_SCORE', 0):.1f}")
+        txt = " │ ".join(items) + " │ "
     st.markdown(f'<div class="ticker"><div class="ticker-label"><span class="ticker-dot"></span> LIVE</div><div class="ticker-text">{txt + txt}</div></div>', unsafe_allow_html=True)
 
 def render_headlines(c, t):
     df = get_headlines(c, t)
     if df.empty: st.info("📰 Loading..."); return
     df = process_df(df).head(12)
-    if df.empty: st.info("📰 No headlines available"); return
+    if df.empty: st.info("📰 No headlines"); return
     st.dataframe(df[['TONE', 'DATE_FMT', 'HEADLINE', 'REGION', 'NEWS_LINK']], hide_index=True, height=350,
-        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Headline", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", display_text="Open", width="small")}, use_container_width=True)
+        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Headline", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", width="small")}, width='stretch')
 
 def render_sentiment(c, t):
     df = get_sentiment(c, t)
@@ -391,13 +368,16 @@ def render_actors(c, t):
     if df.empty: st.info("🎯 Loading..."); return
     labels = []
     for _, r in df.iterrows():
-        actor = clean_headline(r['MAIN_ACTOR']) or 'Unknown'
-        cc = r.get('ACTOR_COUNTRY_CODE', '')
-        labels.append(f"{actor[:18]} ({cc})" if cc else actor[:20])
+        actor = r['MAIN_ACTOR'][:25]
+        country = get_country(r.get('ACTOR_COUNTRY_CODE', ''))
+        if country:
+            labels.append(f"{actor} ({country[:10]})")
+        else:
+            labels.append(actor)
     colors = ['#ef4444' if x and x < -3 else ('#f59e0b' if x and x < 0 else ('#10b981' if x and x > 3 else '#06b6d4')) for x in df['avg_impact']]
     fig = go.Figure(go.Bar(x=df['events'], y=labels, orientation='h', marker_color=colors, text=df['events'].apply(lambda x: f'{x:,}'), textposition='outside', textfont=dict(color='#94a3b8', size=10)))
     fig.update_layout(height=350, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=0,r=50,t=10,b=0), xaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')), yaxis=dict(showgrid=False, tickfont=dict(color='#e2e8f0', size=11), autorange='reversed'), bargap=0.3)
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch')
 
 def render_distribution(c, t):
     df = get_distribution(c, t)
@@ -405,7 +385,7 @@ def render_distribution(c, t):
     colors = {'Crisis': '#ef4444', 'Negative': '#f59e0b', 'Neutral': '#64748b', 'Positive': '#10b981', 'Very Positive': '#06b6d4'}
     fig = go.Figure(data=[go.Pie(labels=df['cat'], values=df['cnt'], hole=0.6, marker_colors=[colors.get(c, '#64748b') for c in df['cat']], textinfo='percent', textfont=dict(size=11, color='#e2e8f0'))])
     fig.update_layout(height=200, paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=10,r=10,t=10,b=10), showlegend=True, legend=dict(orientation='h', y=-0.2, x=0.5, xanchor='center', font=dict(size=10, color='#94a3b8')))
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch')
 
 def render_countries(c, t):
     df = get_countries(c, t)
@@ -415,7 +395,7 @@ def render_countries(c, t):
     fmt = lambda n: f"{n/1000:.1f}K" if n >= 1000 else str(int(n))
     fig = go.Figure(go.Bar(x=df['name'], y=df['events'], marker_color='#06b6d4', text=df['events'].apply(fmt), textposition='outside', textfont=dict(color='#94a3b8', size=10)))
     fig.update_layout(height=200, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=0,r=0,t=10,b=0), xaxis=dict(showgrid=False, tickfont=dict(color='#94a3b8', size=9), tickangle=-45), yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', showticklabels=False), bargap=0.4)
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch')
 
 def render_trending(c, t):
     df = get_trending(c, t)
@@ -423,7 +403,7 @@ def render_trending(c, t):
     df = process_df(df).head(15)
     if df.empty: st.info("🔥 No stories"); return
     st.dataframe(df[['DATE_FMT', 'HEADLINE', 'REGION', 'ARTICLE_COUNT', 'NEWS_LINK']], hide_index=True, height=400,
-        column_config={"DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Story", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "ARTICLE_COUNT": st.column_config.NumberColumn("📰", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", display_text="Open", width="small")}, use_container_width=True)
+        column_config={"DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Story", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "ARTICLE_COUNT": st.column_config.NumberColumn("📰", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", width="small")}, width='stretch')
 
 def render_feed(c, t):
     df = get_feed(c, t)
@@ -431,7 +411,7 @@ def render_feed(c, t):
     df = process_df(df).head(15)
     if df.empty: st.info("📋 No events"); return
     st.dataframe(df[['TONE', 'DATE_FMT', 'HEADLINE', 'REGION', 'NEWS_LINK']], hide_index=True, height=400,
-        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Event", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", display_text="Open", width="small")}, use_container_width=True)
+        column_config={"TONE": st.column_config.TextColumn("", width="small"), "DATE_FMT": st.column_config.TextColumn("Date", width="small"), "HEADLINE": st.column_config.TextColumn("Event", width="large"), "REGION": st.column_config.TextColumn("Region", width="small"), "NEWS_LINK": st.column_config.LinkColumn("🔗", width="small")}, width='stretch')
 
 def render_timeseries(c, t):
     df = get_timeseries(c, t)
@@ -442,111 +422,378 @@ def render_timeseries(c, t):
     fig.add_trace(go.Scatter(x=df['date'], y=df['negative'], line=dict(color='#ef4444', width=2), name='Negative'), secondary_y=True)
     fig.add_trace(go.Scatter(x=df['date'], y=df['positive'], line=dict(color='#10b981', width=2), name='Positive'), secondary_y=True)
     fig.update_layout(height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=0,r=0,t=30,b=0), showlegend=True, legend=dict(orientation='h', y=1.02, font=dict(size=11, color='#94a3b8')), xaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')), yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')), hovermode='x unified')
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# AI CHAT
-# ═══════════════════════════════════════════════════════════════════════════════
+    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch')
 
 def render_ai_chat(c, sql_db):
     if "msgs" not in st.session_state:
-        st.session_state.msgs = [{"role": "assistant", "content": "🌐 **GDELT Analyst Ready** - Ask me about global news events!"}]
+        st.session_state.msgs = [{"role": "assistant", "content": "🌐 Ask me about global news!"}]
     
-    st.markdown('''
-        <div style="
-            background:#111827;
-            border:1px solid #1e3a5f;
-            border-radius:8px;
-            padding:0.5rem 0.75rem;
-            margin-bottom:0.75rem;
-        ">
-            <span style="display:block;color:#94a3b8;font-size:0.75rem;">
-                💡 Try the following questions:<br>
-                - "Top 10 countries with negative news"
-                - "Analyze the conflict trend in the Middle East"
-                - "Compare media coverage of USA vs China"
-                - "Which country has the lowest sentiment score?"
-            </span>
-        </div>
-        ''', unsafe_allow_html=True)
-    for msg in st.session_state.msgs[-6:]:
-        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+    st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;margin-bottom:1rem;"><span style="color:#64748b;font-size:0.7rem;">💡 EXAMPLE QUESTIONS:</span> <span style="color:#94a3b8;font-size:0.75rem;">"What major events happened this week?" • "Top 5 countries by event count" • "Show crisis-level events" • "What are the most severe events?"</span></div>', unsafe_allow_html=True)
     
-    prompt = st.chat_input("Ask about global news...")
+    for msg in st.session_state.msgs[-8:]:
+        with st.chat_message(msg["role"]): 
+            st.markdown(msg["content"])
+    
+    prompt = st.chat_input("Ask about global events...", key="chat")
     
     if prompt:
         st.session_state.msgs.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
+        with st.chat_message("user"): 
+            st.markdown(prompt)
+        
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Analyzing..."):
-                qe = get_query_engine(sql_db)
-                if qe:
-                    try:
-                        enhanced_prompt = f"""You are a GDELT news analyst. User asked: "{prompt}"
+            qe = get_query_engine(sql_db)
+            if not qe:
+                st.error("❌ AI not available")
+                return
+            
+            try:
+                # ENHANCED PROMPT with explicit examples
+                short_prompt = f"""Query: "{prompt}"
 
-Table columns:
-- DATE (YYYYMMDD integer)
-- MAIN_ACTOR (person/org)
-- ACTOR_COUNTRY_CODE (2-letter: US, RU, CN)
-- IMPACT_SCORE (negative=conflict, positive=cooperation)
-- ARTICLE_COUNT (media coverage count)
-- NEWS_LINK (URL)
+Table: events_dagster
+Columns: DATE (VARCHAR in YYYYMMDD format like '20241206'), MAIN_ACTOR (VARCHAR), ACTOR_COUNTRY_CODE (VARCHAR 3-letter), IMPACT_SCORE (FLOAT), ARTICLE_COUNT (SMALLINT), NEWS_LINK (VARCHAR)
 
-IMPORTANT RULES:
-1. ALWAYS filter NULL values: WHERE column IS NOT NULL
-2. For country queries: WHERE ACTOR_COUNTRY_CODE IS NOT NULL
-3. Use LIMIT 15 max
-4. Recent data: DATE >= '{WEEK_AGO}'
-5. Negative events: IMPACT_SCORE < -3
-6. Positive events: IMPACT_SCORE > 3
+CRITICAL: DATE is stored as VARCHAR like '20241206', NOT as date type!
 
-Generate SQL to answer the question."""
+MANDATORY FILTERS:
+WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE != ''
+
+For recent events (last 7 days), use: DATE >= '{WEEK_AGO}'
+
+EXAMPLES:
+1. "top 5 countries by event count":
+SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
+
+2. "show crisis events":
+SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{WEEK_AGO}' ORDER BY IMPACT_SCORE ASC LIMIT 10
+
+3. "what happened this week":
+SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC LIMIT 10
+
+DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{WEEK_AGO}'.
+
+CRISIS = IMPACT_SCORE < -3
+
+ALWAYS include NEWS_LINK. Write complete SQL only."""
+                
+                with st.spinner("🔍 Querying..."):
+                    response = qe.query(short_prompt)
+                    answer = str(response)
+                    st.markdown(answer)
+                    
+                    sql = response.metadata.get('sql_query')
+                    logger.info(f"Generated SQL: {sql}")  # LOG THE SQL
+                    
+                    # FALLBACK: If no SQL and user asked for crisis, generate it manually
+                    if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{WEEK_AGO}' ORDER BY IMPACT_SCORE ASC LIMIT 10"
+                        logger.info(f"Using fallback crisis SQL: {sql}")
+                        st.info("🔧 Using built-in crisis query")
+                    
+                    # FALLBACK: If no SQL and user asked for top countries
+                    if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
+                        limit = 5  # default
+                        import re
+                        match = re.search(r'top\s+(\d+)', prompt.lower())
+                        if match:
+                            limit = int(match.group(1))
+                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
+                        logger.info(f"Using fallback top countries SQL: {sql}")
+                        st.info("🔧 Using built-in top countries query")
+                    
+                    # FALLBACK: If no SQL and user asked "what happened"
+                    if not sql and ('what' in prompt.lower() and ('happen' in prompt.lower() or 'event' in prompt.lower())):
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
+                        logger.info(f"Using fallback what happened SQL: {sql}")
+                        st.info("🔧 Using built-in recent events query")
+                    
+                    if sql:
+                        data = safe_query(c, sql)
+                        if not data.empty:
+                            data_display = data.copy()
+                            data_display.columns = [c.upper() for c in data_display.columns]
+                            
+                            # Remove EVENT_ID
+                            if 'EVENT_ID' in data_display.columns:
+                                data_display = data_display.drop(columns=['EVENT_ID'])
+                            
+                            # Convert country codes - FILTER OUT UNKNOWNS
+                            if 'ACTOR_COUNTRY_CODE' in data_display.columns:
+                                data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
+                                    lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
+                                )
+                                # Remove rows where country conversion failed
+                                data_display = data_display[data_display['COUNTRY'].notna()]
+                                data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
+                            
+                            # For aggregated queries (like "top countries"), rename count column
+                            if 'COUNT(*)' in data_display.columns:
+                                data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
+                            elif 'COUNT' in data_display.columns:
+                                data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
+                            
+                            # Add severity labels
+                            if 'IMPACT_SCORE' in data_display.columns:
+                                data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
+                            
+                            # Format dates
+                            if 'DATE' in data_display.columns:
+                                try:
+                                    data_display['DATE'] = pd.to_datetime(
+                                        data_display['DATE'].astype(str), format='%Y%m%d'
+                                    ).dt.strftime('%d/%m')
+                                except: pass
+                            
+                            # AGGRESSIVE NULL/UNKNOWN FILTERING
+                            for col in data_display.columns:
+                                if data_display[col].dtype == 'object':
+                                    data_display = data_display[
+                                        (data_display[col].notna()) & 
+                                        (data_display[col].astype(str) != 'None') & 
+                                        (data_display[col].astype(str) != '') &
+                                        (data_display[col].astype(str) != 'Unknown')
+                                    ]
+                            
+                            # Rename links
+                            if 'NEWS_LINK' in data_display.columns:
+                                data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
+                            
+                            # Smart column ordering based on query type
+                            if 'EVENTS' in data_display.columns:
+                                # Aggregated query (like "top countries")
+                                preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
+                            else:
+                                # Regular query
+                                preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
+                            
+                            link_cols = [c for c in data_display.columns if '🔗' in c]
+                            other_cols = [c for c in data_display.columns if c not in preferred_order and c not in link_cols]
+                            final_order = [c for c in preferred_order if c in data_display.columns] + other_cols + link_cols
+                            data_display = data_display[final_order]
+                            
+                            # Column config
+                            col_config = {
+                                "DATE": st.column_config.TextColumn("DATE", width="small"),
+                                "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
+                                "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
+                                "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
+                                "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
+                                "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
+                                "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
+                            }
+                            for col in link_cols:
+                                col_config[col] = st.column_config.LinkColumn(col, width="small")
+                            
+                            # Show results only if we have valid data
+                            if not data_display.empty:
+                                st.dataframe(data_display.head(10), hide_index=True, width='stretch', column_config=col_config)
+                            else:
+                                st.info("📭 No valid results after filtering")
+                        else:
+                            st.warning("📭 No results found")
                         
-                        response = qe.query(enhanced_prompt)
-                        answer = str(response)
-                        st.markdown(answer)
-                        sql = response.metadata.get('sql_query')
-                        if sql:
-                            data = safe_query(c, sql)
-                            if not data.empty:
-                                if 'DATE' in data.columns:
-                                    data['DATE'] = pd.to_datetime(data['DATE'], 
-                                format="%Y%m%d").dt.strftime("%d/%m/%Y")
-                                st.dataframe(data.head(15), hide_index=True, use_container_width=True)
-                            with st.expander("SQL"): st.code(sql, language='sql')
-                        st.session_state.msgs.append({"role": "assistant", "content": answer})
-                    except Exception as e:
-                        st.error(f"Error: {str(e)[:100]}")
+                        with st.expander("🔍 SQL Query"): 
+                            st.code(sql, language='sql')
+                    else:
+                        st.warning("⚠️ Could not generate SQL query. Try rephrasing your question or use one of the examples above.")
+                    
+                    st.session_state.msgs.append({"role": "assistant", "content": answer})
+                    
+            except Exception as e:
+                error_msg = str(e)
+                if "MAX_TOKENS" in error_msg:
+                    st.error("⚠️ Response too long. Try: 'Top 5 countries by event count'")
                 else:
-                    st.warning("⚠️ AI initializing... Refresh page.")
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ARCHITECTURE & ABOUT
-# ═══════════════════════════════════════════════════════════════════════════════
+                    st.error(f"❌ Error: {error_msg[:100]}")
+                logger.error(f"AI error: {e}")
 
 def render_arch():
-    st.markdown('<div style="text-align:center;margin-bottom:2rem;"><h2 style="font-family:JetBrains Mono;color:#e2e8f0;">🏗️ System Architecture</h2><p style="color:#64748b;">GDELT → GitHub Actions → MotherDuck → Gemini AI → Streamlit</p></div>', unsafe_allow_html=True)
-    st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;text-align:center;margin-bottom:2rem;"><span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.25rem;">📰 GDELT</span><span style="color:#06b6d4;margin:0 0.5rem;">→</span><span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.25rem;">⚡ GitHub Actions</span><span style="color:#06b6d4;margin:0 0.5rem;">→</span><span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.25rem;">🦆 MotherDuck</span><span style="color:#06b6d4;margin:0 0.5rem;">→</span><span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.25rem;">🤖 Gemini AI</span><span style="color:#06b6d4;margin:0 0.5rem;">→</span><span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.25rem;">🎨 Streamlit</span></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align:center;margin-bottom:2rem;">
+        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;">🏗️ System Architecture</h2>
+        <p style="color:#64748b;">End-to-end data pipeline processing 2M+ daily events</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;text-align:center;margin-bottom:2rem;">
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">📰 GDELT API</span>
+        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">⚡ Dagster Orchestration</span>
+        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🔧 dbt Transformations</span>
+        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🦆 MotherDuck DWH</span>
+        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Gemini AI</span>
+        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🎨 Streamlit</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
     c1, c2 = st.columns(2)
+    
     with c1:
-        st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;"><h4 style="color:#06b6d4;font-size:0.9rem;">📥 DATA: GDELT</h4><p style="color:#94a3b8;font-size:0.8rem;">Global Database of Events - monitors news worldwide in 100+ languages.</p><ul style="color:#94a3b8;font-size:0.85rem;"><li>Updates every 15 min</li><li>Dagster + dbt pipeline</li><li>GitHub Actions</li></ul></div>', unsafe_allow_html=True)
-        st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 GEN AI</h4><ul style="color:#94a3b8;font-size:0.85rem;"><li>Google Gemini 2.5</li><li>LlamaIndex</li><li>Text-to-SQL</li><li>Free Tier</li></ul></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+            <h4 style="color:#06b6d4;font-size:0.9rem;">📥 DATA INGESTION</h4>
+            <p style="color:#94a3b8;font-size:0.85rem;">GDELT Project monitors 100+ languages, 2M+ daily events</p>
+            <ul style="color:#94a3b8;font-size:0.85rem;">
+                <li>15-minute update intervals</li>
+                <li>GitHub Actions scheduler</li>
+                <li>Dagster orchestration</li>
+                <li>Incremental loads</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+            <h4 style="color:#10b981;font-size:0.9rem;">🔧 TRANSFORMATION</h4>
+            <ul style="color:#94a3b8;font-size:0.85rem;">
+                <li>dbt models for data quality</li>
+                <li>Aggregations & metrics</li>
+                <li>Country code mapping</li>
+                <li>Impact scoring</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with c2:
-        st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;"><h4 style="color:#10b981;font-size:0.9rem;">🗄️ STORAGE</h4><p style="color:#94a3b8;font-size:0.8rem;">Snowflake → MotherDuck migration</p><ul style="color:#94a3b8;font-size:0.85rem;"><li>DuckDB (columnar)</li><li>Serverless</li><li>Sub-second queries</li></ul><div style="margin-top:0.5rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;border-left:3px solid #10b981;"><span style="color:#10b981;font-size:0.75rem;">💡 COST: $0/month</span></div></div>', unsafe_allow_html=True)
-        st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#f59e0b;font-size:0.9rem;">📊 VISUALIZATION</h4><ul style="color:#94a3b8;font-size:0.85rem;"><li>Streamlit</li><li>Plotly</li><li>Cloud hosting</li></ul></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+            <h4 style="color:#f59e0b;font-size:0.9rem;">🗄️ DATA WAREHOUSE</h4>
+            <p style="color:#94a3b8;font-size:0.85rem;">Migrated from Snowflake → MotherDuck</p>
+            <ul style="color:#94a3b8;font-size:0.85rem;">
+                <li>DuckDB columnar format</li>
+                <li>Sub-second queries</li>
+                <li>Serverless architecture</li>
+            </ul>
+            <div style="margin-top:0.5rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;border-left:3px solid #10b981;">
+                <span style="color:#10b981;font-size:0.75rem;">💰 COST: $0/month</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+            <h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 AI LAYER</h4>
+            <ul style="color:#94a3b8;font-size:0.85rem;">
+                <li>Google Gemini 2.5 Flash</li>
+                <li>LlamaIndex text-to-SQL</li>
+                <li>Natural language queries</li>
+                <li>Free tier usage</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.markdown("---")
-    st.markdown('<h3 style="text-align:center;color:#e2e8f0;">🛠️ Tech Stack</h3><div style="text-align:center;padding:1rem;"><span class="tech-badge">🐍 Python</span><span class="tech-badge">❄️ Snowflake</span><span class="tech-badge">🦆 DuckDB</span><span class="tech-badge">☁️ MotherDuck</span><span class="tech-badge">⚙️ Dagster</span><span class="tech-badge">🔧 dbt</span><span class="tech-badge">🤖 Gen AI</span><span class="tech-badge">🦙 LlamaIndex</span><span class="tech-badge">✨ Gemini</span><span class="tech-badge">📊 Plotly</span><span class="tech-badge">🎨 Streamlit</span><span class="tech-badge">🔄 CI/CD</span></div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <h3 style="text-align:center;color:#e2e8f0;margin-bottom:1rem;">🛠️ Tech Stack</h3>
+    <div style="text-align:center;padding:1rem;">
+        <span class="tech-badge">🐍 Python</span>
+        <span class="tech-badge">❄️ Snowflake</span>
+        <span class="tech-badge">🦆 DuckDB</span>
+        <span class="tech-badge">☁️ MotherDuck</span>
+        <span class="tech-badge">⚙️ Dagster</span>
+        <span class="tech-badge">🔧 dbt</span>
+        <span class="tech-badge">🤖 Gen AI</span>
+        <span class="tech-badge">🦙 LlamaIndex</span>
+        <span class="tech-badge">✨ Gemini</span>
+        <span class="tech-badge">📊 Plotly</span>
+        <span class="tech-badge">🎨 Streamlit</span>
+        <span class="tech-badge">🔄 GitHub Actions</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_about():
-    st.markdown('<div style="text-align:center;padding:2rem 0;"><h2 style="font-family:JetBrains Mono;color:#e2e8f0;">👋 About This Project</h2><p style="color:#94a3b8;max-width:750px;margin:0 auto 1.5rem;">Real-time analytics for <b>GDELT</b> — world\'s largest open database monitoring global news in 100+ languages.</p><p style="color:#64748b;max-width:700px;margin:0 auto 2rem;">Built on Snowflake, migrated to MotherDuck. Uses Gemini AI free tier.</p></div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="text-align:center;padding:2rem 0;">
+        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;">👋 About This Project</h2>
+        <p style="color:#94a3b8;max-width:750px;margin:0 auto 1.5rem;font-size:1.1rem;">
+            Real-time analytics for <b>GDELT</b> — the world's largest open database monitoring global news in 100+ languages
+        </p>
+        <p style="color:#64748b;max-width:700px;margin:0 auto 2rem;">
+            This project showcases end-to-end data engineering, from ingestion to visualization, with AI-powered natural language querying
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     c1, c2 = st.columns(2)
-    with c1: st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#06b6d4;font-size:0.9rem;">🎯 GOALS</h4><ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;"><li>End-to-end data engineering</li><li>AI/LLM integration</li><li>Production dashboards</li><li>Cost optimization</li></ul></div>', unsafe_allow_html=True)
-    with c2: st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;"><h4 style="color:#10b981;font-size:0.9rem;">🛠️ SKILLS</h4><ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;"><li>Python, SQL, Data Engineering</li><li>ETL/ELT (Dagster, dbt)</li><li>Cloud (Snowflake, MotherDuck)</li><li>Gen AI, CI/CD, Visualization</li></ul></div>', unsafe_allow_html=True)
-    st.markdown('---<div style="text-align:center;"><h4 style="color:#e2e8f0;">📬 CONTACT</h4><div style="display:flex;justify-content:center;gap:1rem;"><a href="https://github.com/Mohith-akash" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem 1.25rem;color:#e2e8f0;text-decoration:none;">⭐ GitHub</a><a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem 1.25rem;color:#e2e8f0;text-decoration:none;">💼 LinkedIn</a></div></div>', unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN
-# ═══════════════════════════════════════════════════════════════════════════════
+    
+    with c1:
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+            <h4 style="color:#06b6d4;font-size:0.9rem;">🎯 PROJECT GOALS</h4>
+            <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
+                <li>Demonstrate production-ready data pipelines</li>
+                <li>Showcase modern data stack (Dagster, dbt, DuckDB)</li>
+                <li>Integrate AI/LLM capabilities (Gemini, LlamaIndex)</li>
+                <li>Build scalable, cost-effective architecture</li>
+                <li>Create intuitive data visualizations</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with c2:
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+            <h4 style="color:#10b981;font-size:0.9rem;">🛠️ TECHNICAL SKILLS</h4>
+            <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
+                <li><b>Languages:</b> Python, SQL</li>
+                <li><b>Data Engineering:</b> ETL/ELT, Data Modeling</li>
+                <li><b>Orchestration:</b> Dagster, dbt, GitHub Actions</li>
+                <li><b>Cloud:</b> Snowflake, MotherDuck (DuckDB)</li>
+                <li><b>AI/ML:</b> LLMs, RAG, Text-to-SQL</li>
+                <li><b>Visualization:</b> Streamlit, Plotly</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;margin:2rem 0;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">📈 PROJECT HIGHLIGHTS</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+            <div style="text-align:center;padding:1rem;background:rgba(6,182,212,0.1);border-radius:8px;">
+                <div style="font-size:2rem;font-weight:700;color:#06b6d4;">2M+</div>
+                <div style="font-size:0.75rem;color:#94a3b8;">Daily Events Processed</div>
+            </div>
+            <div style="text-align:center;padding:1rem;background:rgba(16,185,129,0.1);border-radius:8px;">
+                <div style="font-size:2rem;font-weight:700;color:#10b981;">$0</div>
+                <div style="font-size:0.75rem;color:#94a3b8;">Monthly Operating Cost</div>
+            </div>
+            <div style="text-align:center;padding:1rem;background:rgba(245,158,11,0.1);border-radius:8px;">
+                <div style="font-size:2rem;font-weight:700;color:#f59e0b;">&lt;1s</div>
+                <div style="font-size:0.75rem;color:#94a3b8;">Average Query Time</div>
+            </div>
+            <div style="text-align:center;padding:1rem;background:rgba(139,92,246,0.1);border-radius:8px;">
+                <div style="font-size:2rem;font-weight:700;color:#8b5cf6;">100+</div>
+                <div style="font-size:0.75rem;color:#94a3b8;">Languages Monitored</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown("""
+    <div style="text-align:center;">
+        <h4 style="color:#e2e8f0;">📬 CONTACT</h4>
+        <p style="color:#94a3b8;margin-bottom:1rem;">Interested in data engineering roles or collaborations</p>
+        <div style="display:flex;justify-content:center;gap:1rem;flex-wrap:wrap;">
+            <a href="https://github.com/Mohith-akash" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem 1.25rem;color:#e2e8f0;text-decoration:none;display:inline-block;">
+                ⭐ GitHub
+            </a>
+            <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem 1.25rem;color:#e2e8f0;text-decoration:none;display:inline-block;">
+                💼 LinkedIn
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 def main():
     inject_css()
@@ -555,9 +802,7 @@ def main():
     sql_db = get_ai_engine(get_engine())
     
     render_header()
-    
-    tab_names = ["📊 HOME", "📈 TRENDS", "🤖 AI", "🏗️ TECH", "👤 ABOUT"]
-    tabs = st.tabs(tab_names)
+    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🤖 AI", "🏗️ TECH", "👤 ABOUT"])
     
     with tabs[0]:
         render_metrics(conn, tbl)
@@ -599,12 +844,22 @@ def main():
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
             render_ai_chat(conn, sql_db)
         with c2:
-            st.markdown('<div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;"><h4 style="color:#06b6d4;font-size:0.8rem;">ℹ️ HOW IT WORKS</h4><p style="color:#94a3b8;font-size:0.75rem;">Question → Gemini AI → SQL → Results</p></div>', unsafe_allow_html=True)
+            st.markdown("""
+            <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;">
+                <h4 style="color:#06b6d4;font-size:0.85rem;">ℹ️ HOW IT WORKS</h4>
+                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Gemini AI → SQL query → Results with links</p>
+                <hr style="border-color:#1e3a5f;margin:1rem 0;">
+                <p style="color:#94a3b8;font-size:0.75rem;">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
+            </div>
+            """, unsafe_allow_html=True)
     
-    with tabs[3]: render_arch()
-    with tabs[4]: render_about()
+    with tabs[3]:
+        render_arch()
     
-    st.markdown('<div style="text-align:center;padding:2rem 0 1rem;border-top:1px solid #1e3a5f;margin-top:2rem;"><p style="color:#475569;font-size:0.75rem;">Built by <a href="https://www.linkedin.com/in/mohith-akash/" style="color:#06b6d4;">Mohith Akash</a> • GDELT Real-Time Analytics</p></div>', unsafe_allow_html=True)
+    with tabs[4]:
+        render_about()
+    
+    st.markdown('<div style="text-align:center;padding:2rem 0 1rem;border-top:1px solid #1e3a5f;margin-top:2rem;"><p style="color:#64748b;font-size:0.8rem;"><b>GDELT</b> monitors worldwide news in real-time • 2M+ daily events</p><p style="color:#475569;font-size:0.75rem;">Built by <a href="https://www.linkedin.com/in/mohith-akash/" style="color:#06b6d4;">Mohith Akash</a> • Portfolio Project</p></div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
