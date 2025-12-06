@@ -31,6 +31,7 @@ import logging                      # Tracks errors and info messages
 import re                           # Pattern matching in text
 from urllib.parse import urlparse, unquote  # Extracts info from web links
 import duckdb                       # Fast database engine
+from google.genai import types
 
 # ============================================================================
 # SECTION 2: INITIAL SETUP (Configure the app before it runs)
@@ -50,6 +51,14 @@ load_dotenv()
 # Set up logging to track what's happening (helpful for debugging)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gdelt")
+
+gen_config = types.GenerateContentConfig(
+    temperature=0.1,
+    # this is the important bit 👇
+    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+        disable=True
+    ),
+)
 
 # ============================================================================
 # SECTION 3: SECURITY & API KEYS (Get secret passwords safely)
@@ -502,7 +511,7 @@ def get_ai_engine(_engine):
         llm = Gemini(
             api_key=api_key, 
             model=GEMINI_MODEL,  # Use fast, free tier model
-            temperature=0.1       # Low temperature = more focused, less creative
+            generation_config=gen_config,
         )
         
         # Initialize embedding model (converts text to numbers AI can understand)
