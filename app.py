@@ -103,9 +103,26 @@ for key in REQUIRED_ENVS:
 # ============================================================================
 
 GEMINI_MODEL = "gemini-2.5-flash-lite"  # Which AI model to use (fast and free)
-NOW = datetime.datetime.now()           # Current date and time
-WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')    # 7 days ago (e.g., 20241129)
-MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')  # 30 days ago (e.g., 20241106)
+
+def get_dates():
+    """
+    Get current date and calculated date ranges.
+    
+    IMPORTANT: This function is called every time to ensure dates are always current.
+    If we calculated these once at module level, they would become stale as the 
+    server stays running for days/weeks.
+    
+    Returns:
+        dict with: now, week_ago, month_ago (all as strings in YYYYMMDD format)
+    """
+    now = datetime.datetime.now()
+    week_ago = (now - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    month_ago = (now - datetime.timedelta(days=30)).strftime('%Y%m%d')
+    return {
+        'now': now,
+        'week_ago': week_ago,
+        'month_ago': month_ago
+    }
 
 # ============================================================================
 # SECTION 5: STYLING (Make the app look professional)
@@ -937,12 +954,14 @@ def get_metrics(_c, t):
     Returns:
         Dictionary with metrics: {total, recent, critical, hotspot}
     """
+    dates = get_dates()  # Get current dates
+    
     # Query for counts
     df = safe_query(_c, f"""
         SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN DATE >= '{WEEK_AGO}' THEN 1 ELSE 0 END) as recent,
-            SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 AND DATE >= '{WEEK_AGO}' THEN 1 ELSE 0 END) as critical
+            SUM(CASE WHEN DATE >= '{dates['week_ago']}' THEN 1 ELSE 0 END) as recent,
+            SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 AND DATE >= '{dates['week_ago']}' THEN 1 ELSE 0 END) as critical
         FROM {t}
     """)
     
@@ -950,7 +969,7 @@ def get_metrics(_c, t):
     hs = safe_query(_c, f"""
         SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND ACTOR_COUNTRY_CODE IS NOT NULL 
         GROUP BY 1 
         ORDER BY 2 DESC 
@@ -980,7 +999,8 @@ def get_alerts(_c, t):
         DataFrame with: MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE
     """
     # Get events from past 3 days with severe negative impact
-    three_days_ago = (NOW - datetime.timedelta(days=3)).strftime('%Y%m%d')
+    now = datetime.datetime.now()  # Get current time
+    three_days_ago = (now - datetime.timedelta(days=3)).strftime('%Y%m%d')
     
     return safe_query(_c, f"""
         SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
@@ -1009,12 +1029,13 @@ def get_headlines(_c, t):
     Returns:
         DataFrame with: DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
         FROM {t} 
         WHERE NEWS_LINK IS NOT NULL 
             AND ARTICLE_COUNT > 5 
-            AND DATE >= '{WEEK_AGO}' 
+            AND DATE >= '{dates['week_ago']}' 
         ORDER BY DATE DESC, ARTICLE_COUNT DESC 
         LIMIT 60
     """)
@@ -1035,10 +1056,11 @@ def get_trending(_c, t):
         DataFrame with: DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, 
                         IMPACT_SCORE, ARTICLE_COUNT
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND ARTICLE_COUNT > 3 
             AND NEWS_LINK IS NOT NULL 
         ORDER BY ARTICLE_COUNT DESC 
@@ -1060,10 +1082,11 @@ def get_feed(_c, t):
     Returns:
         DataFrame with: DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND NEWS_LINK IS NOT NULL 
         ORDER BY DATE DESC 
         LIMIT 60
@@ -1084,10 +1107,11 @@ def get_countries(_c, t):
     Returns:
         DataFrame with: country (country code), events (count)
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT ACTOR_COUNTRY_CODE as country, COUNT(*) as events 
         FROM {t} 
-        WHERE DATE >= '{MONTH_AGO}' 
+        WHERE DATE >= '{dates['month_ago']}' 
             AND ACTOR_COUNTRY_CODE IS NOT NULL 
         GROUP BY 1 
         ORDER BY 2 DESC
@@ -1110,6 +1134,7 @@ def get_timeseries(_c, t):
     Returns:
         DataFrame with: DATE, events, negative, positive
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             DATE, 
@@ -1117,7 +1142,7 @@ def get_timeseries(_c, t):
             SUM(CASE WHEN IMPACT_SCORE < -2 THEN 1 ELSE 0 END) as negative, 
             SUM(CASE WHEN IMPACT_SCORE > 2 THEN 1 ELSE 0 END) as positive 
         FROM {t} 
-        WHERE DATE >= '{MONTH_AGO}' 
+        WHERE DATE >= '{dates['month_ago']}' 
         GROUP BY 1 
         ORDER BY 1
     """)
@@ -1140,6 +1165,7 @@ def get_sentiment(_c, t):
     Returns:
         DataFrame with: avg, neg, pos, total
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             AVG(IMPACT_SCORE) as avg, 
@@ -1147,7 +1173,7 @@ def get_sentiment(_c, t):
             SUM(CASE WHEN IMPACT_SCORE > 3 THEN 1 ELSE 0 END) as pos, 
             COUNT(*) as total 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND IMPACT_SCORE IS NOT NULL
     """)
 
@@ -1166,6 +1192,7 @@ def get_actors(_c, t):
     Returns:
         DataFrame with: MAIN_ACTOR, ACTOR_COUNTRY_CODE, events, avg_impact
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             MAIN_ACTOR, 
@@ -1173,7 +1200,7 @@ def get_actors(_c, t):
             COUNT(*) as events, 
             AVG(IMPACT_SCORE) as avg_impact 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND MAIN_ACTOR IS NOT NULL 
             AND LENGTH(MAIN_ACTOR) > 3 
         GROUP BY 1, 2 
@@ -1202,6 +1229,7 @@ def get_distribution(_c, t):
     Returns:
         DataFrame with: cat (category), cnt (count)
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             CASE 
@@ -1213,7 +1241,7 @@ def get_distribution(_c, t):
             END as cat, 
             COUNT(*) as cnt 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND IMPACT_SCORE IS NOT NULL 
         GROUP BY 1
     """)
@@ -1333,7 +1361,8 @@ def render_metrics(c, t):
     
     # Column 5: Last Updated Time
     with c5:
-        st.metric("📅 UPDATED", NOW.strftime("%H:%M"), NOW.strftime("%d %b"))
+        now = datetime.datetime.now()  # Get current time
+        st.metric("📅 UPDATED", now.strftime("%H:%M"), now.strftime("%d %b"))
         st.markdown('''
             <div style="text-align:center;margin-top:-0.5rem;">
                 <span style="font-size:0.7rem;color:#64748b;">
@@ -1967,6 +1996,9 @@ def render_ai_chat(c, sql_db):
                 return
             
             try:
+                # Get current dates for AI prompt
+                dates = get_dates()
+                
                 # ENHANCED PROMPT FOR AI
                 # This prompt teaches the AI about our database structure
                 # and provides examples of correct SQL queries
@@ -1980,19 +2012,19 @@ CRITICAL: DATE is stored as VARCHAR like '20241206', NOT as date type!
 MANDATORY FILTERS:
 WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE != ''
 
-For recent events (last 7 days), use: DATE >= '{WEEK_AGO}'
+For recent events (last 7 days), use: DATE >= '{dates['week_ago']}'
 
 EXAMPLES:
 1. "top 5 countries by event count":
-SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
+SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
 
 2. "show crisis events":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{WEEK_AGO}' ORDER BY IMPACT_SCORE ASC LIMIT 10
+SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' ORDER BY IMPACT_SCORE ASC LIMIT 10
 
 3. "what happened this week":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC LIMIT 10
+SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' ORDER BY DATE DESC LIMIT 10
 
-DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{WEEK_AGO}'.
+DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{dates['week_ago']}'.
 
 CRISIS = IMPACT_SCORE < -3
 
@@ -2010,7 +2042,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                     
                     # FALLBACK #1: Crisis query
                     if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{WEEK_AGO}' ORDER BY IMPACT_SCORE ASC LIMIT 10"
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' ORDER BY IMPACT_SCORE ASC LIMIT 10"
                         logger.info(f"Using fallback crisis SQL: {sql}")
                         st.info("🔧 Using built-in crisis query")
                     
@@ -2021,13 +2053,13 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         match = re.search(r'top\s+(\d+)', prompt.lower())
                         if match:
                             limit = int(match.group(1))
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
+                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
                         logger.info(f"Using fallback top countries SQL: {sql}")
                         st.info("🔧 Using built-in top countries query")
                     
                     # FALLBACK #3: What happened query
                     if not sql and ('what' in prompt.lower() and ('happen' in prompt.lower() or 'event' in prompt.lower())):
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
                         logger.info(f"Using fallback what happened SQL: {sql}")
                         st.info("🔧 Using built-in recent events query")
                     
