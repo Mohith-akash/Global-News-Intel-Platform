@@ -1959,13 +1959,13 @@ def render_ai_chat(c, sql_db):
     st.markdown('''
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;
                     padding:0.75rem;margin-bottom:1rem;">
-            <span style="color:#64748b;font-size:0.7rem;">💡 EXAMPLE QUESTIONS:</span> 
-            <span style="color:#94a3b8;font-size:0.75rem;">
-                "What major events happened this week?" • 
-                "Top 5 countries by event count" • 
-                "Show crisis-level events" • 
-                "What are the most severe events?"
-            </span>
+            <div style="color:#64748b;font-size:0.7rem;margin-bottom:0.5rem;">💡 EXAMPLE QUESTIONS:</div>
+            <div style="color:#94a3b8;font-size:0.75rem;line-height:1.8;">
+                • "What major events happened this week?"<br>
+                • "Top 5 countries by event count"<br>
+                • "Show crisis-level events"<br>
+                • "What are the most severe events?"
+            </div>
         </div>
     ''', unsafe_allow_html=True)
     
@@ -2211,7 +2211,7 @@ def render_arch():
     
     with c1:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;min-height:260px;">
             <h4 style="color:#06b6d4;font-size:0.9rem;">📥 DATA INGESTION</h4>
             <p style="color:#94a3b8;font-size:0.85rem;">GDELT Project monitors 100+ languages, 100K+ daily events</p>
             <ul style="color:#94a3b8;font-size:0.85rem;">
@@ -2224,7 +2224,7 @@ def render_arch():
         """, unsafe_allow_html=True)
         
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
             <h4 style="color:#10b981;font-size:0.9rem;">🔧 TRANSFORMATION</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;">
                 <li>dbt models for data quality</li>
@@ -2237,7 +2237,7 @@ def render_arch():
     
     with c2:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;min-height:260px;">
             <h4 style="color:#f59e0b;font-size:0.9rem;">🗄️ DATA WAREHOUSE</h4>
             <p style="color:#94a3b8;font-size:0.85rem;">Migrated from Snowflake → MotherDuck</p>
             <ul style="color:#94a3b8;font-size:0.85rem;">
@@ -2252,7 +2252,7 @@ def render_arch():
         """, unsafe_allow_html=True)
         
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
             <h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 AI LAYER</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;">
                 <li>Google Gemini 2.5 Flash</li>
@@ -2312,7 +2312,7 @@ def render_about():
     
     with c1:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:280px;">
             <h4 style="color:#06b6d4;font-size:0.9rem;">🎯 PROJECT GOALS</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
                 <li>Demonstrate production-ready data pipelines</li>
@@ -2326,7 +2326,7 @@ def render_about():
     
     with c2:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:280px;">
             <h4 style="color:#10b981;font-size:0.9rem;">🛠️ TECHNICAL SKILLS</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
                 <li><b>Languages:</b> Python, SQL</li>
