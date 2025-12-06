@@ -126,7 +126,7 @@ def gdelt_raw_data() -> pd.DataFrame:
                 f, 
                 sep='\t', 
                 header=None,
-                usecols=[0, 1, 6, 7, 29, 30, 31, 34, 53, 60],
+                usecols=[0, 1, 6, 7, 29, 30, 31, 34, 60],
                 low_memory=False
             )
         
@@ -140,7 +140,7 @@ def gdelt_raw_data() -> pd.DataFrame:
             "IMPACT_SCORE",          # 30: Goldstein scale
             "ARTICLE_COUNT",         # 31: Mentions
             "SENTIMENT_SCORE",       # 34: Tone
-            "LOCATION_NAME",         # 53: Full location (e.g., "Tokyo, Japan")
+            
             "NEWS_LINK"              # 60: Source URL
         ]
         
