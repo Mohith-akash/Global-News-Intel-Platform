@@ -6,7 +6,7 @@ This application monitors worldwide news events in real-time and displays them
 in an easy-to-understand dashboard with charts, tables, and AI-powered search.
 
 Author: Mohith Akash | Portfolio Project
-Tech Stack: Python, Streamlit, DuckDB, Gemini AI, Plotly
+Tech Stack: Python, Streamlit, DuckDB, Groq AI, Plotly
 """
 
 # ============================================================================
@@ -20,7 +20,7 @@ import pandas as pd                 # Handles data tables (like Excel)
 import plotly.graph_objects as go   # Creates interactive charts
 from plotly.subplots import make_subplots  # Allows multiple charts in one
 from dotenv import load_dotenv      # Loads secret keys from .env file
-from llama_index.llms.google_genai import GoogleGenAI as Gemini  # Google's AI
+from llama_index.llms.groq import Groq  # Groq's AI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding  # AI text understanding
 from llama_index.core import SQLDatabase, Settings  # Database wrapper for AI
 from llama_index.core.query_engine import NLSQLTableQueryEngine  # Converts English to SQL
@@ -31,7 +31,6 @@ import logging                      # Tracks errors and info messages
 import re                           # Pattern matching in text
 from urllib.parse import urlparse, unquote  # Extracts info from web links
 import duckdb                       # Fast database engine
-from google.genai import types
 
 # ============================================================================
 # SECTION 2: INITIAL SETUP (Configure the app before it runs)
@@ -52,14 +51,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gdelt")
 
-gen_config = types.GenerateContentConfig(
-    temperature=0.1,
-    # this is the important bit 👇
-    automatic_function_calling=types.AutomaticFunctionCallingConfig(
-        disable=True
-    ),
-)
-
 # ============================================================================
 # SECTION 3: SECURITY & API KEYS (Get secret passwords safely)
 # ============================================================================
@@ -72,7 +63,7 @@ def get_secret(key):
     We check two places: .env file (local) and Streamlit Cloud (deployment).
     
     Args:
-        key: The name of the secret we're looking for (e.g., "GOOGLE_API_KEY")
+        key: The name of the secret we're looking for (e.g., "GROQ_API_KEY")
     
     Returns:
         The secret value if found, None if not found
@@ -91,7 +82,7 @@ def get_secret(key):
 # List of required API keys - the app won't work without these
 REQUIRED_ENVS = [
     "MOTHERDUCK_TOKEN",  # Access to our cloud database
-    "GOOGLE_API_KEY"     # Access to Google's AI (Gemini)
+    "GROQ_API_KEY"       # Access to Groq's AI (Llama)
 ]
 
 # Check if any required keys are missing
@@ -483,13 +474,13 @@ def safe_query(conn, sql):
         return pd.DataFrame()
 
 # ============================================================================
-# SECTION 8: AI SETUP (Initialize Google's Gemini AI)
+# SECTION 8: AI SETUP (Initialize Groq AI with Llama)
 # ============================================================================
 
 @st.cache_resource  # Only set up AI once
 def get_ai_engine(_engine):
     """
-    Set up Google's Gemini AI to understand our database.
+    Set up Groq AI with Llama to understand our database.
     
     This is like teaching the AI about our data so it can answer questions
     in plain English. The AI learns the table structure and can write SQL
@@ -502,21 +493,21 @@ def get_ai_engine(_engine):
         SQL database wrapper for AI, or None if setup fails
     """
     try:
-        # Get API key for Google's AI service
-        api_key = os.getenv("GOOGLE_API_KEY")
+        # Get API key for Groq's AI service
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key: 
             return None
         
-        # Initialize Gemini LLM (Large Language Model)
-        llm = Gemini(
+        # Initialize Groq LLM (Large Language Model) with Llama
+        llm = Groq(
             api_key=api_key, 
-            model=GEMINI_MODEL,  # Use fast, free tier model
-            generation_config=gen_config,
+            model=GEMINI_MODEL,  # Use llama-3.1-8b-instant
+            temperature=0.1
         )
         
         # Initialize embedding model (converts text to numbers AI can understand)
         embed = GoogleGenAIEmbedding(
-            api_key=api_key, 
+            api_key=os.getenv("GOOGLE_API_KEY") or api_key, 
             model_name="text-embedding-004"
         )
         
@@ -1945,7 +1936,7 @@ def render_ai_chat(c, sql_db):
     - "Top 5 countries by event count"
     - "Show crisis-level events"
     
-    The AI converts these to SQL queries automatically using Google Gemini.
+    The AI converts these to SQL queries automatically using Groq Llama.
     
     Features:
     - Chat history (stores last 8 messages)
@@ -2218,7 +2209,7 @@ def render_arch():
     Display the Architecture page.
     
     Shows:
-    - Pipeline diagram (GDELT → Dagster → dbt → MotherDuck → Gemini → Streamlit)
+    - Pipeline diagram (GDELT → Dagster → dbt → MotherDuck → Groq → Streamlit)
     - 4 component cards (Data Ingestion, Transformation, Data Warehouse, AI Layer)
     - Tech stack badges (12 technologies)
     
@@ -2242,7 +2233,7 @@ def render_arch():
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
         <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🦆 MotherDuck DWH</span>
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Gemini AI</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Groq AI</span>
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
         <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🎨 Streamlit</span>
     </div>
@@ -2297,7 +2288,7 @@ def render_arch():
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
             <h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 AI LAYER</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>Google Gemini 2.5 Flash</li>
+                <li>Groq Llama 3.1 8B</li>
                 <li>LlamaIndex text-to-SQL</li>
                 <li>Natural language queries</li>
                 <li>Free tier usage</li>
@@ -2319,7 +2310,7 @@ def render_arch():
         <span class="tech-badge">🔧 dbt</span>
         <span class="tech-badge">🤖 Gen AI</span>
         <span class="tech-badge">🦙 LlamaIndex</span>
-        <span class="tech-badge">✨ Gemini</span>
+        <span class="tech-badge">⚡ Groq</span>
         <span class="tech-badge">📊 Plotly</span>
         <span class="tech-badge">🎨 Streamlit</span>
         <span class="tech-badge">🔄 GitHub Actions</span>
@@ -2359,7 +2350,7 @@ def render_about():
             <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
                 <li>Demonstrate production-ready data pipelines</li>
                 <li>Showcase modern data stack (Dagster, dbt, DuckDB)</li>
-                <li>Integrate AI/LLM capabilities (Gemini, LlamaIndex)</li>
+                <li>Integrate AI/LLM capabilities (Groq, LlamaIndex)</li>
                 <li>Build scalable, cost-effective architecture</li>
                 <li>Create intuitive data visualizations</li>
             </ul>
@@ -2572,7 +2563,7 @@ def main():
             st.markdown("""
             <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;">
                 <h4 style="color:#06b6d4;font-size:0.85rem;">ℹ️ HOW IT WORKS</h4>
-                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Gemini AI → SQL query → Results with links</p>
+                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Groq AI → SQL query → Results with links</p>
                 <hr style="border-color:#1e3a5f;margin:1rem 0;">
                 <p style="color:#94a3b8;font-size:0.75rem;">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
             </div>
