@@ -111,7 +111,7 @@ for key in REQUIRED_ENVS:
 # SECTION 4: GLOBAL CONSTANTS (Settings used throughout the app)
 # ============================================================================
 
-GEMINI_MODEL = "gemini-2.5-flash-live"  # Which AI model to use (fast and free)
+GEMINI_MODEL = "llama-3.1-8b-instant"  # Which AI model to use (fast and free)
 
 def get_dates():
     """
