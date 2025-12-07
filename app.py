@@ -1958,13 +1958,51 @@ def render_ai_chat(c, sql_db):
         c: Database connection
         sql_db: SQL database wrapper for AI
     """
-    # Initialize chat history in session state
-    if "msgs" not in st.session_state:
-        st.session_state.msgs = [
-            {"role": "assistant", "content": "🌐 Ask me about global news!"}
-        ]
-    
-    # Display example questions
+    if "qa_history" not in st.session_state:
+        st.session_state.qa_history = []
+
+    # Helper to render previous conversations selector
+    if st.session_state.qa_history:
+        # Take all but the latest as "past" and keep only last 5
+        past_convos = st.session_state.qa_history[:-1] if len(st.session_state.qa_history) > 1 else st.session_state.qa_history
+        past_convos = past_convos[-5:]  # up to 5 past convos
+
+        with st.expander("🕒 Previous Conversations", expanded=False):
+            def label_for(idx):
+                q = past_convos[idx]["question"]
+                q = q.strip().replace("\n", " ")
+                return (q[:70] + "…") if len(q) > 70 else q
+
+            selected_idx = st.selectbox(
+                "Select a past question",
+                options=list(range(len(past_convos))),
+                format_func=label_for,
+                key="prev_convo_select"
+            )
+
+            selected = past_convos[selected_idx]
+
+            # Show the selected Q&A in a compact, themed card
+            st.markdown(f"""
+            <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;margin-top:0.5rem;">
+                <div style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem;">💬 Previous Conversation</div>
+                <div style="margin-bottom:0.75rem;">
+                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.25rem;"><b>Q:</b></div>
+                    <div style="font-size:0.8rem;color:#e2e8f0;">{selected['question']}</div>
+                </div>
+                <div>
+                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.25rem;"><b>A:</b></div>
+                    <div style="font-size:0.8rem;color:#e2e8f0;">{selected['answer']}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # If we stored SQL for that convo, show it like a mini SQL trace
+            if selected.get("sql"):
+                with st.expander("🔍 SQL Query (for this conversation)"):
+                    st.code(selected["sql"], language="sql")
+
+    # Info card with example questions
     st.markdown('''
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;
                     padding:0.75rem;margin-bottom:1rem;">
@@ -1977,40 +2015,25 @@ def render_ai_chat(c, sql_db):
             </div>
         </div>
     ''', unsafe_allow_html=True)
-    
-    # Display chat history (last 8 messages only)
-    for msg in st.session_state.msgs[-8:]:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-    
-    # Chat input box
+
+    # We no longer replay the full chat history here – just handle the current interaction.
     prompt = st.chat_input("Ask about global events...", key="chat")
-    
-    # If user submitted a question
+
     if prompt:
-        # Add user message to history
-        st.session_state.msgs.append({"role": "user", "content": prompt})
-        
-        # Display user message
+        # Show current user message
         with st.chat_message("user"):
             st.markdown(prompt)
-        
-        # Generate and display AI response
+
         with st.chat_message("assistant"):
             # Get query engine
             qe = get_query_engine(sql_db)
-            
             if not qe:
                 st.error("❌ AI not available")
                 return
-            
+
             try:
-                # Get current dates for AI prompt
                 dates = get_dates()
-                
-                # ENHANCED PROMPT FOR AI
-                # This prompt teaches the AI about our database structure
-                # and provides examples of correct SQL queries
+
                 short_prompt = f"""Query: "{prompt}"
 
 Table: events_dagster
@@ -2037,110 +2060,115 @@ DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{dat
 
 CRISIS = IMPACT_SCORE < -3
 
+ALWAYS use titled abberviations for countries that are being queried for. For example, US or USA = United States, UK = United Kingdom and so on. It should ALWAYS be titled.
+
 ALWAYS include NEWS_LINK. Write complete SQL only."""
-                
-                # Query the AI with spinner
+
+                sql = None  # we'll fill this if/when we get a SQL query
+
                 with st.spinner("🔍 Querying..."):
                     response = qe.query(short_prompt)
                     answer = str(response)
                     st.markdown(answer)
-                    
-                    # Try to get the SQL query that was generated
+
                     sql = response.metadata.get('sql_query')
                     logger.info(f"Generated SQL: {sql}")
-                    
+
                     # FALLBACK #1: Crisis query
                     if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' ORDER BY IMPACT_SCORE ASC LIMIT 10"
+                        sql = (
+                            "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                            "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                            f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' "
+                            "ORDER BY IMPACT_SCORE ASC LIMIT 10"
+                        )
                         logger.info(f"Using fallback crisis SQL: {sql}")
                         st.info("🔧 Using built-in crisis query")
-                    
+
                     # FALLBACK #2: Top countries query
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
-                        limit = 5  # default
-                        import re
-                        match = re.search(r'top\s+(\d+)', prompt.lower())
+                        limit = 5
+                        import re as _re
+                        match = _re.search(r'top\s+(\d+)', prompt.lower())
                         if match:
                             limit = int(match.group(1))
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
+                        sql = (
+                            "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
+                        )
                         logger.info(f"Using fallback top countries SQL: {sql}")
                         st.info("🔧 Using built-in top countries query")
-                    
+
                     # FALLBACK #3: What happened query
                     if not sql and ('what' in prompt.lower() and ('happen' in prompt.lower() or 'event' in prompt.lower())):
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
-                        logger.info(f"Using fallback what happened SQL: {sql}")
+                        sql = (
+                            "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                            "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND DATE >= '{dates['week_ago']}' "
+                            "ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
+                        )
+                        logger.info(f"Using fallback recent events SQL: {sql}")
                         st.info("🔧 Using built-in recent events query")
-                    
-                    # If we have SQL, execute it and display results
+
                     if sql:
                         data = safe_query(c, sql)
-                        
+
                         if not data.empty:
                             data_display = data.copy()
                             data_display.columns = [c.upper() for c in data_display.columns]
-                            
-                            # Remove unwanted columns
+
                             if 'EVENT_ID' in data_display.columns:
                                 data_display = data_display.drop(columns=['EVENT_ID'])
-                            
-                            # Convert country codes to names
+
                             if 'ACTOR_COUNTRY_CODE' in data_display.columns:
                                 data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
                                     lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
                                 )
-                                # Remove rows where conversion failed
                                 data_display = data_display[data_display['COUNTRY'].notna()]
                                 data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
-                            
-                            # Rename COUNT columns to EVENTS
+
                             if 'COUNT(*)' in data_display.columns:
                                 data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
                             elif 'COUNT' in data_display.columns:
                                 data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
-                            
-                            # Add severity labels
+
                             if 'IMPACT_SCORE' in data_display.columns:
                                 data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
-                            
-                            # Format dates
+
                             if 'DATE' in data_display.columns:
                                 try:
                                     data_display['DATE'] = pd.to_datetime(
                                         data_display['DATE'].astype(str), format='%Y%m%d'
                                     ).dt.strftime('%d/%m')
-                                except: 
+                                except:
                                     pass
-                            
-                            # AGGRESSIVE NULL/UNKNOWN FILTERING
+
                             for col in data_display.columns:
                                 if data_display[col].dtype == 'object':
                                     data_display = data_display[
-                                        (data_display[col].notna()) & 
-                                        (data_display[col].astype(str) != 'None') & 
+                                        (data_display[col].notna()) &
+                                        (data_display[col].astype(str) != 'None') &
                                         (data_display[col].astype(str) != '') &
                                         (data_display[col].astype(str) != 'Unknown')
                                     ]
-                            
-                            # Rename link column for display
+
                             if 'NEWS_LINK' in data_display.columns:
                                 data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
-                            
-                            # Smart column ordering
+
                             if 'EVENTS' in data_display.columns:
-                                # Aggregated query (like "top countries")
                                 preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
                             else:
-                                # Detail query (like "what happened")
                                 preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
-                            
-                            # Build final column order (preferred + others + links at end)
+
                             link_cols = [c for c in data_display.columns if '🔗' in c]
                             other_cols = [c for c in data_display.columns if c not in preferred_order and c not in link_cols]
                             final_order = [c for c in preferred_order if c in data_display.columns] + other_cols + link_cols
                             data_display = data_display[final_order]
-                            
-                            # Configure column display
+
                             col_config = {
                                 "DATE": st.column_config.TextColumn("DATE", width="small"),
                                 "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
@@ -2152,27 +2180,32 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             }
                             for col in link_cols:
                                 col_config[col] = st.column_config.LinkColumn(col, width="small")
-                            
-                            # Display results table
+
                             if not data_display.empty:
-                                st.dataframe(data_display.head(10), hide_index=True, width='stretch', column_config=col_config)
+                                st.dataframe(
+                                    data_display.head(10),
+                                    hide_index=True,
+                                    width='stretch',
+                                    column_config=col_config
+                                )
                             else:
                                 st.info("📭 No valid results after filtering")
                         else:
                             st.warning("📭 No results found")
-                        
-                        # Show generated SQL in expandable section
+
                         with st.expander("🔍 SQL Query"):
                             st.code(sql, language='sql')
                     else:
-                        # No SQL generated even after fallbacks
                         st.warning("⚠️ Could not generate SQL query. Try rephrasing your question or use one of the examples above.")
-                    
-                    # Add AI response to history
-                    st.session_state.msgs.append({"role": "assistant", "content": answer})
-            
+
+                    # Save this Q&A (and SQL if any) into compact history
+                    st.session_state.qa_history.append({
+                        "question": prompt,
+                        "answer": answer,
+                        "sql": sql
+                    })
+
             except Exception as e:
-                # Handle errors gracefully
                 error_msg = str(e)
                 if "MAX_TOKENS" in error_msg:
                     st.error("⚠️ Response too long. Try: 'Top 5 countries by event count'")
