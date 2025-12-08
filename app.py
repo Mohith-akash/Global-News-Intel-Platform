@@ -20,8 +20,7 @@ import pandas as pd                 # Handles data tables (like Excel)
 import plotly.graph_objects as go   # Creates interactive charts
 from plotly.subplots import make_subplots  # Allows multiple charts in one
 from dotenv import load_dotenv      # Loads secret keys from .env file
-from llama_index.llms.groq import Groq  # Groq's AI for SQL generation
-from llama_index.llms.cerebras import Cerebras  # Cerebras AI for answer generation
+from llama_index.llms.groq import Groq  # Groq's AI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding  # AI text understanding
 from llama_index.core import SQLDatabase, Settings  # Database wrapper for AI
 from llama_index.core.query_engine import NLSQLTableQueryEngine  # Converts English to SQL
@@ -82,9 +81,8 @@ def get_secret(key):
 
 # List of required API keys - the app won't work without these
 REQUIRED_ENVS = [
-    "MOTHERDUCK_TOKEN",   # Access to our cloud database
-    "GROQ_API_KEY",       # Access to Groq's AI (SQL generation)
-    "CEREBRAS_API_KEY"    # Access to Cerebras AI (answer generation)
+    "MOTHERDUCK_TOKEN",  # Access to our cloud database
+    "GROQ_API_KEY"       # Access to Groq's AI (Llama)
 ]
 
 # Check if any required keys are missing
@@ -568,37 +566,6 @@ def get_query_engine(_sql_db):
         return NLSQLTableQueryEngine(sql_database=_sql_db)
     
     except:
-        return None
-
-@st.cache_resource  # Cache the Cerebras LLM
-def get_cerebras_llm():
-    """
-    Initialize Cerebras LLM for generating answers from query results.
-    
-    This splits API usage to avoid rate limits:
-    - Groq: Generates SQL queries (~500 tokens, 6k/min limit)
-    - Cerebras: Generates answers from results (~1500+ tokens, better limits)
-    
-    Returns:
-        Cerebras LLM instance, or None if API key missing
-    """
-    try:
-        api_key = os.getenv("CEREBRAS_API_KEY")
-        if not api_key:
-            logger.warning("CEREBRAS_API_KEY not found")
-            return None
-        
-        cerebras_llm = Cerebras(
-            api_key=api_key,
-            model="llama3.1-8b",  # Cerebras Llama model
-            temperature=0.1       # Low temp for factual responses
-        )
-        
-        logger.info("Cerebras LLM initialized successfully")
-        return cerebras_llm
-    
-    except Exception as e:
-        logger.error(f"Failed to initialize Cerebras: {e}")
         return None
 
 # ============================================================================
@@ -2049,16 +2016,10 @@ def render_ai_chat(c, sql_db):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # Get query engine (uses Groq for SQL generation)
+            # Get query engine
             qe = get_query_engine(sql_db)
             if not qe:
                 st.error("❌ AI not available")
-                return
-            
-            # Get Cerebras LLM (for answer generation from results)
-            cerebras_llm = get_cerebras_llm()
-            if not cerebras_llm:
-                st.error("❌ Cerebras AI not available")
                 return
 
             try:
@@ -2075,6 +2036,8 @@ MANDATORY FILTERS:
 WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE != ''
 
 For recent events (last 7 days), use: DATE >= '{dates['week_ago']}'
+
+AN 'ACTOR' is a person, organization, or entity involved in an event. Not related to film/TV actors.
 
 EXAMPLES:
 1. "top 5 countries by event count":
@@ -2116,7 +2079,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         st.info("🔧 Using built-in crisis query")
 
                     # FALLBACK #2: Top countries query
-                    if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
+                    if not sql and ('top' in prompt.lower() and 'country' in prompt.lower()):
                         limit = 5
                         import re as _re
                         match = _re.search(r'top\s+(\d+)', prompt.lower())
@@ -2145,20 +2108,19 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
 
                     # STEP 2: Execute SQL and get results
                     if sql:
-                        data = safe_query(c, sql)
+                        data = safe_query(c, sql.replace('USA', 'United States'))
                         
                         if not data.empty:
-                            # STEP 3: Generate natural language answer from actual results using Cerebras
+                            # STEP 3: Generate natural language answer from actual results
                             new_prompt = f"""Query: {prompt}
 
 Use the data below to generate a natural language answer to the query:
 
 {data.to_string()}
 
-Provide a clear, concise answer based on this data."""
+Provide a clear, concise answer based on this data. Do not add 'Based on the data...' preamble. If no relevant data, say 'No results found'."""
                             
-                            # Use Cerebras (not Groq) to avoid rate limits on heavy token operations
-                            response_og = cerebras_llm.complete(new_prompt)
+                            response_og = qe.query(new_prompt)
                             answer = str(response_og)
                             st.markdown(answer)
                         else:
