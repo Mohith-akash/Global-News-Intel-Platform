@@ -6,7 +6,7 @@ This application monitors worldwide news events in real-time and displays them
 in an easy-to-understand dashboard with charts, tables, and AI-powered search.
 
 Author: Mohith Akash | Portfolio Project
-Tech Stack: Python, Streamlit, DuckDB, Gemini AI, Plotly
+Tech Stack: Python, Streamlit, DuckDB, Groq AI, Plotly
 """
 
 # ============================================================================
@@ -20,7 +20,8 @@ import pandas as pd                 # Handles data tables (like Excel)
 import plotly.graph_objects as go   # Creates interactive charts
 from plotly.subplots import make_subplots  # Allows multiple charts in one
 from dotenv import load_dotenv      # Loads secret keys from .env file
-from llama_index.llms.google_genai import GoogleGenAI as Gemini  # Google's AI
+from llama_index.llms.groq import Groq  # Groq's AI for SQL generation
+from llama_index.llms.cerebras import Cerebras  # Cerebras AI for answer generation
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding  # AI text understanding
 from llama_index.core import SQLDatabase, Settings  # Database wrapper for AI
 from llama_index.core.query_engine import NLSQLTableQueryEngine  # Converts English to SQL
@@ -63,7 +64,7 @@ def get_secret(key):
     We check two places: .env file (local) and Streamlit Cloud (deployment).
     
     Args:
-        key: The name of the secret we're looking for (e.g., "GOOGLE_API_KEY")
+        key: The name of the secret we're looking for (e.g., "GROQ_API_KEY")
     
     Returns:
         The secret value if found, None if not found
@@ -81,8 +82,9 @@ def get_secret(key):
 
 # List of required API keys - the app won't work without these
 REQUIRED_ENVS = [
-    "MOTHERDUCK_TOKEN",  # Access to our cloud database
-    "GOOGLE_API_KEY"     # Access to Google's AI (Gemini)
+    "MOTHERDUCK_TOKEN",   # Access to our cloud database
+    "GROQ_API_KEY",       # Access to Groq's AI (SQL generation)
+    "CEREBRAS_API_KEY"    # Access to Cerebras AI (answer generation)
 ]
 
 # Check if any required keys are missing
@@ -102,10 +104,27 @@ for key in REQUIRED_ENVS:
 # SECTION 4: GLOBAL CONSTANTS (Settings used throughout the app)
 # ============================================================================
 
-GEMINI_MODEL = "gemini-2.5-flash-lite"  # Which AI model to use (fast and free)
-NOW = datetime.datetime.now()           # Current date and time
-WEEK_AGO = (NOW - datetime.timedelta(days=7)).strftime('%Y%m%d')    # 7 days ago (e.g., 20241129)
-MONTH_AGO = (NOW - datetime.timedelta(days=30)).strftime('%Y%m%d')  # 30 days ago (e.g., 20241106)
+GEMINI_MODEL = "llama-3.1-8b-instant"  # Which AI model to use (fast and free)
+
+def get_dates():
+    """
+    Get current date and calculated date ranges.
+    
+    IMPORTANT: This function is called every time to ensure dates are always current.
+    If we calculated these once at module level, they would become stale as the 
+    server stays running for days/weeks.
+    
+    Returns:
+        dict with: now, week_ago, month_ago (all as strings in YYYYMMDD format)
+    """
+    now = datetime.datetime.now()
+    week_ago = (now - datetime.timedelta(days=7)).strftime('%Y%m%d')
+    month_ago = (now - datetime.timedelta(days=30)).strftime('%Y%m%d')
+    return {
+        'now': now,
+        'week_ago': week_ago,
+        'month_ago': month_ago
+    }
 
 # ============================================================================
 # SECTION 5: STYLING (Make the app look professional)
@@ -457,13 +476,13 @@ def safe_query(conn, sql):
         return pd.DataFrame()
 
 # ============================================================================
-# SECTION 8: AI SETUP (Initialize Google's Gemini AI)
+# SECTION 8: AI SETUP (Initialize Groq AI with Llama)
 # ============================================================================
 
 @st.cache_resource  # Only set up AI once
 def get_ai_engine(_engine):
     """
-    Set up Google's Gemini AI to understand our database.
+    Set up Groq AI with Llama to understand our database.
     
     This is like teaching the AI about our data so it can answer questions
     in plain English. The AI learns the table structure and can write SQL
@@ -476,21 +495,21 @@ def get_ai_engine(_engine):
         SQL database wrapper for AI, or None if setup fails
     """
     try:
-        # Get API key for Google's AI service
-        api_key = os.getenv("GOOGLE_API_KEY")
+        # Get API key for Groq's AI service
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key: 
             return None
         
-        # Initialize Gemini LLM (Large Language Model)
-        llm = Gemini(
+        # Initialize Groq LLM (Large Language Model) with Llama
+        llm = Groq(
             api_key=api_key, 
-            model=GEMINI_MODEL,  # Use fast, free tier model
-            temperature=0.1       # Low temperature = more focused, less creative
+            model=GEMINI_MODEL,  # Use llama-3.1-8b-instant
+            temperature=0.1
         )
         
         # Initialize embedding model (converts text to numbers AI can understand)
         embed = GoogleGenAIEmbedding(
-            api_key=api_key, 
+            api_key=os.getenv("GOOGLE_API_KEY") or api_key, 
             model_name="text-embedding-004"
         )
         
@@ -549,6 +568,37 @@ def get_query_engine(_sql_db):
         return NLSQLTableQueryEngine(sql_database=_sql_db)
     
     except:
+        return None
+
+@st.cache_resource  # Cache the Cerebras LLM
+def get_cerebras_llm():
+    """
+    Initialize Cerebras LLM for generating answers from query results.
+    
+    This splits API usage to avoid rate limits:
+    - Groq: Generates SQL queries (~500 tokens, 6k/min limit)
+    - Cerebras: Generates answers from results (~1500+ tokens, better limits)
+    
+    Returns:
+        Cerebras LLM instance, or None if API key missing
+    """
+    try:
+        api_key = os.getenv("CEREBRAS_API_KEY")
+        if not api_key:
+            logger.warning("CEREBRAS_API_KEY not found")
+            return None
+        
+        cerebras_llm = Cerebras(
+            api_key=api_key,
+            model="llama3.1-8b",  # Cerebras Llama model
+            temperature=0.1       # Low temp for factual responses
+        )
+        
+        logger.info("Cerebras LLM initialized successfully")
+        return cerebras_llm
+    
+    except Exception as e:
+        logger.error(f"Failed to initialize Cerebras: {e}")
         return None
 
 # ============================================================================
@@ -937,12 +987,14 @@ def get_metrics(_c, t):
     Returns:
         Dictionary with metrics: {total, recent, critical, hotspot}
     """
+    dates = get_dates()  # Get current dates
+    
     # Query for counts
     df = safe_query(_c, f"""
         SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN DATE >= '{WEEK_AGO}' THEN 1 ELSE 0 END) as recent,
-            SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 AND DATE >= '{WEEK_AGO}' THEN 1 ELSE 0 END) as critical
+            SUM(CASE WHEN DATE >= '{dates['week_ago']}' THEN 1 ELSE 0 END) as recent,
+            SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 AND DATE >= '{dates['week_ago']}' THEN 1 ELSE 0 END) as critical
         FROM {t}
     """)
     
@@ -950,7 +1002,7 @@ def get_metrics(_c, t):
     hs = safe_query(_c, f"""
         SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND ACTOR_COUNTRY_CODE IS NOT NULL 
         GROUP BY 1 
         ORDER BY 2 DESC 
@@ -980,7 +1032,8 @@ def get_alerts(_c, t):
         DataFrame with: MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE
     """
     # Get events from past 3 days with severe negative impact
-    three_days_ago = (NOW - datetime.timedelta(days=3)).strftime('%Y%m%d')
+    now = datetime.datetime.now()  # Get current time
+    three_days_ago = (now - datetime.timedelta(days=3)).strftime('%Y%m%d')
     
     return safe_query(_c, f"""
         SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
@@ -1009,12 +1062,13 @@ def get_headlines(_c, t):
     Returns:
         DataFrame with: DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
         FROM {t} 
         WHERE NEWS_LINK IS NOT NULL 
             AND ARTICLE_COUNT > 5 
-            AND DATE >= '{WEEK_AGO}' 
+            AND DATE >= '{dates['week_ago']}' 
         ORDER BY DATE DESC, ARTICLE_COUNT DESC 
         LIMIT 60
     """)
@@ -1035,10 +1089,11 @@ def get_trending(_c, t):
         DataFrame with: DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, 
                         IMPACT_SCORE, ARTICLE_COUNT
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND ARTICLE_COUNT > 3 
             AND NEWS_LINK IS NOT NULL 
         ORDER BY ARTICLE_COUNT DESC 
@@ -1060,10 +1115,11 @@ def get_feed(_c, t):
     Returns:
         DataFrame with: DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND NEWS_LINK IS NOT NULL 
         ORDER BY DATE DESC 
         LIMIT 60
@@ -1084,10 +1140,11 @@ def get_countries(_c, t):
     Returns:
         DataFrame with: country (country code), events (count)
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT ACTOR_COUNTRY_CODE as country, COUNT(*) as events 
         FROM {t} 
-        WHERE DATE >= '{MONTH_AGO}' 
+        WHERE DATE >= '{dates['month_ago']}' 
             AND ACTOR_COUNTRY_CODE IS NOT NULL 
         GROUP BY 1 
         ORDER BY 2 DESC
@@ -1110,6 +1167,7 @@ def get_timeseries(_c, t):
     Returns:
         DataFrame with: DATE, events, negative, positive
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             DATE, 
@@ -1117,7 +1175,7 @@ def get_timeseries(_c, t):
             SUM(CASE WHEN IMPACT_SCORE < -2 THEN 1 ELSE 0 END) as negative, 
             SUM(CASE WHEN IMPACT_SCORE > 2 THEN 1 ELSE 0 END) as positive 
         FROM {t} 
-        WHERE DATE >= '{MONTH_AGO}' 
+        WHERE DATE >= '{dates['month_ago']}' 
         GROUP BY 1 
         ORDER BY 1
     """)
@@ -1140,6 +1198,7 @@ def get_sentiment(_c, t):
     Returns:
         DataFrame with: avg, neg, pos, total
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             AVG(IMPACT_SCORE) as avg, 
@@ -1147,7 +1206,7 @@ def get_sentiment(_c, t):
             SUM(CASE WHEN IMPACT_SCORE > 3 THEN 1 ELSE 0 END) as pos, 
             COUNT(*) as total 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND IMPACT_SCORE IS NOT NULL
     """)
 
@@ -1166,6 +1225,7 @@ def get_actors(_c, t):
     Returns:
         DataFrame with: MAIN_ACTOR, ACTOR_COUNTRY_CODE, events, avg_impact
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             MAIN_ACTOR, 
@@ -1173,7 +1233,7 @@ def get_actors(_c, t):
             COUNT(*) as events, 
             AVG(IMPACT_SCORE) as avg_impact 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND MAIN_ACTOR IS NOT NULL 
             AND LENGTH(MAIN_ACTOR) > 3 
         GROUP BY 1, 2 
@@ -1202,6 +1262,7 @@ def get_distribution(_c, t):
     Returns:
         DataFrame with: cat (category), cnt (count)
     """
+    dates = get_dates()  # Get current dates
     return safe_query(_c, f"""
         SELECT 
             CASE 
@@ -1213,7 +1274,7 @@ def get_distribution(_c, t):
             END as cat, 
             COUNT(*) as cnt 
         FROM {t} 
-        WHERE DATE >= '{WEEK_AGO}' 
+        WHERE DATE >= '{dates['week_ago']}' 
             AND IMPACT_SCORE IS NOT NULL 
         GROUP BY 1
     """)
@@ -1333,7 +1394,8 @@ def render_metrics(c, t):
     
     # Column 5: Last Updated Time
     with c5:
-        st.metric("📅 UPDATED", NOW.strftime("%H:%M"), NOW.strftime("%d %b"))
+        now = datetime.datetime.now()  # Get current time
+        st.metric("📅 UPDATED", now.strftime("%H:%M"), now.strftime("%d %b"))
         st.markdown('''
             <div style="text-align:center;margin-top:-0.5rem;">
                 <span style="font-size:0.7rem;color:#64748b;">
@@ -1907,7 +1969,7 @@ def render_ai_chat(c, sql_db):
     - "Top 5 countries by event count"
     - "Show crisis-level events"
     
-    The AI converts these to SQL queries automatically using Google Gemini.
+    The AI converts these to SQL queries automatically using Groq Llama.
     
     Features:
     - Chat history (stores last 8 messages)
@@ -1920,56 +1982,88 @@ def render_ai_chat(c, sql_db):
         c: Database connection
         sql_db: SQL database wrapper for AI
     """
-    # Initialize chat history in session state
-    if "msgs" not in st.session_state:
-        st.session_state.msgs = [
-            {"role": "assistant", "content": "🌐 Ask me about global news!"}
-        ]
-    
-    # Display example questions
+    if "qa_history" not in st.session_state:
+        st.session_state.qa_history = []
+
+    # Helper to render previous conversations selector
+    if st.session_state.qa_history:
+        # Take all but the latest as "past" and keep only last 5
+        past_convos = st.session_state.qa_history[:-1] if len(st.session_state.qa_history) > 1 else st.session_state.qa_history
+        past_convos = past_convos[-5:]  # up to 5 past convos
+
+        with st.expander("🕒 Previous Conversations", expanded=False):
+            def label_for(idx):
+                q = past_convos[idx]["question"]
+                q = q.strip().replace("\n", " ")
+                return (q[:70] + "…") if len(q) > 70 else q
+
+            selected_idx = st.selectbox(
+                "Select a past question",
+                options=list(range(len(past_convos))),
+                format_func=label_for,
+                key="prev_convo_select"
+            )
+
+            selected = past_convos[selected_idx]
+
+            # Show the selected Q&A in a compact, themed card
+            st.markdown(f"""
+            <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;margin-top:0.5rem;">
+                <div style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem;">💬 Previous Conversation</div>
+                <div style="margin-bottom:0.75rem;">
+                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.25rem;"><b>Q:</b></div>
+                    <div style="font-size:0.8rem;color:#e2e8f0;">{selected['question']}</div>
+                </div>
+                <div>
+                    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:0.25rem;"><b>A:</b></div>
+                    <div style="font-size:0.8rem;color:#e2e8f0;">{selected['answer']}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # If we stored SQL for that convo, show it like a mini SQL trace
+            if selected.get("sql"):
+                with st.expander("🔍 SQL Query (for this conversation)"):
+                    st.code(selected["sql"], language="sql")
+
+    # Info card with example questions
     st.markdown('''
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;
                     padding:0.75rem;margin-bottom:1rem;">
-            <span style="color:#64748b;font-size:0.7rem;">💡 EXAMPLE QUESTIONS:</span> 
-            <span style="color:#94a3b8;font-size:0.75rem;">
-                "What major events happened this week?" • 
-                "Top 5 countries by event count" • 
-                "Show crisis-level events" • 
-                "What are the most severe events?"
-            </span>
+            <div style="color:#64748b;font-size:0.7rem;margin-bottom:0.5rem;">💡 EXAMPLE QUESTIONS:</div>
+            <div style="color:#94a3b8;font-size:0.75rem;line-height:1.8;">
+                • "What major events happened this week?"<br>
+                • "Top 5 countries by event count"<br>
+                • "Show crisis-level events"<br>
+                • "What are the most severe events?"
+            </div>
         </div>
     ''', unsafe_allow_html=True)
-    
-    # Display chat history (last 8 messages only)
-    for msg in st.session_state.msgs[-8:]:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-    
-    # Chat input box
+
+    # We no longer replay the full chat history here – just handle the current interaction.
     prompt = st.chat_input("Ask about global events...", key="chat")
-    
-    # If user submitted a question
+
     if prompt:
-        # Add user message to history
-        st.session_state.msgs.append({"role": "user", "content": prompt})
-        
-        # Display user message
+        # Show current user message
         with st.chat_message("user"):
             st.markdown(prompt)
-        
-        # Generate and display AI response
+
         with st.chat_message("assistant"):
-            # Get query engine
+            # Get query engine (uses Groq for SQL generation)
             qe = get_query_engine(sql_db)
-            
             if not qe:
                 st.error("❌ AI not available")
                 return
             
+            # Get Cerebras LLM (for answer generation from results)
+            cerebras_llm = get_cerebras_llm()
+            if not cerebras_llm:
+                st.error("❌ Cerebras AI not available")
+                return
+
             try:
-                # ENHANCED PROMPT FOR AI
-                # This prompt teaches the AI about our database structure
-                # and provides examples of correct SQL queries
+                dates = get_dates()
+
                 short_prompt = f"""Query: "{prompt}"
 
 Table: events_dagster
@@ -1980,158 +2074,188 @@ CRITICAL: DATE is stored as VARCHAR like '20241206', NOT as date type!
 MANDATORY FILTERS:
 WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE != ''
 
-For recent events (last 7 days), use: DATE >= '{WEEK_AGO}'
+For recent events (last 7 days), use: DATE >= '{dates['week_ago']}'
 
 EXAMPLES:
 1. "top 5 countries by event count":
-SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
+SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
 
 2. "show crisis events":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{WEEK_AGO}' ORDER BY IMPACT_SCORE ASC LIMIT 10
+SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' ORDER BY IMPACT_SCORE ASC LIMIT 10
 
 3. "what happened this week":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC LIMIT 10
+SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' ORDER BY DATE DESC LIMIT 10
 
-DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{WEEK_AGO}'.
+DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{dates['week_ago']}'.
 
 CRISIS = IMPACT_SCORE < -3
 
+ALWAYS use titled abberviations for countries that are being queried for. For example, US or USA = United States, UK = United Kingdom and so on. It should ALWAYS be titled.
+
 ALWAYS include NEWS_LINK. Write complete SQL only."""
-                
-                # Query the AI with spinner
+
+                sql = None  # we'll fill this if/when we get a SQL query
+                data = None  # will hold query results
+
                 with st.spinner("🔍 Querying..."):
+                    # STEP 1: Get SQL query from AI
                     response = qe.query(short_prompt)
-                    answer = str(response)
-                    st.markdown(answer)
-                    
-                    # Try to get the SQL query that was generated
                     sql = response.metadata.get('sql_query')
                     logger.info(f"Generated SQL: {sql}")
-                    
+
                     # FALLBACK #1: Crisis query
                     if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{WEEK_AGO}' ORDER BY IMPACT_SCORE ASC LIMIT 10"
+                        sql = (
+                            "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                            "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                            f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' "
+                            "ORDER BY IMPACT_SCORE ASC LIMIT 10"
+                        )
                         logger.info(f"Using fallback crisis SQL: {sql}")
                         st.info("🔧 Using built-in crisis query")
-                    
+
                     # FALLBACK #2: Top countries query
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
-                        limit = 5  # default
-                        import re
-                        match = re.search(r'top\s+(\d+)', prompt.lower())
+                        limit = 5
+                        import re as _re
+                        match = _re.search(r'top\s+(\d+)', prompt.lower())
                         if match:
                             limit = int(match.group(1))
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
+                        sql = (
+                            "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
+                        )
                         logger.info(f"Using fallback top countries SQL: {sql}")
                         st.info("🔧 Using built-in top countries query")
-                    
+
                     # FALLBACK #3: What happened query
                     if not sql and ('what' in prompt.lower() and ('happen' in prompt.lower() or 'event' in prompt.lower())):
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{WEEK_AGO}' ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
-                        logger.info(f"Using fallback what happened SQL: {sql}")
+                        sql = (
+                            "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                            "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND DATE >= '{dates['week_ago']}' "
+                            "ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
+                        )
+                        logger.info(f"Using fallback recent events SQL: {sql}")
                         st.info("🔧 Using built-in recent events query")
-                    
-                    # If we have SQL, execute it and display results
+
+                    # STEP 2: Execute SQL and get results
                     if sql:
                         data = safe_query(c, sql)
                         
                         if not data.empty:
-                            data_display = data.copy()
-                            data_display.columns = [c.upper() for c in data_display.columns]
+                            # STEP 3: Generate natural language answer from actual results using Cerebras
+                            new_prompt = f"""Query: {prompt}
+
+Use the data below to generate a natural language answer to the query:
+
+{data.to_string()}
+
+Provide a clear, concise answer based on this data."""
                             
-                            # Remove unwanted columns
-                            if 'EVENT_ID' in data_display.columns:
-                                data_display = data_display.drop(columns=['EVENT_ID'])
-                            
-                            # Convert country codes to names
-                            if 'ACTOR_COUNTRY_CODE' in data_display.columns:
-                                data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
-                                    lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
-                                )
-                                # Remove rows where conversion failed
-                                data_display = data_display[data_display['COUNTRY'].notna()]
-                                data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
-                            
-                            # Rename COUNT columns to EVENTS
-                            if 'COUNT(*)' in data_display.columns:
-                                data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
-                            elif 'COUNT' in data_display.columns:
-                                data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
-                            
-                            # Add severity labels
-                            if 'IMPACT_SCORE' in data_display.columns:
-                                data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
-                            
-                            # Format dates
-                            if 'DATE' in data_display.columns:
-                                try:
-                                    data_display['DATE'] = pd.to_datetime(
-                                        data_display['DATE'].astype(str), format='%Y%m%d'
-                                    ).dt.strftime('%d/%m')
-                                except: 
-                                    pass
-                            
-                            # AGGRESSIVE NULL/UNKNOWN FILTERING
-                            for col in data_display.columns:
-                                if data_display[col].dtype == 'object':
-                                    data_display = data_display[
-                                        (data_display[col].notna()) & 
-                                        (data_display[col].astype(str) != 'None') & 
-                                        (data_display[col].astype(str) != '') &
-                                        (data_display[col].astype(str) != 'Unknown')
-                                    ]
-                            
-                            # Rename link column for display
-                            if 'NEWS_LINK' in data_display.columns:
-                                data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
-                            
-                            # Smart column ordering
-                            if 'EVENTS' in data_display.columns:
-                                # Aggregated query (like "top countries")
-                                preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
-                            else:
-                                # Detail query (like "what happened")
-                                preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
-                            
-                            # Build final column order (preferred + others + links at end)
-                            link_cols = [c for c in data_display.columns if '🔗' in c]
-                            other_cols = [c for c in data_display.columns if c not in preferred_order and c not in link_cols]
-                            final_order = [c for c in preferred_order if c in data_display.columns] + other_cols + link_cols
-                            data_display = data_display[final_order]
-                            
-                            # Configure column display
-                            col_config = {
-                                "DATE": st.column_config.TextColumn("DATE", width="small"),
-                                "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
-                                "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
-                                "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
-                                "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
-                                "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
-                                "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
-                            }
-                            for col in link_cols:
-                                col_config[col] = st.column_config.LinkColumn(col, width="small")
-                            
-                            # Display results table
-                            if not data_display.empty:
-                                st.dataframe(data_display.head(10), hide_index=True, width='stretch', column_config=col_config)
-                            else:
-                                st.info("📭 No valid results after filtering")
+                            # Use Cerebras (not Groq) to avoid rate limits on heavy token operations
+                            response_og = cerebras_llm.complete(new_prompt)
+                            answer = str(response_og)
+                            st.markdown(answer)
                         else:
                             st.warning("📭 No results found")
-                        
-                        # Show generated SQL in expandable section
+                            answer = "No results found for your query."
+                    else:
+                        # No SQL generated, show original AI response
+                        answer = str(response)
+                        st.markdown(answer)
+                        st.warning("⚠️ Could not generate SQL query. Try rephrasing your question or use one of the examples above.")
+
+                    # Now continue with table display if we have SQL and data
+                    if sql and data is not None and not data.empty:
+                        data_display = data.copy()
+                        data_display.columns = [c.upper() for c in data_display.columns]
+
+                        if 'EVENT_ID' in data_display.columns:
+                            data_display = data_display.drop(columns=['EVENT_ID'])
+
+                        if 'ACTOR_COUNTRY_CODE' in data_display.columns:
+                            data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
+                                lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
+                            )
+                            data_display = data_display[data_display['COUNTRY'].notna()]
+                            data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
+
+                        if 'COUNT(*)' in data_display.columns:
+                            data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
+                        elif 'COUNT' in data_display.columns:
+                            data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
+
+                        if 'IMPACT_SCORE' in data_display.columns:
+                            data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
+
+                        if 'DATE' in data_display.columns:
+                            try:
+                                data_display['DATE'] = pd.to_datetime(
+                                    data_display['DATE'].astype(str), format='%Y%m%d'
+                                ).dt.strftime('%d/%m')
+                            except:
+                                pass
+
+                        for col in data_display.columns:
+                            if data_display[col].dtype == 'object':
+                                data_display = data_display[
+                                    (data_display[col].notna()) &
+                                    (data_display[col].astype(str) != 'None') &
+                                    (data_display[col].astype(str) != '') &
+                                    (data_display[col].astype(str) != 'Unknown')
+                                ]
+
+                        if 'NEWS_LINK' in data_display.columns:
+                            data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
+
+                        if 'EVENTS' in data_display.columns:
+                            preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
+                        else:
+                            preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
+
+                        link_cols = [c for c in data_display.columns if '🔗' in c]
+                        other_cols = [c for c in data_display.columns if c not in preferred_order and c not in link_cols]
+                        final_order = [c for c in preferred_order if c in data_display.columns] + other_cols + link_cols
+                        data_display = data_display[final_order]
+
+                        col_config = {
+                            "DATE": st.column_config.TextColumn("DATE", width="small"),
+                            "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
+                            "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
+                            "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
+                            "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
+                            "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
+                            "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
+                        }
+                        for col in link_cols:
+                            col_config[col] = st.column_config.LinkColumn(col, width="small")
+
+                        if not data_display.empty:
+                            st.dataframe(
+                                data_display.head(10),
+                                hide_index=True,
+                                width='stretch',
+                                column_config=col_config
+                            )
+                        else:
+                            st.info("📭 No valid results after filtering")
+
                         with st.expander("🔍 SQL Query"):
                             st.code(sql, language='sql')
-                    else:
-                        # No SQL generated even after fallbacks
-                        st.warning("⚠️ Could not generate SQL query. Try rephrasing your question or use one of the examples above.")
-                    
-                    # Add AI response to history
-                    st.session_state.msgs.append({"role": "assistant", "content": answer})
-            
+
+                    # Save this Q&A (and SQL if any) into compact history
+                    st.session_state.qa_history.append({
+                        "question": prompt,
+                        "answer": answer,
+                        "sql": sql
+                    })
+
             except Exception as e:
-                # Handle errors gracefully
                 error_msg = str(e)
                 if "MAX_TOKENS" in error_msg:
                     st.error("⚠️ Response too long. Try: 'Top 5 countries by event count'")
@@ -2144,7 +2268,7 @@ def render_arch():
     Display the Architecture page.
     
     Shows:
-    - Pipeline diagram (GDELT → Dagster → dbt → MotherDuck → Gemini → Streamlit)
+    - Pipeline diagram (GDELT → Dagster → dbt → MotherDuck → Groq → Streamlit)
     - 4 component cards (Data Ingestion, Transformation, Data Warehouse, AI Layer)
     - Tech stack badges (12 technologies)
     
@@ -2168,7 +2292,7 @@ def render_arch():
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
         <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🦆 MotherDuck DWH</span>
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Gemini AI</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Groq AI</span>
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
         <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🎨 Streamlit</span>
     </div>
@@ -2179,7 +2303,7 @@ def render_arch():
     
     with c1:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;min-height:260px;">
             <h4 style="color:#06b6d4;font-size:0.9rem;">📥 DATA INGESTION</h4>
             <p style="color:#94a3b8;font-size:0.85rem;">GDELT Project monitors 100+ languages, 100K+ daily events</p>
             <ul style="color:#94a3b8;font-size:0.85rem;">
@@ -2192,7 +2316,7 @@ def render_arch():
         """, unsafe_allow_html=True)
         
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
             <h4 style="color:#10b981;font-size:0.9rem;">🔧 TRANSFORMATION</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;">
                 <li>dbt models for data quality</li>
@@ -2205,7 +2329,7 @@ def render_arch():
     
     with c2:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;min-height:260px;">
             <h4 style="color:#f59e0b;font-size:0.9rem;">🗄️ DATA WAREHOUSE</h4>
             <p style="color:#94a3b8;font-size:0.85rem;">Migrated from Snowflake → MotherDuck</p>
             <ul style="color:#94a3b8;font-size:0.85rem;">
@@ -2220,10 +2344,10 @@ def render_arch():
         """, unsafe_allow_html=True)
         
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
             <h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 AI LAYER</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>Google Gemini 2.5 Flash</li>
+                <li>Groq Llama 3.1 8B</li>
                 <li>LlamaIndex text-to-SQL</li>
                 <li>Natural language queries</li>
                 <li>Free tier usage</li>
@@ -2245,7 +2369,7 @@ def render_arch():
         <span class="tech-badge">🔧 dbt</span>
         <span class="tech-badge">🤖 Gen AI</span>
         <span class="tech-badge">🦙 LlamaIndex</span>
-        <span class="tech-badge">✨ Gemini</span>
+        <span class="tech-badge">⚡ Groq</span>
         <span class="tech-badge">📊 Plotly</span>
         <span class="tech-badge">🎨 Streamlit</span>
         <span class="tech-badge">🔄 GitHub Actions</span>
@@ -2280,12 +2404,12 @@ def render_about():
     
     with c1:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:280px;">
             <h4 style="color:#06b6d4;font-size:0.9rem;">🎯 PROJECT GOALS</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
                 <li>Demonstrate production-ready data pipelines</li>
                 <li>Showcase modern data stack (Dagster, dbt, DuckDB)</li>
-                <li>Integrate AI/LLM capabilities (Gemini, LlamaIndex)</li>
+                <li>Integrate AI/LLM capabilities (Groq, LlamaIndex)</li>
                 <li>Build scalable, cost-effective architecture</li>
                 <li>Create intuitive data visualizations</li>
             </ul>
@@ -2294,7 +2418,7 @@ def render_about():
     
     with c2:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:280px;">
             <h4 style="color:#10b981;font-size:0.9rem;">🛠️ TECHNICAL SKILLS</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
                 <li><b>Languages:</b> Python, SQL</li>
@@ -2498,7 +2622,7 @@ def main():
             st.markdown("""
             <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;">
                 <h4 style="color:#06b6d4;font-size:0.85rem;">ℹ️ HOW IT WORKS</h4>
-                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Gemini AI → SQL query → Results with links</p>
+                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Groq AI → SQL query → Results with links</p>
                 <hr style="border-color:#1e3a5f;margin:1rem 0;">
                 <p style="color:#94a3b8;font-size:0.75rem;">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
             </div>
