@@ -20,7 +20,8 @@ import pandas as pd                 # Handles data tables (like Excel)
 import plotly.graph_objects as go   # Creates interactive charts
 from plotly.subplots import make_subplots  # Allows multiple charts in one
 from dotenv import load_dotenv      # Loads secret keys from .env file
-from llama_index.llms.groq import Groq  # Groq's AI
+from llama_index.llms.groq import Groq  # Groq's AI for SQL generation
+from llama_index.llms.cerebras import Cerebras  # Cerebras AI for answer generation
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding  # AI text understanding
 from llama_index.core import SQLDatabase, Settings  # Database wrapper for AI
 from llama_index.core.query_engine import NLSQLTableQueryEngine  # Converts English to SQL
@@ -81,8 +82,9 @@ def get_secret(key):
 
 # List of required API keys - the app won't work without these
 REQUIRED_ENVS = [
-    "MOTHERDUCK_TOKEN",  # Access to our cloud database
-    "GROQ_API_KEY"       # Access to Groq's AI (Llama)
+    "MOTHERDUCK_TOKEN",   # Access to our cloud database
+    "GROQ_API_KEY",       # Access to Groq's AI (SQL generation)
+    "CEREBRAS_API_KEY"    # Access to Cerebras AI (answer generation)
 ]
 
 # Check if any required keys are missing
@@ -566,6 +568,37 @@ def get_query_engine(_sql_db):
         return NLSQLTableQueryEngine(sql_database=_sql_db)
     
     except:
+        return None
+
+@st.cache_resource  # Cache the Cerebras LLM
+def get_cerebras_llm():
+    """
+    Initialize Cerebras LLM for generating answers from query results.
+    
+    This splits API usage to avoid rate limits:
+    - Groq: Generates SQL queries (~500 tokens, 6k/min limit)
+    - Cerebras: Generates answers from results (~1500+ tokens, better limits)
+    
+    Returns:
+        Cerebras LLM instance, or None if API key missing
+    """
+    try:
+        api_key = os.getenv("CEREBRAS_API_KEY")
+        if not api_key:
+            logger.warning("CEREBRAS_API_KEY not found")
+            return None
+        
+        cerebras_llm = Cerebras(
+            api_key=api_key,
+            model="llama3.1-8b",  # Cerebras Llama model
+            temperature=0.1       # Low temp for factual responses
+        )
+        
+        logger.info("Cerebras LLM initialized successfully")
+        return cerebras_llm
+    
+    except Exception as e:
+        logger.error(f"Failed to initialize Cerebras: {e}")
         return None
 
 # ============================================================================
@@ -2016,10 +2049,16 @@ def render_ai_chat(c, sql_db):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # Get query engine
+            # Get query engine (uses Groq for SQL generation)
             qe = get_query_engine(sql_db)
             if not qe:
                 st.error("❌ AI not available")
+                return
+            
+            # Get Cerebras LLM (for answer generation from results)
+            cerebras_llm = get_cerebras_llm()
+            if not cerebras_llm:
+                st.error("❌ Cerebras AI not available")
                 return
 
             try:
@@ -2109,7 +2148,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         data = safe_query(c, sql)
                         
                         if not data.empty:
-                            # STEP 3: Generate natural language answer from actual results
+                            # STEP 3: Generate natural language answer from actual results using Cerebras
                             new_prompt = f"""Query: {prompt}
 
 Use the data below to generate a natural language answer to the query:
@@ -2118,7 +2157,8 @@ Use the data below to generate a natural language answer to the query:
 
 Provide a clear, concise answer based on this data."""
                             
-                            response_og = qe.query(new_prompt)
+                            # Use Cerebras (not Groq) to avoid rate limits on heavy token operations
+                            response_og = cerebras_llm.complete(new_prompt)
                             answer = str(response_og)
                             st.markdown(answer)
                         else:
