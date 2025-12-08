@@ -103,7 +103,7 @@ for key in REQUIRED_ENVS:
 # SECTION 4: GLOBAL CONSTANTS (Settings used throughout the app)
 # ============================================================================
 
-GEMINI_MODEL = "llama-3.1-8b-instant"  # Which AI model to use (fast and free)
+GEMINI_MODEL = "llama3.1-8b"  # Cerebras model name
 
 def get_dates():
     """
@@ -502,7 +502,7 @@ def get_ai_engine(_engine):
         # Initialize Cerebras LLM (Large Language Model)
         llm = Cerebras(
             api_key=api_key, 
-            model=GEMINI_MODEL,  # Use llama-3.1-8b-instant
+            model=GEMINI_MODEL,  # Use llama3.1-8b
             temperature=0.1
         )
         
