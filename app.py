@@ -2136,6 +2136,11 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         logger.info(f"Using fallback recent events SQL: {sql}")
                         st.info("🔧 Using built-in recent events query")
 
+                    # SAFETY: Enforce LIMIT on all queries to prevent runaway queries
+                    if sql and 'LIMIT' not in sql.upper():
+                        sql = sql.rstrip(';') + ' LIMIT 20'
+                        logger.info(f"Added safety LIMIT: {sql}")
+
                     # STEP 2: Execute SQL and get results
                     if sql:
                         data = safe_query(c, sql)
