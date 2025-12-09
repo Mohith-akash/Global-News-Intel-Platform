@@ -2059,14 +2059,14 @@ def render_ai_chat(c, sql_db):
 
                 short_prompt = f"""Query: "{prompt}"
 Table: events_dagster
-Columns: DATE (VARCHAR YYYYMMDD), MAIN_ACTOR, ACTOR_COUNTRY_CODE (3-letter), IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK
+Columns: DATE (VARCHAR YYYYMMDD), MAIN_ACTOR, ACTOR_COUNTRY_CODE (3-letter ISO code), IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK
 
 Rules:
-- DATE is VARCHAR like '20251209'
+- DATE is VARCHAR like '20251210'
 - Always include: WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
-- For recent: DATE >= '{dates['week_ago']}'
-- Country codes: USA, DEU (Germany), IND (India), CHN (China), GBR (UK)
+- For recent data use: DATE >= '{dates['week_ago']}'
 - LIMIT 10 max
+- ALWAYS include NEWS_LINK in SELECT
 
 Return only the SQL query."""
 
