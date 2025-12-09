@@ -2058,34 +2058,17 @@ def render_ai_chat(c, sql_db):
                 dates = get_dates()
 
                 short_prompt = f"""Query: "{prompt}"
-
 Table: events_dagster
-Columns: DATE (VARCHAR in YYYYMMDD format like '20241206'), MAIN_ACTOR (VARCHAR), ACTOR_COUNTRY_CODE (VARCHAR 3-letter), IMPACT_SCORE (FLOAT), ARTICLE_COUNT (SMALLINT), NEWS_LINK (VARCHAR)
+Columns: DATE (VARCHAR YYYYMMDD), MAIN_ACTOR, ACTOR_COUNTRY_CODE (3-letter), IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK
 
-CRITICAL: DATE is stored as VARCHAR like '20241206', NOT as date type!
+Rules:
+- DATE is VARCHAR like '20251209'
+- Always include: WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
+- For recent: DATE >= '{dates['month_ago']}'
+- Country codes: USA, DEU (Germany), IND (India), CHN (China), GBR (UK)
+- LIMIT 10 max
 
-MANDATORY FILTERS:
-WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE != ''
-
-For recent events (last 7 days), use: DATE >= '{dates['week_ago']}'
-
-EXAMPLES:
-1. "top 5 countries by event count":
-SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
-
-2. "show crisis events":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' ORDER BY IMPACT_SCORE ASC LIMIT 10
-
-3. "what happened this week":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' ORDER BY DATE DESC LIMIT 10
-
-DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{dates['week_ago']}'.
-
-CRISIS = IMPACT_SCORE < -3
-
-ALWAYS use titled abberviations for countries that are being queried for. For example, US or USA = United States, UK = United Kingdom and so on. It should ALWAYS be titled.
-
-ALWAYS include NEWS_LINK. Write complete SQL only."""
+Return only the SQL query."""
 
                 sql = None  # we'll fill this if/when we get a SQL query
                 data = None  # will hold query results
@@ -2196,7 +2179,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                                 try:
                                     data_display['DATE'] = pd.to_datetime(
                                         data_display['DATE'].astype(str), format='%Y%m%d'
-                                    ).dt.strftime('%d/%m')
+                                    ).dt.strftime('%b %d')
                                 except:
                                     pass
 
