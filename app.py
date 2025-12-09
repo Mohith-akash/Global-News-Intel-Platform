@@ -2226,10 +2226,15 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                                 
                                 new_prompt = f"""Query: {prompt}
 
-Data:
+Events data:
 {summary_data}
 
-Write a brief summary: 2-3 sentences for each event describing what happened, who was involved, and where."""
+Based on this data, write a news-style summary. For each event:
+- Explain what likely happened in the real world (the actual news story)
+- Don't just repeat the table values - interpret and explain the significance
+- Write 2-3 sentences per event with real-world context
+
+Focus on the news story, not the data columns."""
                                 
                                 response_og = cerebras_llm.complete(new_prompt)
                                 answer = str(response_og)
