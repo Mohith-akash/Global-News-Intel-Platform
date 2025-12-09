@@ -2141,15 +2141,15 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         sql_upper = sql.upper()
                         import re as _re
                         
-                        # SAFEGUARD 1: Add LIMIT 5 if missing
+                        # SAFEGUARD 1: Add LIMIT 10 if missing
                         if 'LIMIT' not in sql_upper:
-                            sql = sql.rstrip(';') + ' LIMIT 5'
+                            sql = sql.rstrip(';') + ' LIMIT 10'
                         
-                        # SAFEGUARD 2: Reduce high LIMITs to max 5
+                        # SAFEGUARD 2: Reduce high LIMITs to max 10
                         else:
                             limit_match = _re.search(r'LIMIT\s+(\d+)', sql_upper)
-                            if limit_match and int(limit_match.group(1)) > 5:
-                                sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 5', sql, flags=_re.IGNORECASE)
+                            if limit_match and int(limit_match.group(1)) > 10:
+                                sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 10', sql, flags=_re.IGNORECASE)
                         
                         logger.info(f"Safe SQL: {sql}")
 
@@ -2192,15 +2192,9 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                                 except:
                                     pass
 
-                            # Remove rows with null/empty values
-                            for col in data_display.columns:
-                                if data_display[col].dtype == 'object':
-                                    data_display = data_display[
-                                        (data_display[col].notna()) &
-                                        (data_display[col].astype(str) != 'None') &
-                                        (data_display[col].astype(str) != '') &
-                                        (data_display[col].astype(str) != 'Unknown')
-                                    ]
+                            # Remove rows only if COUNTRY is missing (essential field)
+                            if 'COUNTRY' in data_display.columns:
+                                data_display = data_display[data_display['COUNTRY'].notna()]
 
                             # Rename link column
                             if 'NEWS_LINK' in data_display.columns:
@@ -2235,12 +2229,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
 Data:
 {summary_data}
 
-Provide a detailed analysis. For EACH event in the data:
-- Describe what happened (2-3 sentences)
-- Mention the country, actor involved, and severity level
-- Explain the significance
-
-Write at least 8-10 sentences total covering all events."""
+Write a brief summary: 2-3 sentences for each event describing what happened, who was involved, and where."""
                                 
                                 response_og = cerebras_llm.complete(new_prompt)
                                 answer = str(response_og)
