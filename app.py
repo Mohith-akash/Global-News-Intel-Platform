@@ -2136,35 +2136,19 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         logger.info(f"Using fallback recent events SQL: {sql}")
                         st.info("🔧 Using built-in recent events query")
 
-                    # SAFETY SAFEGUARDS TO PREVENT TOKEN DRAIN
-                    # 1. Force LIMIT on all queries (max 15 rows)
+                    # SAFETY: Enforce max LIMIT 5 on all queries to prevent token drain
                     if sql:
                         sql_upper = sql.upper()
                         if 'LIMIT' not in sql_upper:
-                            sql = sql.rstrip(';') + ' LIMIT 15'
+                            sql = sql.rstrip(';') + ' LIMIT 5'
                         else:
-                            # Reduce existing LIMIT if too high
+                            # Reduce existing LIMIT if too high (max 5)
                             import re as _re
                             limit_match = _re.search(r'LIMIT\s+(\d+)', sql_upper)
-                            if limit_match and int(limit_match.group(1)) > 15:
-                                sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 15', sql, flags=_re.IGNORECASE)
+                            if limit_match and int(limit_match.group(1)) > 5:
+                                sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 5', sql, flags=_re.IGNORECASE)
                         
-                        # 2. Force date filter if not present (last 7 days only)
-                        if 'DATE' not in sql_upper or ('>=' not in sql and '>' not in sql):
-                            # Add date filter to WHERE clause
-                            if 'WHERE' in sql_upper:
-                                sql = sql.replace('WHERE', f"WHERE DATE >= '{dates['week_ago']}' AND", 1)
-                            else:
-                                # Find position to insert WHERE
-                                sql = sql.rstrip(';').rstrip()
-                                if 'ORDER BY' in sql_upper:
-                                    sql = sql.replace('ORDER BY', f"WHERE DATE >= '{dates['week_ago']}' ORDER BY", 1)
-                                elif 'GROUP BY' in sql_upper:
-                                    sql = sql.replace('GROUP BY', f"WHERE DATE >= '{dates['week_ago']}' GROUP BY", 1)
-                                else:
-                                    sql = sql + f" WHERE DATE >= '{dates['week_ago']}'"
-                        
-                        logger.info(f"Final safe SQL: {sql}")
+                        logger.info(f"Safe SQL with LIMIT 5: {sql}")
 
                     # STEP 2: Execute SQL and get results
                     if sql:
@@ -2172,7 +2156,6 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         
                         if not data.empty:
                             # STEP 3: Clean data FIRST (before AI summarization)
-                            # This ensures the AI summary matches what's shown in the table
                             data_display = data.copy()
                             data_display.columns = [col.upper() for col in data_display.columns]
 
@@ -2231,30 +2214,19 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             final_order = [col for col in preferred_order if col in data_display.columns] + other_cols + link_cols
                             data_display = data_display[final_order]
 
-                            # STEP 4: Generate AI summary with TOKEN PROTECTION
+                            # STEP 4: Generate AI summary (original good format)
                             if not data_display.empty:
-                                # SAFETY: Limit to 10 rows max for AI
-                                ai_data = data_display.head(10)
+                                # Remove links for AI (not useful in text)
+                                ai_cols = [c for c in data_display.columns if '🔗' not in c]
+                                summary_data = data_display[ai_cols].to_string(index=False)
                                 
-                                # SAFETY: Truncate long text fields to save tokens
-                                for col in ai_data.columns:
-                                    if ai_data[col].dtype == 'object':
-                                        ai_data[col] = ai_data[col].astype(str).str[:50]
-                                
-                                # SAFETY: Remove link column from AI data (waste of tokens)
-                                ai_cols = [c for c in ai_data.columns if '🔗' not in c]
-                                summary_data = ai_data[ai_cols].to_string(index=False)
-                                
-                                # SAFETY: Cap total data size to 1500 chars
-                                if len(summary_data) > 1500:
-                                    summary_data = summary_data[:1500] + "..."
-                                
-                                new_prompt = f"""Query: {prompt[:100]}
+                                new_prompt = f"""Query: {prompt}
 
-Data ({len(ai_data)} rows):
+Use the data below to generate a natural language answer to the query:
+
 {summary_data}
 
-Give a brief answer in 2-3 sentences."""
+Provide a clear, concise answer based on this data."""
                                 
                                 response_og = cerebras_llm.complete(new_prompt)
                                 answer = str(response_og)
