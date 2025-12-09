@@ -2102,7 +2102,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
                             f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' "
+                            f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['month_ago']}' "
                             "ORDER BY IMPACT_SCORE ASC LIMIT 10"
                         )
                         logger.info(f"Using fallback crisis SQL: {sql}")
@@ -2118,7 +2118,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         sql = (
                             "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster "
                             "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"AND DATE >= '{dates['month_ago']}' "
                             f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
                         )
                         logger.info(f"Using fallback top countries SQL: {sql}")
@@ -2130,7 +2130,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
                             "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"AND DATE >= '{dates['month_ago']}' "
                             "ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
                         )
                         logger.info(f"Using fallback recent events SQL: {sql}")
