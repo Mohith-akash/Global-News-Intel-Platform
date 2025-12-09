@@ -2136,19 +2136,31 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         logger.info(f"Using fallback recent events SQL: {sql}")
                         st.info("🔧 Using built-in recent events query")
 
-                    # SAFETY: Enforce max LIMIT 5 on all queries to prevent token drain
+                    # ========== SAFETY SAFEGUARDS TO PREVENT TOKEN DRAIN ==========
                     if sql:
                         sql_upper = sql.upper()
+                        import re as _re
+                        
+                        # SAFEGUARD 1: Add LIMIT 5 if missing
                         if 'LIMIT' not in sql_upper:
                             sql = sql.rstrip(';') + ' LIMIT 5'
+                        
+                        # SAFEGUARD 2: Reduce high LIMITs to max 5
                         else:
-                            # Reduce existing LIMIT if too high (max 5)
-                            import re as _re
                             limit_match = _re.search(r'LIMIT\s+(\d+)', sql_upper)
                             if limit_match and int(limit_match.group(1)) > 5:
                                 sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 5', sql, flags=_re.IGNORECASE)
                         
-                        logger.info(f"Safe SQL with LIMIT 5: {sql}")
+                        # SAFEGUARD 3: Force date filter if not present (last 7 days)
+                        if 'DATE' not in sql_upper or ('>=' not in sql and '>' not in sql):
+                            if 'WHERE' in sql_upper:
+                                sql = sql.replace('WHERE', f"WHERE DATE >= '{dates['week_ago']}' AND", 1)
+                            elif 'ORDER BY' in sql_upper:
+                                sql = sql.replace('ORDER BY', f"WHERE DATE >= '{dates['week_ago']}' ORDER BY", 1)
+                            elif 'GROUP BY' in sql_upper:
+                                sql = sql.replace('GROUP BY', f"WHERE DATE >= '{dates['week_ago']}' GROUP BY", 1)
+                        
+                        logger.info(f"Safe SQL: {sql}")
 
                     # STEP 2: Execute SQL and get results
                     if sql:
@@ -2214,11 +2226,18 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             final_order = [col for col in preferred_order if col in data_display.columns] + other_cols + link_cols
                             data_display = data_display[final_order]
 
-                            # STEP 4: Generate AI summary (original good format)
+                            # STEP 4: Generate AI summary with safeguards
                             if not data_display.empty:
-                                # Remove links for AI (not useful in text)
-                                ai_cols = [c for c in data_display.columns if '🔗' not in c]
-                                summary_data = data_display[ai_cols].to_string(index=False)
+                                # SAFEGUARD 4: Limit to 5 rows max for AI
+                                ai_data = data_display.head(5)
+                                
+                                # SAFEGUARD 6: Remove links from AI (not useful in text)
+                                ai_cols = [c for c in ai_data.columns if '🔗' not in c]
+                                summary_data = ai_data[ai_cols].to_string(index=False)
+                                
+                                # SAFEGUARD 7: Cap data at 3000 chars (reasonable limit)
+                                if len(summary_data) > 3000:
+                                    summary_data = summary_data[:3000]
                                 
                                 new_prompt = f"""Query: {prompt}
 
