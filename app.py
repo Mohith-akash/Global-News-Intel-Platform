@@ -2096,7 +2096,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                     sql = response.metadata.get('sql_query')
                     logger.info(f"Generated SQL: {sql}")
 
-                    # FALLBACK #1: Crisis query
+                    # FALLBACK #1: Crisis/severe query (working well - keep as is)
                     if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
@@ -2106,10 +2106,9 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             "ORDER BY IMPACT_SCORE ASC LIMIT 10"
                         )
                         logger.info(f"Using fallback crisis SQL: {sql}")
-                        st.info("🔧 Using built-in crisis query")
 
                     # FALLBACK #2: Top countries query
-                    if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
+                    elif not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
                         limit = 5
                         import re as _re
                         match = _re.search(r'top\s+(\d+)', prompt.lower())
@@ -2122,10 +2121,20 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
                         )
                         logger.info(f"Using fallback top countries SQL: {sql}")
-                        st.info("🔧 Using built-in top countries query")
 
-                    # FALLBACK #3: What happened query
-                    if not sql and ('what' in prompt.lower() and ('happen' in prompt.lower() or 'event' in prompt.lower())):
+                    # FALLBACK #3: "What happened this week" - only for specific phrases
+                    elif not sql and ('what' in prompt.lower() and 'happen' in prompt.lower()):
+                        sql = (
+                            "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                            "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND DATE >= '{dates['month_ago']}' "
+                            "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
+                        )
+                        logger.info(f"Using fallback recent events SQL: {sql}")
+
+                    # FALLBACK #4: If AI generated no SQL at all, get most recent events
+                    elif not sql:
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
@@ -2133,8 +2142,7 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             f"AND DATE >= '{dates['month_ago']}' "
                             "ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
                         )
-                        logger.info(f"Using fallback recent events SQL: {sql}")
-                        st.info("🔧 Using built-in recent events query")
+                        logger.info(f"Using default fallback SQL: {sql}")
 
                     # ========== SAFETY SAFEGUARDS TO PREVENT TOKEN DRAIN ==========
                     if sql:
