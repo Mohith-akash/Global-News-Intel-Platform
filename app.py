@@ -2044,11 +2044,8 @@ def render_ai_chat(c, sql_db):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # Get query engine
-            qe = get_query_engine(sql_db)
-            if not qe:
-                st.error("❌ AI not available")
-                return
+            # Get query engine (may be None if AI failed to initialize)
+            qe = get_query_engine(sql_db) if sql_db else None
             
             # Get Cerebras LLM
             cerebras_llm = get_cerebras_llm()
@@ -2590,8 +2587,12 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
     
-    # Initialize AI
-    sql_db = get_ai_engine(get_engine())
+    # Initialize AI (with fallback if it fails)
+    try:
+        sql_db = get_ai_engine(get_engine())
+    except Exception as e:
+        logger.warning(f"AI initialization failed, using fallback queries: {e}")
+        sql_db = None
     
     # Render header
     render_header()
