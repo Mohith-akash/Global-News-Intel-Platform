@@ -2123,7 +2123,68 @@ Return only the SQL query."""
                         )
                         logger.info(f"Using recent events SQL: {sql}")
 
-                    # FALLBACK: If AI generated no SQL, get most recent events
+                    # FALLBACK: Country-specific queries (detect country names in prompt)
+                    if not sql:
+                        # Map country names to codes
+                        country_codes = {
+                            'usa': 'USA', 'united states': 'USA', 'america': 'USA', 'us': 'USA',
+                            'india': 'IND', 'indian': 'IND',
+                            'china': 'CHN', 'chinese': 'CHN',
+                            'germany': 'DEU', 'german': 'DEU',
+                            'uk': 'GBR', 'united kingdom': 'GBR', 'britain': 'GBR', 'british': 'GBR',
+                            'russia': 'RUS', 'russian': 'RUS',
+                            'france': 'FRA', 'french': 'FRA',
+                            'japan': 'JPN', 'japanese': 'JPN',
+                            'brazil': 'BRA', 'brazilian': 'BRA',
+                            'canada': 'CAN', 'canadian': 'CAN',
+                            'australia': 'AUS', 'australian': 'AUS',
+                            'israel': 'ISR', 'israeli': 'ISR',
+                            'iran': 'IRN', 'iranian': 'IRN',
+                            'ukraine': 'UKR', 'ukrainian': 'UKR',
+                            'pakistan': 'PAK', 'pakistani': 'PAK',
+                            'mexico': 'MEX', 'mexican': 'MEX',
+                            'italy': 'ITA', 'italian': 'ITA',
+                            'spain': 'ESP', 'spanish': 'ESP',
+                            'korea': 'KOR', 'korean': 'KOR', 'south korea': 'KOR',
+                            'turkey': 'TUR', 'turkish': 'TUR',
+                            'saudi': 'SAU', 'saudi arabia': 'SAU',
+                            'egypt': 'EGY', 'egyptian': 'EGY',
+                            'indonesia': 'IDN', 'indonesian': 'IDN',
+                            'poland': 'POL', 'polish': 'POL',
+                            'netherlands': 'NLD', 'dutch': 'NLD',
+                            'sweden': 'SWE', 'swedish': 'SWE',
+                            'switzerland': 'CHE', 'swiss': 'CHE',
+                            'argentina': 'ARG', 'argentine': 'ARG',
+                            'nigeria': 'NGA', 'nigerian': 'NGA',
+                            'south africa': 'ZAF',
+                        }
+                        
+                        # Find countries mentioned in prompt
+                        prompt_lower = prompt.lower()
+                        found_codes = []
+                        for name, code in country_codes.items():
+                            if name in prompt_lower:
+                                if code not in found_codes:
+                                    found_codes.append(code)
+                        
+                        if found_codes:
+                            # Build country filter
+                            if len(found_codes) == 1:
+                                country_filter = f"ACTOR_COUNTRY_CODE = '{found_codes[0]}'"
+                            else:
+                                codes_str = "', '".join(found_codes)
+                                country_filter = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
+                            
+                            sql = (
+                                "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                                "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                                f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                                f"AND {country_filter} AND DATE >= '{dates['week_ago']}' "
+                                "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
+                            )
+                            logger.info(f"Using country-specific SQL: {sql}")
+
+                    # FALLBACK: Default - get most recent events (no country filter)
                     if not sql:
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
