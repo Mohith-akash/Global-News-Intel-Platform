@@ -2151,15 +2151,6 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             if limit_match and int(limit_match.group(1)) > 5:
                                 sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 5', sql, flags=_re.IGNORECASE)
                         
-                        # SAFEGUARD 3: Force date filter if not present (last 7 days)
-                        if 'DATE' not in sql_upper or ('>=' not in sql and '>' not in sql):
-                            if 'WHERE' in sql_upper:
-                                sql = sql.replace('WHERE', f"WHERE DATE >= '{dates['week_ago']}' AND", 1)
-                            elif 'ORDER BY' in sql_upper:
-                                sql = sql.replace('ORDER BY', f"WHERE DATE >= '{dates['week_ago']}' ORDER BY", 1)
-                            elif 'GROUP BY' in sql_upper:
-                                sql = sql.replace('GROUP BY', f"WHERE DATE >= '{dates['week_ago']}' GROUP BY", 1)
-                        
                         logger.info(f"Safe SQL: {sql}")
 
                     # STEP 2: Execute SQL and get results
@@ -2241,11 +2232,15 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                                 
                                 new_prompt = f"""Query: {prompt}
 
-Use the data below to generate a natural language answer to the query:
-
+Data:
 {summary_data}
 
-Provide a clear, concise answer based on this data."""
+Provide a detailed analysis. For EACH event in the data:
+- Describe what happened (2-3 sentences)
+- Mention the country, actor involved, and severity level
+- Explain the significance
+
+Write at least 8-10 sentences total covering all events."""
                                 
                                 response_og = cerebras_llm.complete(new_prompt)
                                 answer = str(response_og)
