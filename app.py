@@ -519,7 +519,9 @@ def get_ai_engine(_engine):
         main_table = detect_table(conn)
         
         # Wrap database so AI can understand it
-        sql_db = SQLDatabase(_engine, include_tables=[main_table])
+        # Note: sample_rows_in_table_info=0 disables PostgreSQL-specific introspection
+        # that doesn't work with DuckDB (avoids pg_collation error)
+        sql_db = SQLDatabase(_engine, include_tables=[main_table], sample_rows_in_table_info=0)
         
         return sql_db
     
