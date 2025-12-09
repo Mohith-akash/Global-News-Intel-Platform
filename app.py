@@ -6,35 +6,33 @@ This application monitors worldwide news events in real-time and displays them
 in an easy-to-understand dashboard with charts, tables, and AI-powered search.
 
 Author: Mohith Akash | Portfolio Project
-Tech Stack: Python, Streamlit, DuckDB, Groq AI, Plotly
+Tech Stack: Python, Streamlit, DuckDB, Cerebras AI, Plotly
 """
 
 # ============================================================================
-# SECTION 1: IMPORT LIBRARIES (Loading the tools we need)
+# SECTION 1: IMPORT LIBRARIES
 # ============================================================================
-# Think of this like gathering all your tools before starting a project
 
-import streamlit as st              # Creates the web interface (what you see in browser)
-import os                           # Accesses environment variables (secret keys)
-import pandas as pd                 # Handles data tables (like Excel)
+import streamlit as st              # Creates the web interface
+import os                           # Accesses environment variables
+import pandas as pd                 # Handles data tables
 import plotly.graph_objects as go   # Creates interactive charts
 from plotly.subplots import make_subplots  # Allows multiple charts in one
 from dotenv import load_dotenv      # Loads secret keys from .env file
-from llama_index.llms.groq import Groq  # Groq's AI for SQL generation
-from llama_index.llms.cerebras import Cerebras  # Cerebras AI for answer generation
+from llama_index.llms.cerebras import Cerebras  # Cerebras AI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding  # AI text understanding
 from llama_index.core import SQLDatabase, Settings  # Database wrapper for AI
 from llama_index.core.query_engine import NLSQLTableQueryEngine  # Converts English to SQL
 from sqlalchemy import create_engine  # Connects to databases
 import datetime                     # Handles dates and times
-import pycountry                    # Converts country codes (USA → United States)
+import pycountry                    # Converts country codes
 import logging                      # Tracks errors and info messages
 import re                           # Pattern matching in text
 from urllib.parse import urlparse, unquote  # Extracts info from web links
 import duckdb                       # Fast database engine
 
 # ============================================================================
-# SECTION 2: INITIAL SETUP (Configure the app before it runs)
+# SECTION 2: INITIAL SETUP
 # ============================================================================
 
 # Configure the web page appearance
@@ -45,15 +43,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"        # Hide sidebar by default
 )
 
-# Load environment variables (secret API keys) from .env file
+# Load environment variables from .env file
 load_dotenv()
 
-# Set up logging to track what's happening (helpful for debugging)
+# Set up logging to track what's happening
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gdelt")
 
 # ============================================================================
-# SECTION 3: SECURITY & API KEYS (Get secret passwords safely)
+# SECTION 3: SECURITY & API KEYS
 # ============================================================================
 
 def get_secret(key):
@@ -64,17 +62,17 @@ def get_secret(key):
     We check two places: .env file (local) and Streamlit Cloud (deployment).
     
     Args:
-        key: The name of the secret we're looking for (e.g., "GROQ_API_KEY")
+        key: The name of the secret we're looking for (e.g., "CEREBRAS_API_KEY")
     
     Returns:
         The secret value if found, None if not found
     """
-    # First, check environment variables (from .env file)
+    # First, check environment variables
     val = os.getenv(key)
     if val: 
         return val
     
-    # If not found, check Streamlit's secret storage (for cloud deployment)
+    # If not found, check Streamlit's secret storage
     try: 
         return st.secrets.get(key)
     except: 
@@ -82,9 +80,8 @@ def get_secret(key):
 
 # List of required API keys - the app won't work without these
 REQUIRED_ENVS = [
-    "MOTHERDUCK_TOKEN",   # Access to our cloud database
-    "GROQ_API_KEY",       # Access to Groq's AI (SQL generation)
-    "CEREBRAS_API_KEY"    # Access to Cerebras AI (answer generation)
+    "MOTHERDUCK_TOKEN",
+    "CEREBRAS_API_KEY"
 ]
 
 # Check if any required keys are missing
@@ -101,10 +98,10 @@ for key in REQUIRED_ENVS:
         os.environ[key] = val
 
 # ============================================================================
-# SECTION 4: GLOBAL CONSTANTS (Settings used throughout the app)
+# SECTION 4: GLOBAL CONSTANTS
 # ============================================================================
 
-GEMINI_MODEL = "llama-3.1-8b-instant"  # Which AI model to use (fast and free)
+GEMINI_MODEL = "llama3.1-8b"  # Cerebras model name
 
 def get_dates():
     """
@@ -127,7 +124,7 @@ def get_dates():
     }
 
 # ============================================================================
-# SECTION 5: STYLING (Make the app look professional)
+# SECTION 5: STYLING
 # ============================================================================
 
 def inject_css():
@@ -382,7 +379,7 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 # ============================================================================
-# SECTION 6: DATABASE CONNECTION (Connect to our data storage)
+# SECTION 6: DATABASE CONNECTION
 # ============================================================================
 
 @st.cache_resource  # Cache this so we only connect once, not on every page reload
@@ -417,10 +414,10 @@ def get_engine():
     )
 
 # ============================================================================
-# SECTION 7: DATA RETRIEVAL HELPERS (Find and load data)
+# SECTION 7: DATA RETRIEVAL HELPERS
 # ============================================================================
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour (3600 seconds)
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def detect_table(_conn):
     """
     Automatically find the main events table in the database.
@@ -476,13 +473,13 @@ def safe_query(conn, sql):
         return pd.DataFrame()
 
 # ============================================================================
-# SECTION 8: AI SETUP (Initialize Groq AI with Llama)
+# SECTION 8: AI SETUP
 # ============================================================================
 
 @st.cache_resource  # Only set up AI once
 def get_ai_engine(_engine):
     """
-    Set up Groq AI with Llama to understand our database.
+    Set up Cerebras AI to understand our database.
     
     This is like teaching the AI about our data so it can answer questions
     in plain English. The AI learns the table structure and can write SQL
@@ -495,19 +492,19 @@ def get_ai_engine(_engine):
         SQL database wrapper for AI, or None if setup fails
     """
     try:
-        # Get API key for Groq's AI service
-        api_key = os.getenv("GROQ_API_KEY")
+        # Get API key for Cerebras AI service
+        api_key = os.getenv("CEREBRAS_API_KEY")
         if not api_key: 
             return None
         
-        # Initialize Groq LLM (Large Language Model) with Llama
-        llm = Groq(
+        # Initialize Cerebras LLM
+        llm = Cerebras(
             api_key=api_key, 
-            model=GEMINI_MODEL,  # Use llama-3.1-8b-instant
+            model=GEMINI_MODEL,  # Use llama3.1-8b
             temperature=0.1
         )
         
-        # Initialize embedding model (converts text to numbers AI can understand)
+        # Initialize embedding model
         embed = GoogleGenAIEmbedding(
             api_key=os.getenv("GOOGLE_API_KEY") or api_key, 
             model_name="text-embedding-004"
@@ -575,10 +572,6 @@ def get_cerebras_llm():
     """
     Initialize Cerebras LLM for generating answers from query results.
     
-    This splits API usage to avoid rate limits:
-    - Groq: Generates SQL queries (~500 tokens, 6k/min limit)
-    - Cerebras: Generates answers from results (~1500+ tokens, better limits)
-    
     Returns:
         Cerebras LLM instance, or None if API key missing
     """
@@ -602,7 +595,7 @@ def get_cerebras_llm():
         return None
 
 # ============================================================================
-# SECTION 9: DATA TRANSFORMATION HELPERS (Clean and format data)
+# SECTION 9: DATA TRANSFORMATION HELPERS
 # ============================================================================
 
 def get_country(code):
@@ -628,13 +621,13 @@ def get_country(code):
         return None
     
     try:
-        # Try 2-letter code first (ISO Alpha-2)
+        # Try 2-letter code first
         if len(code) == 2:
             country = pycountry.countries.get(alpha_2=code)
             if country: 
                 return country.name
         
-        # Try 3-letter code (ISO Alpha-3)
+        # Try 3-letter code
         if len(code) == 3:
             country = pycountry.countries.get(alpha_3=code)
             if country: 
@@ -663,7 +656,7 @@ def get_impact_label(score):
     
     score = float(score)
     
-    # Negative events (conflicts, crises)
+    # Negative events
     if score <= -8: return "🔴 Severe Crisis"
     if score <= -5: return "🔴 Major Conflict"
     if score <= -3: return "🟠 Rising Tensions"
@@ -672,7 +665,7 @@ def get_impact_label(score):
     # Neutral events
     if score < 1: return "⚪ Neutral"
     
-    # Positive events (cooperation, agreements)
+    # Positive events
     if score < 3: return "🟢 Cooperation"
     if score < 5: return "🟢 Partnership"
     
@@ -745,7 +738,7 @@ def clean_headline(text):
         if re.match(pattern, text.lower()): 
             return None
     
-    # Remove date patterns (run multiple times to catch nested dates)
+    # Remove date patterns
     for _ in range(5):
         text = re.sub(r'^\d{4}\s+\d{1,2}\s+\d{1,2}\s+', '', text)  # "2024 12 06 "
         text = re.sub(r'^\d{1,2}\s+\d{1,2}\s+', '', text)          # "12 06 "
@@ -775,7 +768,7 @@ def clean_headline(text):
         if num_count > len(text_no_spaces) * 0.2: 
             return None
     
-    # Reject if more than 35% hex characters (indicates code/ID)
+    # Reject if more than 35% hex characters
     hex_count = sum(c in '0123456789abcdefABCDEF' for c in text_no_spaces)
     if hex_count > len(text_no_spaces) * 0.35: 
         return None
@@ -830,7 +823,7 @@ def enhance_headline(text, impact_score=None, actor=None):
         # Capitalize important words
         elif word_lower in important_words:
             capitalized.append(word.capitalize())
-        # Convert ALL CAPS to Title Case (looks better)
+        # Convert ALL CAPS to Title Case
         elif word.isupper() and len(word) > 2:
             capitalized.append(word.title())
         else:
@@ -866,12 +859,12 @@ def extract_headline(url, actor=None, impact_score=None):
     try:
         # Parse the URL into components
         parsed = urlparse(str(url))
-        path = unquote(parsed.path)  # Decode URL encoding (%20 → space)
+        path = unquote(parsed.path)  # Decode URL encoding
         
         # Split path into segments and find promising ones
         segments = [s for s in path.split('/') if s and len(s) > 8]
         
-        # Try segments in reverse order (last segments usually have titles)
+        # Try segments in reverse order
         for seg in reversed(segments):
             cleaned = clean_headline(seg)
             if cleaned and len(cleaned) > 20:
@@ -918,7 +911,7 @@ def process_df(df):
     # Ensure all column names are uppercase for consistency
     df.columns = [c.upper() for c in df.columns]
     
-    # Extract headlines from URLs (one per row)
+    # Extract headlines from URLs
     headlines = []
     for _, row in df.iterrows():
         headline = extract_headline(
@@ -947,7 +940,7 @@ def process_df(df):
     except:
         df['DATE_FMT'] = df['DATE']
     
-    # Add emoji tone indicators (quick visual reference)
+    # Add emoji tone indicators
     df['TONE'] = df['IMPACT_SCORE'].apply(
         lambda x: "🔴" if x and x < -4 else (
             "🟡" if x and x < -1 else (
@@ -959,13 +952,13 @@ def process_df(df):
     # Add detailed intensity labels
     df['INTENSITY'] = df['IMPACT_SCORE'].apply(get_intensity_label)
     
-    # Remove duplicate headlines (same story from multiple sources)
+    # Remove duplicate headlines
     df = df.drop_duplicates(subset=['HEADLINE'])
     
     return df
 
 # ============================================================================
-# SECTION 10: DATA QUERIES (Get specific data from database)
+# SECTION 10: DATA QUERIES
 # ============================================================================
 # Each function retrieves specific data needed for different parts of the dashboard
 
@@ -1280,7 +1273,7 @@ def get_distribution(_c, t):
     """)
 
 # ============================================================================
-# SECTION 11: UI RENDERING FUNCTIONS (Display data on screen)
+# SECTION 11: UI RENDERING FUNCTIONS
 # ============================================================================
 # Each function displays a specific component of the dashboard
 
@@ -1333,7 +1326,7 @@ def render_metrics(c, t):
     # Create 5 equal-width columns
     c1, c2, c3, c4, c5 = st.columns(5)
     
-    # Format large numbers with commas (1000000 → 1,000,000)
+    # Format large numbers with commas
     def fmt(n): 
         return f"{int(n or 0):,}"
     
@@ -1693,11 +1686,11 @@ def render_distribution(c, t, chart_key='distribution'):
         'Very Positive': '#06b6d4'
     }
     
-    # Create donut chart (pie chart with hole in middle)
+    # Create donut chart
     fig = go.Figure(data=[go.Pie(
         labels=df['cat'],    # Category names
         values=df['cnt'],    # Counts
-        hole=0.6,            # Size of center hole (donut)
+        hole=0.6,            # Size of center hole
         marker_colors=[colors.get(c, '#64748b') for c in df['cat']],
         textinfo='percent',  # Show percentages
         textfont=dict(size=11, color='#e2e8f0')
@@ -1744,7 +1737,7 @@ def render_countries(c, t):
     # Convert country codes to full names
     df['name'] = df['country'].apply(lambda x: get_country(x) or x or 'Unknown')
     
-    # Format numbers (1000 → 1.0K for readability)
+    # Format numbers
     def fmt(n): 
         return f"{n/1000:.1f}K" if n >= 1000 else str(int(n))
     
@@ -1856,7 +1849,7 @@ def render_feed(c, t):
         st.info("📋 No events")
         return
     
-    # Display table with precise column widths (taller than trending)
+    # Display table with precise column widths
     st.dataframe(
         df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'NEWS_LINK']], 
         hide_index=True, 
@@ -1895,10 +1888,10 @@ def render_timeseries(c, t):
     # Convert date strings to actual dates for plotting
     df['date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
     
-    # Create figure with dual y-axis (allows different scales)
+    # Create figure with dual y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # Add total events line with filled area (primary y-axis)
+    # Add total events line with filled area
     fig.add_trace(
         go.Scatter(
             x=df['date'], 
@@ -1911,7 +1904,7 @@ def render_timeseries(c, t):
         secondary_y=False
     )
     
-    # Add negative events line (secondary y-axis)
+    # Add negative events line
     fig.add_trace(
         go.Scatter(
             x=df['date'], 
@@ -1922,7 +1915,7 @@ def render_timeseries(c, t):
         secondary_y=True
     )
     
-    # Add positive events line (secondary y-axis)
+    # Add positive events line
     fig.add_trace(
         go.Scatter(
             x=df['date'], 
@@ -1969,7 +1962,7 @@ def render_ai_chat(c, sql_db):
     - "Top 5 countries by event count"
     - "Show crisis-level events"
     
-    The AI converts these to SQL queries automatically using Groq Llama.
+    The AI converts these to SQL queries automatically using Cerebras.
     
     Features:
     - Chat history (stores last 8 messages)
@@ -2049,13 +2042,13 @@ def render_ai_chat(c, sql_db):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # Get query engine (uses Groq for SQL generation)
+            # Get query engine
             qe = get_query_engine(sql_db)
             if not qe:
                 st.error("❌ AI not available")
                 return
             
-            # Get Cerebras LLM (for answer generation from results)
+            # Get Cerebras LLM
             cerebras_llm = get_cerebras_llm()
             if not cerebras_llm:
                 st.error("❌ Cerebras AI not available")
@@ -2157,7 +2150,7 @@ Use the data below to generate a natural language answer to the query:
 
 Provide a clear, concise answer based on this data."""
                             
-                            # Use Cerebras (not Groq) to avoid rate limits on heavy token operations
+                            # Use Cerebras to distribute load across API limits
                             response_og = cerebras_llm.complete(new_prompt)
                             answer = str(response_og)
                             st.markdown(answer)
@@ -2248,7 +2241,7 @@ Provide a clear, concise answer based on this data."""
                         with st.expander("🔍 SQL Query"):
                             st.code(sql, language='sql')
 
-                    # Save this Q&A (and SQL if any) into compact history
+                    # Save this Q&A into compact history
                     st.session_state.qa_history.append({
                         "question": prompt,
                         "answer": answer,
@@ -2268,7 +2261,7 @@ def render_arch():
     Display the Architecture page.
     
     Shows:
-    - Pipeline diagram (GDELT → Dagster → dbt → MotherDuck → Groq → Streamlit)
+    - Pipeline diagram (GDELT → Dagster → dbt → MotherDuck → Cerebras → Streamlit)
     - 4 component cards (Data Ingestion, Transformation, Data Warehouse, AI Layer)
     - Tech stack badges (12 technologies)
     
@@ -2292,7 +2285,7 @@ def render_arch():
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
         <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🦆 MotherDuck DWH</span>
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Groq AI</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Cerebras AI</span>
         <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
         <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🎨 Streamlit</span>
     </div>
@@ -2336,9 +2329,10 @@ def render_arch():
                 <li>DuckDB columnar format</li>
                 <li>Sub-second queries</li>
                 <li>Serverless architecture</li>
+                <li><b>Saved:</b> ~$100/month vs Snowflake</li>
             </ul>
             <div style="margin-top:0.5rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;border-left:3px solid #10b981;">
-                <span style="color:#10b981;font-size:0.75rem;">💰 COST: $0/month</span>
+                <span style="color:#10b981;font-size:0.75rem;">💰 CURRENT COST: $0/month</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2347,7 +2341,8 @@ def render_arch():
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
             <h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 AI LAYER</h4>
             <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>Groq Llama 3.1 8B</li>
+                <li>Cerebras Llama 3.1 8B</li>
+                <li>Previously tested: Gemini, Groq</li>
                 <li>LlamaIndex text-to-SQL</li>
                 <li>Natural language queries</li>
                 <li>Free tier usage</li>
@@ -2359,7 +2354,7 @@ def render_arch():
     
     # Tech stack badges
     st.markdown("""
-    <h3 style="text-align:center;color:#e2e8f0;margin-bottom:1rem;">🛠️ Tech Stack</h3>
+    <h3 style="text-align:center;color:#e2e8f0;margin-bottom:1rem;">🛠️ Tech Stack Evolution</h3>
     <div style="text-align:center;padding:1rem;">
         <span class="tech-badge">🐍 Python</span>
         <span class="tech-badge">❄️ Snowflake</span>
@@ -2369,11 +2364,19 @@ def render_arch():
         <span class="tech-badge">🔧 dbt</span>
         <span class="tech-badge">🤖 Gen AI</span>
         <span class="tech-badge">🦙 LlamaIndex</span>
-        <span class="tech-badge">⚡ Groq</span>
+        <span class="tech-badge">⚡ Cerebras</span>
         <span class="tech-badge">📊 Plotly</span>
         <span class="tech-badge">🎨 Streamlit</span>
         <span class="tech-badge">🔄 GitHub Actions</span>
     </div>
+        <div style="margin-top:1rem;">
+            <div style="color:#64748b;font-size:0.75rem;margin-bottom:0.5rem;text-align:center;">PREVIOUSLY TESTED</div>
+            <div style="text-align:center;">
+                <span style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.8rem;display:inline-block;margin:0.25rem;font-size:0.75rem;color:#64748b;">❄️ Snowflake</span>
+                <span style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.8rem;display:inline-block;margin:0.25rem;font-size:0.75rem;color:#64748b;">✨ Gemini</span>
+                <span style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.8rem;display:inline-block;margin:0.25rem;font-size:0.75rem;color:#64748b;">⚡ Groq</span>
+            </div>
+        </div>
     """, unsafe_allow_html=True)
 
 def render_about():
@@ -2409,7 +2412,7 @@ def render_about():
             <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
                 <li>Demonstrate production-ready data pipelines</li>
                 <li>Showcase modern data stack (Dagster, dbt, DuckDB)</li>
-                <li>Integrate AI/LLM capabilities (Groq, LlamaIndex)</li>
+                <li>Integrate AI/LLM capabilities (Cerebras, LlamaIndex)</li>
                 <li>Build scalable, cost-effective architecture</li>
                 <li>Create intuitive data visualizations</li>
             </ul>
@@ -2457,6 +2460,49 @@ def render_about():
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Cost efficiency section
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;margin:2rem 0;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1.5rem;">💰 COST-EFFICIENT ARCHITECTURE</h4>
+        <div style="color:#94a3b8;font-size:0.9rem;line-height:1.8;">
+            <p style="margin-bottom:1rem;">Built with cost optimization in mind, avoiding expensive enterprise tools while maintaining production-grade quality:</p>
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
+                <div>
+                    <h5 style="color:#f59e0b;font-size:0.85rem;margin-bottom:0.5rem;">❌ AVOIDED (Expensive)</h5>
+                    <ul style="font-size:0.85rem;line-height:1.6;">
+                        <li>Apache Spark / PySpark (~$5-10k/month)</li>
+                        <li>Hadoop clusters (~$3-8k/month)</li>
+                        <li>Azure Synapse (~$2-5k/month)</li>
+                        <li>AWS Redshift (~$2-4k/month)</li>
+                        <li>Databricks (~$3-7k/month)</li>
+                        <li>Snowflake compute (~$1-3k/month)</li>
+                        <li>OpenAI GPT-4 API (~$500-1k/month)</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h5 style="color:#10b981;font-size:0.85rem;margin-bottom:0.5rem;">✅ USED INSTEAD (Free/Cheap)</h5>
+                    <ul style="font-size:0.85rem;line-height:1.6;">
+                        <li><b>DuckDB:</b> In-process analytics (free)</li>
+                        <li><b>MotherDuck:</b> Serverless DuckDB ($0 free tier)</li>
+                        <li><b>Dagster:</b> Orchestration (free self-hosted)</li>
+                        <li><b>dbt:</b> Transformations (free core)</li>
+                        <li><b>GitHub Actions:</b> CI/CD (free tier)</li>
+                        <li><b>Cerebras:</b> LLM inference (pay-as-you-go)</li>
+                        <li><b>Streamlit:</b> Free hosting + dashboards</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div style="margin-top:1.5rem;padding:1rem;background:rgba(16,185,129,0.1);border-radius:8px;border-left:3px solid #10b981;text-align:center;">
+                <div style="font-size:1.2rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Savings: $15,000 - $40,000</div>
+                <div style="font-size:0.8rem;color:#94a3b8;">Achieved enterprise-scale data processing at near-zero cost</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -2477,7 +2523,7 @@ def render_about():
     """, unsafe_allow_html=True)
 
 # ============================================================================
-# SECTION 12: MAIN APPLICATION (Bring it all together)
+# SECTION 12: MAIN APPLICATION
 # ============================================================================
 
 def main():
@@ -2502,7 +2548,7 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
     
-    # Initialize AI (for chat feature)
+    # Initialize AI
     sql_db = get_ai_engine(get_engine())
     
     # Render header
@@ -2521,7 +2567,7 @@ def main():
         
         st.markdown("---")
         
-        # Main content: Trending (left) + Sentiment (right)
+        # Main content: Trending + Sentiment
         c1, c2 = st.columns([6, 4])
         
         with c1:
@@ -2534,7 +2580,7 @@ def main():
         
         st.markdown("---")
         
-        # Bottom section: Actors (left) + Distribution + Countries (right)
+        # Bottom section: Actors + Distribution + Countries
         c1, c2 = st.columns([6, 4])
         
         with c1:
@@ -2550,7 +2596,7 @@ def main():
     
     # ========== TRENDS TAB ==========
     with tabs[1]:
-        # Layout: Recent events (left) + Intensity guide + Distribution (right)
+        # Layout: Recent events + Intensity guide + Distribution
         c1, c2 = st.columns([7, 3])
         
         with c1:
@@ -2604,13 +2650,13 @@ def main():
         
         st.markdown("---")
         
-        # 30-day trend chart (full width)
+        # 30-day trend chart
         st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">30-Day Trend Analysis</span></div>', unsafe_allow_html=True)
         render_timeseries(conn, tbl)
     
     # ========== AI TAB ==========
     with tabs[2]:
-        # Layout: Chat (left) + Info sidebar (right)
+        # Layout: Chat + Info sidebar
         c1, c2 = st.columns([7, 3])
         
         with c1:
@@ -2622,7 +2668,7 @@ def main():
             st.markdown("""
             <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;">
                 <h4 style="color:#06b6d4;font-size:0.85rem;">ℹ️ HOW IT WORKS</h4>
-                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Groq AI → SQL query → Results with links</p>
+                <p style="color:#94a3b8;font-size:0.8rem;">Your question → Cerebras AI → SQL query → Results with links</p>
                 <hr style="border-color:#1e3a5f;margin:1rem 0;">
                 <p style="color:#94a3b8;font-size:0.75rem;">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
             </div>
