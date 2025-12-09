@@ -2074,13 +2074,10 @@ Return only the SQL query."""
                 data = None  # will hold query results
 
                 with st.spinner("🔍 Querying..."):
-                    # STEP 1: Get SQL query from AI
-                    response = qe.query(short_prompt)
-                    sql = response.metadata.get('sql_query')
-                    logger.info(f"Generated SQL: {sql}")
-
-                    # FALLBACK #1: Crisis/severe query (working well - keep as is)
-                    if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
+                    sql = None
+                    
+                    # PRIORITY #1: Crisis/severe queries (BEFORE AI - guaranteed correct filter)
+                    if 'crisis' in prompt.lower() or 'severe' in prompt.lower():
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
@@ -2088,10 +2085,16 @@ Return only the SQL query."""
                             f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' "
                             "ORDER BY IMPACT_SCORE ASC LIMIT 10"
                         )
-                        logger.info(f"Using fallback crisis SQL: {sql}")
+                        logger.info(f"Using crisis SQL: {sql}")
+                    
+                    # Otherwise, ask AI to generate SQL
+                    else:
+                        response = qe.query(short_prompt)
+                        sql = response.metadata.get('sql_query')
+                        logger.info(f"AI Generated SQL: {sql}")
 
-                    # FALLBACK #2: Top countries query
-                    elif not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
+                    # FALLBACK: Top countries query  
+                    if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
                         limit = 5
                         import re as _re
                         match = _re.search(r'top\s+(\d+)', prompt.lower())
@@ -2103,10 +2106,10 @@ Return only the SQL query."""
                             f"AND DATE >= '{dates['week_ago']}' "
                             f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
                         )
-                        logger.info(f"Using fallback top countries SQL: {sql}")
+                        logger.info(f"Using top countries SQL: {sql}")
 
-                    # FALLBACK #3: "What happened this week" - only for specific phrases
-                    elif not sql and ('what' in prompt.lower() and 'happen' in prompt.lower()):
+                    # FALLBACK: "What happened" queries
+                    if not sql and ('what' in prompt.lower() and 'happen' in prompt.lower()):
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
@@ -2114,10 +2117,10 @@ Return only the SQL query."""
                             f"AND DATE >= '{dates['week_ago']}' "
                             "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
                         )
-                        logger.info(f"Using fallback recent events SQL: {sql}")
+                        logger.info(f"Using recent events SQL: {sql}")
 
-                    # FALLBACK #4: If AI generated no SQL at all, get most recent events
-                    elif not sql:
+                    # FALLBACK: If AI generated no SQL, get most recent events
+                    if not sql:
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
