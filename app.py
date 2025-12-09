@@ -2461,46 +2461,54 @@ def render_about():
     </div>
     """, unsafe_allow_html=True)
 
-    # Cost efficiency section
+    # Cost efficiency section - using Streamlit columns for reliable layout
     st.markdown("""
     <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;margin:2rem 0;">
         <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1.5rem;">💰 COST-EFFICIENT ARCHITECTURE</h4>
-        <div style="color:#94a3b8;font-size:0.9rem;line-height:1.8;">
-            <p style="margin-bottom:1rem;">Built with cost optimization in mind, avoiding expensive enterprise tools while maintaining production-grade quality:</p>
-            
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
-                <div>
-                    <h5 style="color:#f59e0b;font-size:0.85rem;margin-bottom:0.5rem;">❌ AVOIDED (Expensive)</h5>
-                    <ul style="font-size:0.85rem;line-height:1.6;">
-                        <li>Apache Spark / PySpark (~$5-10k/month)</li>
-                        <li>Hadoop clusters (~$3-8k/month)</li>
-                        <li>Azure Synapse (~$2-5k/month)</li>
-                        <li>AWS Redshift (~$2-4k/month)</li>
-                        <li>Databricks (~$3-7k/month)</li>
-                        <li>Snowflake compute (~$1-3k/month)</li>
-                        <li>OpenAI GPT-4 API (~$500-1k/month)</li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h5 style="color:#10b981;font-size:0.85rem;margin-bottom:0.5rem;">✅ USED INSTEAD (Free/Cheap)</h5>
-                    <ul style="font-size:0.85rem;line-height:1.6;">
-                        <li><b>DuckDB:</b> In-process analytics (free)</li>
-                        <li><b>MotherDuck:</b> Serverless DuckDB ($0 free tier)</li>
-                        <li><b>Dagster:</b> Orchestration (free self-hosted)</li>
-                        <li><b>dbt:</b> Transformations (free core)</li>
-                        <li><b>GitHub Actions:</b> CI/CD (free tier)</li>
-                        <li><b>Cerebras:</b> LLM inference (pay-as-you-go)</li>
-                        <li><b>Streamlit:</b> Free hosting + dashboards</li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div style="margin-top:1.5rem;padding:1rem;background:rgba(16,185,129,0.1);border-radius:8px;border-left:3px solid #10b981;text-align:center;">
-                <div style="font-size:1.2rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Savings: $15,000 - $40,000</div>
-                <div style="font-size:0.8rem;color:#94a3b8;">Achieved enterprise-scale data processing at near-zero cost</div>
-            </div>
+        <p style="color:#94a3b8;font-size:0.9rem;text-align:center;margin-bottom:1rem;">Built with cost optimization in mind, avoiding expensive enterprise tools while maintaining production-grade quality</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Use Streamlit columns for side-by-side layout (more reliable than CSS grid)
+    cost_col1, cost_col2 = st.columns(2)
+    
+    with cost_col1:
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
+            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">❌ AVOIDED (Expensive)</h5>
+            <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
+                <li>Apache Spark / PySpark (~$5-10k/month)</li>
+                <li>Hadoop clusters (~$3-8k/month)</li>
+                <li>Azure Synapse (~$2-5k/month)</li>
+                <li>AWS Redshift (~$2-4k/month)</li>
+                <li>Databricks (~$3-7k/month)</li>
+                <li>Snowflake compute (~$1-3k/month)</li>
+                <li>OpenAI GPT-4 API (~$500-1k/month)</li>
+            </ul>
         </div>
+        """, unsafe_allow_html=True)
+    
+    with cost_col2:
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
+            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">✅ USED INSTEAD (Free/Cheap)</h5>
+            <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
+                <li><b style="color:#e2e8f0;">DuckDB:</b> In-process analytics (free)</li>
+                <li><b style="color:#e2e8f0;">MotherDuck:</b> Serverless DuckDB ($0 free tier)</li>
+                <li><b style="color:#e2e8f0;">Dagster:</b> Orchestration (free self-hosted)</li>
+                <li><b style="color:#e2e8f0;">dbt:</b> Transformations (free core)</li>
+                <li><b style="color:#e2e8f0;">GitHub Actions:</b> CI/CD (free tier)</li>
+                <li><b style="color:#e2e8f0;">Cerebras:</b> LLM inference (pay-as-you-go)</li>
+                <li><b style="color:#e2e8f0;">Streamlit:</b> Free hosting + dashboards</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Savings summary
+    st.markdown("""
+    <div style="margin-top:1rem;padding:1.25rem;background:rgba(16,185,129,0.1);border-radius:12px;border-left:4px solid #10b981;text-align:center;">
+        <div style="font-size:1.3rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Savings: $15,000 - $40,000</div>
+        <div style="font-size:0.85rem;color:#94a3b8;">Achieved enterprise-scale data processing at near-zero cost</div>
     </div>
     """, unsafe_allow_html=True)
     
