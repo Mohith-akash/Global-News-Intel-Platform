@@ -2089,11 +2089,16 @@ Return only the SQL query."""
                         )
                         logger.info(f"Using crisis SQL: {sql}")
                     
-                    # Otherwise, ask AI to generate SQL
+                    # Otherwise, try AI to generate SQL (with fallback if AI fails)
                     else:
-                        response = qe.query(short_prompt)
-                        sql = response.metadata.get('sql_query')
-                        logger.info(f"AI Generated SQL: {sql}")
+                        try:
+                            if qe:
+                                response = qe.query(short_prompt)
+                                sql = response.metadata.get('sql_query')
+                                logger.info(f"AI Generated SQL: {sql}")
+                        except Exception as ai_error:
+                            logger.warning(f"AI query failed, using fallback: {ai_error}")
+                            sql = None  # Will trigger fallback below
 
                     # FALLBACK: Top countries query  
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
