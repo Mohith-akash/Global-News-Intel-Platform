@@ -2141,19 +2141,107 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                         data = safe_query(c, sql)
                         
                         if not data.empty:
-                            # STEP 3: Generate natural language answer from actual results using Cerebras
-                            new_prompt = f"""Query: {prompt}
+                            # STEP 3: Clean data FIRST (before AI summarization)
+                            # This ensures the AI summary matches what's shown in the table
+                            data_display = data.copy()
+                            data_display.columns = [col.upper() for col in data_display.columns]
+
+                            if 'EVENT_ID' in data_display.columns:
+                                data_display = data_display.drop(columns=['EVENT_ID'])
+
+                            # Convert country codes to full names and filter invalid ones
+                            if 'ACTOR_COUNTRY_CODE' in data_display.columns:
+                                data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
+                                    lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
+                                )
+                                data_display = data_display[data_display['COUNTRY'].notna()]
+                                data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
+
+                            # Rename count columns
+                            if 'COUNT(*)' in data_display.columns:
+                                data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
+                            elif 'COUNT' in data_display.columns:
+                                data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
+
+                            # Add severity labels
+                            if 'IMPACT_SCORE' in data_display.columns:
+                                data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
+
+                            # Format dates
+                            if 'DATE' in data_display.columns:
+                                try:
+                                    data_display['DATE'] = pd.to_datetime(
+                                        data_display['DATE'].astype(str), format='%Y%m%d'
+                                    ).dt.strftime('%d/%m')
+                                except:
+                                    pass
+
+                            # Remove rows with null/empty values
+                            for col in data_display.columns:
+                                if data_display[col].dtype == 'object':
+                                    data_display = data_display[
+                                        (data_display[col].notna()) &
+                                        (data_display[col].astype(str) != 'None') &
+                                        (data_display[col].astype(str) != '') &
+                                        (data_display[col].astype(str) != 'Unknown')
+                                    ]
+
+                            # Rename link column
+                            if 'NEWS_LINK' in data_display.columns:
+                                data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
+
+                            # Reorder columns
+                            if 'EVENTS' in data_display.columns:
+                                preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
+                            else:
+                                preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
+
+                            link_cols = [col for col in data_display.columns if '🔗' in col]
+                            other_cols = [col for col in data_display.columns if col not in preferred_order and col not in link_cols]
+                            final_order = [col for col in preferred_order if col in data_display.columns] + other_cols + link_cols
+                            data_display = data_display[final_order]
+
+                            # STEP 4: Generate AI summary from CLEANED data (ensures consistency)
+                            if not data_display.empty:
+                                # Use cleaned data for AI summary
+                                summary_data = data_display.head(10).to_string(index=False)
+                                new_prompt = f"""Query: {prompt}
 
 Use the data below to generate a natural language answer to the query:
 
-{data.to_string()}
+{summary_data}
 
 Provide a clear, concise answer based on this data."""
-                            
-                            # Use Cerebras to distribute load across API limits
-                            response_og = cerebras_llm.complete(new_prompt)
-                            answer = str(response_og)
-                            st.markdown(answer)
+                                
+                                response_og = cerebras_llm.complete(new_prompt)
+                                answer = str(response_og)
+                                st.markdown(answer)
+
+                                # STEP 5: Display table (same data as summary)
+                                col_config = {
+                                    "DATE": st.column_config.TextColumn("DATE", width="small"),
+                                    "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
+                                    "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
+                                    "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
+                                    "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
+                                    "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
+                                    "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
+                                }
+                                for col in link_cols:
+                                    col_config[col] = st.column_config.LinkColumn(col, width="small")
+
+                                st.dataframe(
+                                    data_display.head(10),
+                                    hide_index=True,
+                                    width='stretch',
+                                    column_config=col_config
+                                )
+                            else:
+                                st.info("📭 No valid results after filtering")
+                                answer = "No valid results found after filtering."
+
+                            with st.expander("🔍 SQL Query"):
+                                st.code(sql, language='sql')
                         else:
                             st.warning("📭 No results found")
                             answer = "No results found for your query."
@@ -2162,84 +2250,6 @@ Provide a clear, concise answer based on this data."""
                         answer = str(response)
                         st.markdown(answer)
                         st.warning("⚠️ Could not generate SQL query. Try rephrasing your question or use one of the examples above.")
-
-                    # Now continue with table display if we have SQL and data
-                    if sql and data is not None and not data.empty:
-                        data_display = data.copy()
-                        data_display.columns = [c.upper() for c in data_display.columns]
-
-                        if 'EVENT_ID' in data_display.columns:
-                            data_display = data_display.drop(columns=['EVENT_ID'])
-
-                        if 'ACTOR_COUNTRY_CODE' in data_display.columns:
-                            data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
-                                lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
-                            )
-                            data_display = data_display[data_display['COUNTRY'].notna()]
-                            data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
-
-                        if 'COUNT(*)' in data_display.columns:
-                            data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
-                        elif 'COUNT' in data_display.columns:
-                            data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
-
-                        if 'IMPACT_SCORE' in data_display.columns:
-                            data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
-
-                        if 'DATE' in data_display.columns:
-                            try:
-                                data_display['DATE'] = pd.to_datetime(
-                                    data_display['DATE'].astype(str), format='%Y%m%d'
-                                ).dt.strftime('%d/%m')
-                            except:
-                                pass
-
-                        for col in data_display.columns:
-                            if data_display[col].dtype == 'object':
-                                data_display = data_display[
-                                    (data_display[col].notna()) &
-                                    (data_display[col].astype(str) != 'None') &
-                                    (data_display[col].astype(str) != '') &
-                                    (data_display[col].astype(str) != 'Unknown')
-                                ]
-
-                        if 'NEWS_LINK' in data_display.columns:
-                            data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
-
-                        if 'EVENTS' in data_display.columns:
-                            preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
-                        else:
-                            preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
-
-                        link_cols = [c for c in data_display.columns if '🔗' in c]
-                        other_cols = [c for c in data_display.columns if c not in preferred_order and c not in link_cols]
-                        final_order = [c for c in preferred_order if c in data_display.columns] + other_cols + link_cols
-                        data_display = data_display[final_order]
-
-                        col_config = {
-                            "DATE": st.column_config.TextColumn("DATE", width="small"),
-                            "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
-                            "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
-                            "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
-                            "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
-                            "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
-                            "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
-                        }
-                        for col in link_cols:
-                            col_config[col] = st.column_config.LinkColumn(col, width="small")
-
-                        if not data_display.empty:
-                            st.dataframe(
-                                data_display.head(10),
-                                hide_index=True,
-                                width='stretch',
-                                column_config=col_config
-                            )
-                        else:
-                            st.info("📭 No valid results after filtering")
-
-                        with st.expander("🔍 SQL Query"):
-                            st.code(sql, language='sql')
 
                     # Save this Q&A into compact history
                     st.session_state.qa_history.append({
