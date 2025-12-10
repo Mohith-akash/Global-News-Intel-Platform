@@ -103,6 +103,40 @@ for key in REQUIRED_ENVS:
 
 GEMINI_MODEL = "llama3.1-8b"  # Cerebras model name
 
+# Country name to ISO code mapping for query fallbacks
+COUNTRY_CODES = {
+    'usa': 'USA', 'united states': 'USA', 'america': 'USA', 'us': 'USA',
+    'india': 'IND', 'indian': 'IND',
+    'china': 'CHN', 'chinese': 'CHN',
+    'germany': 'DEU', 'german': 'DEU',
+    'uk': 'GBR', 'united kingdom': 'GBR', 'britain': 'GBR', 'british': 'GBR',
+    'russia': 'RUS', 'russian': 'RUS',
+    'france': 'FRA', 'french': 'FRA',
+    'japan': 'JPN', 'japanese': 'JPN',
+    'brazil': 'BRA', 'brazilian': 'BRA',
+    'canada': 'CAN', 'canadian': 'CAN',
+    'australia': 'AUS', 'australian': 'AUS',
+    'israel': 'ISR', 'israeli': 'ISR',
+    'iran': 'IRN', 'iranian': 'IRN',
+    'ukraine': 'UKR', 'ukrainian': 'UKR',
+    'pakistan': 'PAK', 'pakistani': 'PAK',
+    'mexico': 'MEX', 'mexican': 'MEX',
+    'italy': 'ITA', 'italian': 'ITA',
+    'spain': 'ESP', 'spanish': 'ESP',
+    'korea': 'KOR', 'korean': 'KOR', 'south korea': 'KOR',
+    'turkey': 'TUR', 'turkish': 'TUR',
+    'saudi': 'SAU', 'saudi arabia': 'SAU',
+    'egypt': 'EGY', 'egyptian': 'EGY',
+    'indonesia': 'IDN', 'indonesian': 'IDN',
+    'poland': 'POL', 'polish': 'POL',
+    'netherlands': 'NLD', 'dutch': 'NLD',
+    'sweden': 'SWE', 'swedish': 'SWE',
+    'switzerland': 'CHE', 'swiss': 'CHE',
+    'argentina': 'ARG', 'argentine': 'ARG',
+    'nigeria': 'NGA', 'nigerian': 'NGA',
+    'south africa': 'ZAF',
+}
+
 def get_dates():
     """
     Get current date and calculated date ranges.
@@ -2069,11 +2103,10 @@ Rules:
 
 Return only the SQL query."""
 
-                sql = None  # we'll fill this if/when we get a SQL query
+                sql = None  # will hold SQL query
                 data = None  # will hold query results
 
                 with st.spinner("🔍 Querying..."):
-                    sql = None
                     
                     # PRIORITY #1: Crisis/severe queries (BEFORE AI - guaranteed correct filter)
                     if 'crisis' in prompt.lower() or 'severe' in prompt.lower():
@@ -2100,8 +2133,7 @@ Return only the SQL query."""
                     # FALLBACK: Top countries query  
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
                         limit = 5
-                        import re as _re
-                        match = _re.search(r'top\s+(\d+)', prompt.lower())
+                        match = re.search(r'top\s+(\d+)', prompt.lower())
                         if match:
                             limit = int(match.group(1))
                         sql = (
@@ -2125,44 +2157,10 @@ Return only the SQL query."""
 
                     # FALLBACK: Country-specific queries (detect country names in prompt)
                     if not sql:
-                        # Map country names to codes
-                        country_codes = {
-                            'usa': 'USA', 'united states': 'USA', 'america': 'USA', 'us': 'USA',
-                            'india': 'IND', 'indian': 'IND',
-                            'china': 'CHN', 'chinese': 'CHN',
-                            'germany': 'DEU', 'german': 'DEU',
-                            'uk': 'GBR', 'united kingdom': 'GBR', 'britain': 'GBR', 'british': 'GBR',
-                            'russia': 'RUS', 'russian': 'RUS',
-                            'france': 'FRA', 'french': 'FRA',
-                            'japan': 'JPN', 'japanese': 'JPN',
-                            'brazil': 'BRA', 'brazilian': 'BRA',
-                            'canada': 'CAN', 'canadian': 'CAN',
-                            'australia': 'AUS', 'australian': 'AUS',
-                            'israel': 'ISR', 'israeli': 'ISR',
-                            'iran': 'IRN', 'iranian': 'IRN',
-                            'ukraine': 'UKR', 'ukrainian': 'UKR',
-                            'pakistan': 'PAK', 'pakistani': 'PAK',
-                            'mexico': 'MEX', 'mexican': 'MEX',
-                            'italy': 'ITA', 'italian': 'ITA',
-                            'spain': 'ESP', 'spanish': 'ESP',
-                            'korea': 'KOR', 'korean': 'KOR', 'south korea': 'KOR',
-                            'turkey': 'TUR', 'turkish': 'TUR',
-                            'saudi': 'SAU', 'saudi arabia': 'SAU',
-                            'egypt': 'EGY', 'egyptian': 'EGY',
-                            'indonesia': 'IDN', 'indonesian': 'IDN',
-                            'poland': 'POL', 'polish': 'POL',
-                            'netherlands': 'NLD', 'dutch': 'NLD',
-                            'sweden': 'SWE', 'swedish': 'SWE',
-                            'switzerland': 'CHE', 'swiss': 'CHE',
-                            'argentina': 'ARG', 'argentine': 'ARG',
-                            'nigeria': 'NGA', 'nigerian': 'NGA',
-                            'south africa': 'ZAF',
-                        }
-                        
-                        # Find countries mentioned in prompt
+                        # Find countries mentioned in prompt using module-level constant
                         prompt_lower = prompt.lower()
                         found_codes = []
-                        for name, code in country_codes.items():
+                        for name, code in COUNTRY_CODES.items():
                             if name in prompt_lower:
                                 if code not in found_codes:
                                     found_codes.append(code)
@@ -2198,7 +2196,6 @@ Return only the SQL query."""
                     # ========== SAFETY SAFEGUARDS TO PREVENT TOKEN DRAIN ==========
                     if sql:
                         sql_upper = sql.upper()
-                        import re as _re
                         
                         # SAFEGUARD 1: Add LIMIT 10 if missing
                         if 'LIMIT' not in sql_upper:
@@ -2206,9 +2203,9 @@ Return only the SQL query."""
                         
                         # SAFEGUARD 2: Reduce high LIMITs to max 10
                         else:
-                            limit_match = _re.search(r'LIMIT\s+(\d+)', sql_upper)
+                            limit_match = re.search(r'LIMIT\s+(\d+)', sql_upper)
                             if limit_match and int(limit_match.group(1)) > 10:
-                                sql = _re.sub(r'LIMIT\s+\d+', 'LIMIT 10', sql, flags=_re.IGNORECASE)
+                                sql = re.sub(r'LIMIT\s+\d+', 'LIMIT 10', sql, flags=re.IGNORECASE)
                         
                         logger.info(f"Safe SQL: {sql}")
 
