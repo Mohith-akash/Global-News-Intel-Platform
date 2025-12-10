@@ -33,11 +33,83 @@ def get_dates():
     now = datetime.datetime.now()
     week_ago = (now - datetime.timedelta(days=7)).strftime('%Y%m%d')
     month_ago = (now - datetime.timedelta(days=30)).strftime('%Y%m%d')
+    three_months_ago = (now - datetime.timedelta(days=90)).strftime('%Y%m%d')
     return {
         'now': now,
+        'today': now.strftime('%Y%m%d'),
         'week_ago': week_ago,
-        'month_ago': month_ago
+        'month_ago': month_ago,
+        'three_months_ago': three_months_ago
     }
+
+
+def detect_query_type(prompt):
+    """
+    Detect what type of query the user is asking and what time period.
+    
+    Returns dict with:
+        - is_aggregate: True if asking for counts/totals (use all data)
+        - is_specific_date: True if asking about a specific date
+        - specific_date: The date in YYYYMMDD format if detected
+        - time_period: 'all', 'month', 'week', or 'day'
+        - period_label: Human-readable label for the AI summary
+    """
+    import re
+    
+    prompt_lower = prompt.lower()
+    result = {
+        'is_aggregate': False,
+        'is_specific_date': False,
+        'specific_date': None,
+        'time_period': 'week',  # Default to week
+        'period_label': 'the past week'
+    }
+    
+    # Detect aggregate queries (counts, totals, "how many")
+    aggregate_keywords = ['count', 'total', 'how many', 'number of', 'sum', 'overall', 
+                          'whole year', 'all time', 'entire', 'so far', 'all events']
+    if any(kw in prompt_lower for kw in aggregate_keywords):
+        result['is_aggregate'] = True
+        result['time_period'] = 'all'
+        result['period_label'] = 'all available data (past 3+ months)'
+    
+    # Detect time periods
+    if 'year' in prompt_lower or 'all data' in prompt_lower:
+        result['time_period'] = 'all'
+        result['period_label'] = 'all available data (past 3+ months)'
+    elif 'month' in prompt_lower or '30 day' in prompt_lower:
+        result['time_period'] = 'month'
+        result['period_label'] = 'the past month'
+    elif 'today' in prompt_lower:
+        result['time_period'] = 'day'
+        result['period_label'] = 'today'
+    
+    # Detect specific dates (e.g., "October 15", "10/15", "2024-10-15", "dec 5")
+    now = datetime.datetime.now()
+    
+    # Pattern: Month name + day (e.g., "october 15", "dec 5")
+    month_names = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                   'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+                   'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
+                   'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12}
+    
+    for month_name, month_num in month_names.items():
+        pattern = rf'{month_name}\s+(\d{{1,2}})'
+        match = re.search(pattern, prompt_lower)
+        if match:
+            day = int(match.group(1))
+            try:
+                # Assume current year
+                date_obj = datetime.datetime(now.year, month_num, day)
+                result['is_specific_date'] = True
+                result['specific_date'] = date_obj.strftime('%Y%m%d')
+                result['time_period'] = 'specific'
+                result['period_label'] = date_obj.strftime('%B %d, %Y')
+                return result
+            except ValueError:
+                pass
+    
+    return result
 
 
 def get_country(code):
