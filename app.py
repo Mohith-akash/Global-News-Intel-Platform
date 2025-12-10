@@ -31,6 +31,11 @@ import re                           # Pattern matching in text
 from urllib.parse import urlparse, unquote  # Extracts info from web links
 import duckdb                       # Fast database engine
 
+# Local modules (extracted for maintainability)
+from config import CEREBRAS_MODEL, COUNTRY_ALIASES
+from utils import get_country_code, get_dates, get_country, get_impact_label, get_intensity_label
+from styles import inject_css
+
 # ============================================================================
 # SECTION 2: INITIAL SETUP
 # ============================================================================
@@ -98,285 +103,12 @@ for key in REQUIRED_ENVS:
         os.environ[key] = val
 
 # ============================================================================
-# SECTION 4: GLOBAL CONSTANTS
+# SECTION 4: GLOBAL CONSTANTS & HELPERS (imported from config.py and utils.py)
 # ============================================================================
 
-GEMINI_MODEL = "llama3.1-8b"  # Cerebras model name
-
-def get_dates():
-    """
-    Get current date and calculated date ranges.
-    
-    IMPORTANT: This function is called every time to ensure dates are always current.
-    If we calculated these once at module level, they would become stale as the 
-    server stays running for days/weeks.
-    
-    Returns:
-        dict with: now, week_ago, month_ago (all as strings in YYYYMMDD format)
-    """
-    now = datetime.datetime.now()
-    week_ago = (now - datetime.timedelta(days=7)).strftime('%Y%m%d')
-    month_ago = (now - datetime.timedelta(days=30)).strftime('%Y%m%d')
-    return {
-        'now': now,
-        'week_ago': week_ago,
-        'month_ago': month_ago
-    }
-
 # ============================================================================
-# SECTION 5: STYLING
+# SECTION 5: STYLING (imported from styles.py)
 # ============================================================================
-
-def inject_css():
-    """
-    Add custom CSS styling to make the dashboard look professional.
-    
-    CSS is like the "paint and decoration" of a website - it controls colors,
-    fonts, spacing, animations, etc. We use a dark theme with blue accents.
-    """
-    st.markdown("""
-    <style>
-        /* Import modern fonts from Google Fonts */
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
-        
-        /* Define color palette as variables for easy reuse */
-        :root { 
-            --bg:#0a0e17;           /* Dark background */
-            --card:#111827;         /* Slightly lighter for cards */
-            --border:#1e3a5f;       /* Blue border color */
-            --text:#e2e8f0;         /* Light text */
-            --muted:#94a3b8;        /* Dimmed text */
-            --cyan:#06b6d4;         /* Bright cyan accent */
-            --green:#10b981;        /* Green for positive */
-            --red:#ef4444;          /* Red for negative */
-            --amber:#f59e0b;        /* Orange for warnings */
-        }
-        
-        /* Main app background */
-        .stApp { background: var(--bg); }
-        
-        /* Hide Streamlit's default header, menu, and footer */
-        header[data-testid="stHeader"], #MainMenu, footer, .stDeployButton { 
-            display: none !important; 
-        }
-        
-        /* Set default fonts for different elements */
-        html, body, p, span, div { 
-            font-family: 'Inter', sans-serif; 
-            color: var(--text); 
-        }
-        h1, h2, h3, code { 
-            font-family: 'JetBrains Mono', monospace; 
-        }
-        
-        /* Main content area spacing */
-        .block-container { 
-            padding: 1.5rem 2rem; 
-            max-width: 100%; 
-        }
-        
-        /* Header section styling */
-        .header { 
-            border-bottom: 1px solid var(--border); 
-            padding: 1rem 0 1.5rem; 
-            margin-bottom: 1.5rem; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-        }
-        
-        /* Logo and branding */
-        .logo { 
-            display: flex; 
-            align-items: center; 
-            gap: 0.75rem; 
-        }
-        .logo-icon { 
-            font-size: 2.5rem; 
-        }
-        .logo-title { 
-            font-family: 'JetBrains Mono'; 
-            font-size: 1.4rem; 
-            font-weight: 700; 
-            text-transform: uppercase; 
-        }
-        .logo-sub { 
-            font-size: 0.7rem; 
-            color: var(--cyan); 
-        }
-        
-        /* "LIVE DATA" badge in header */
-        .live-badge { 
-            display: flex; 
-            align-items: center; 
-            gap: 0.5rem; 
-            background: rgba(16,185,129,0.15); 
-            border: 1px solid rgba(16,185,129,0.4); 
-            padding: 0.4rem 0.8rem; 
-            border-radius: 20px; 
-            font-size: 0.75rem; 
-        }
-        
-        /* Pulsing green dot animation */
-        .live-dot { 
-            width: 8px; 
-            height: 8px; 
-            background: var(--green); 
-            border-radius: 50%; 
-            animation: pulse 2s infinite; 
-        }
-        @keyframes pulse { 
-            0%,100% { opacity:1; } 
-            50% { opacity:0.5; } 
-        }
-        
-        /* Metric cards (the boxes showing numbers like "Total Events") */
-        div[data-testid="stMetric"] { 
-            background: var(--card); 
-            border: 1px solid var(--border); 
-            border-radius: 12px; 
-            padding: 1rem; 
-        }
-        div[data-testid="stMetric"] label { 
-            color: var(--muted); 
-            font-size: 0.7rem; 
-            font-family: 'JetBrains Mono'; 
-            text-transform: uppercase; 
-        }
-        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { 
-            font-size: 1.5rem; 
-            font-weight: 700; 
-            font-family: 'JetBrains Mono'; 
-        }
-        
-        /* Card headers (titles above charts/tables) */
-        .card-hdr { 
-            display: flex; 
-            align-items: center; 
-            gap: 0.75rem; 
-            margin-bottom: 1rem; 
-            padding-bottom: 0.75rem; 
-            border-bottom: 1px solid var(--border); 
-        }
-        .card-title { 
-            font-family: 'JetBrains Mono'; 
-            font-size: 0.85rem; 
-            font-weight: 600; 
-            text-transform: uppercase; 
-        }
-        
-        /* Tab navigation styling */
-        .stTabs [data-baseweb="tab-list"] { 
-            gap: 0; 
-            background: #0d1320; 
-            border-radius: 8px; 
-            padding: 4px; 
-            border: 1px solid var(--border); 
-            overflow-x: auto; 
-        }
-        .stTabs [data-baseweb="tab"] { 
-            font-family: 'JetBrains Mono'; 
-            font-size: 0.75rem; 
-            color: var(--muted); 
-            padding: 0.5rem 0.9rem; 
-            white-space: nowrap; 
-        }
-        .stTabs [aria-selected="true"] { 
-            background: #1a2332; 
-            color: var(--cyan); 
-            border-radius: 6px; 
-        }
-        .stTabs [data-baseweb="tab-highlight"], 
-        .stTabs [data-baseweb="tab-border"] { 
-            display: none; 
-        }
-        
-        /* Data table styling */
-        div[data-testid="stDataFrame"] { 
-            background: var(--card); 
-            border: 1px solid var(--border); 
-            border-radius: 12px; 
-        }
-        div[data-testid="stDataFrame"] th { 
-            background: #1a2332 !important; 
-            color: var(--muted) !important; 
-            font-size: 0.75rem; 
-            text-transform: uppercase; 
-        }
-        
-        /* Live ticker (scrolling alert bar) */
-        .ticker { 
-            background: linear-gradient(90deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05)); 
-            border-left: 4px solid var(--red); 
-            border-radius: 0 8px 8px 0; 
-            padding: 0.6rem 0; 
-            overflow: hidden; 
-            position: relative; 
-            margin: 0.5rem 0; 
-        }
-        .ticker-label { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            bottom: 0; 
-            background: linear-gradient(90deg, rgba(127,29,29,0.98), transparent); 
-            padding: 0.6rem 1.25rem 0.6rem 0.75rem; 
-            font-size: 0.7rem; 
-            font-weight: 600; 
-            color: var(--red); 
-            display: flex; 
-            align-items: center; 
-            gap: 0.5rem; 
-            z-index: 2; 
-        }
-        
-        /* Blinking dot in ticker */
-        .ticker-dot { 
-            width: 7px; 
-            height: 7px; 
-            background: var(--red); 
-            border-radius: 50%; 
-            animation: blink 1s infinite; 
-        }
-        @keyframes blink { 
-            0%,100% { opacity:1; } 
-            50% { opacity:0.3; } 
-        }
-        
-        /* Scrolling text animation */
-        .ticker-text { 
-            display: inline-block; 
-            white-space: nowrap; 
-            padding-left: 95px; 
-            animation: scroll 40s linear infinite; 
-            font-size: 0.8rem; 
-            color: #fca5a5; 
-        }
-        @keyframes scroll { 
-            0% { transform: translateX(0); } 
-            100% { transform: translateX(-50%); } 
-        }
-        
-        /* Technology badges */
-        .tech-badge { 
-            display: inline-flex; 
-            background: #1a2332; 
-            border: 1px solid var(--border); 
-            border-radius: 20px; 
-            padding: 0.4rem 0.8rem; 
-            font-size: 0.75rem; 
-            color: var(--muted); 
-            margin: 0.25rem; 
-        }
-        
-        /* Horizontal divider line */
-        hr { 
-            border: none; 
-            border-top: 1px solid var(--border); 
-            margin: 1.5rem 0; 
-        }
-    </style>
-    """, unsafe_allow_html=True)
 
 # ============================================================================
 # SECTION 6: DATABASE CONNECTION
@@ -500,26 +232,30 @@ def get_ai_engine(_engine):
         # Initialize Cerebras LLM
         llm = Cerebras(
             api_key=api_key, 
-            model=GEMINI_MODEL,  # Use llama3.1-8b
+            model=CEREBRAS_MODEL,
             temperature=0.1
         )
         
-        # Initialize embedding model
-        embed = GoogleGenAIEmbedding(
-            api_key=os.getenv("GOOGLE_API_KEY") or api_key, 
-            model_name="text-embedding-004"
-        )
+        # Initialize embedding model (requires Google API key)
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if google_api_key:
+            embed = GoogleGenAIEmbedding(
+                api_key=google_api_key, 
+                model_name="text-embedding-004"
+            )
+            Settings.embed_model = embed
         
-        # Set these as global defaults for LlamaIndex
+        # Set LLM as global default
         Settings.llm = llm
-        Settings.embed_model = embed
         
         # Get database connection and find main table
         conn = get_db()
         main_table = detect_table(conn)
         
         # Wrap database so AI can understand it
-        sql_db = SQLDatabase(_engine, include_tables=[main_table])
+        # Note: sample_rows_in_table_info=0 disables PostgreSQL-specific introspection
+        # that doesn't work with DuckDB (avoids pg_collation error)
+        sql_db = SQLDatabase(_engine, include_tables=[main_table], sample_rows_in_table_info=0)
         
         return sql_db
     
@@ -583,7 +319,7 @@ def get_cerebras_llm():
         
         cerebras_llm = Cerebras(
             api_key=api_key,
-            model="llama3.1-8b",  # Cerebras Llama model
+            model=CEREBRAS_MODEL,  # Use model from constants
             temperature=0.1       # Low temp for factual responses
         )
         
@@ -595,114 +331,8 @@ def get_cerebras_llm():
         return None
 
 # ============================================================================
-# SECTION 9: DATA TRANSFORMATION HELPERS
+# SECTION 9: DATA TRANSFORMATION HELPERS (imported from utils.py)
 # ============================================================================
-
-def get_country(code):
-    """
-    Convert country codes to full country names.
-    
-    Converts codes like "USA" → "United States", "GBR" → "United Kingdom"
-    Uses the pycountry library which has a database of all country codes.
-    
-    Args:
-        code: 2-letter (US) or 3-letter (USA) country code
-    
-    Returns:
-        Full country name, or None if code is invalid
-    """
-    # Validate input
-    if not code or not isinstance(code, str): 
-        return None
-    
-    code = code.strip().upper()
-    
-    if len(code) < 2: 
-        return None
-    
-    try:
-        # Try 2-letter code first
-        if len(code) == 2:
-            country = pycountry.countries.get(alpha_2=code)
-            if country: 
-                return country.name
-        
-        # Try 3-letter code
-        if len(code) == 3:
-            country = pycountry.countries.get(alpha_3=code)
-            if country: 
-                return country.name
-        
-        return None
-    
-    except:
-        return None
-
-def get_impact_label(score):
-    """
-    Convert numeric impact scores to human-readable labels.
-    
-    Impact scores range from -10 (extreme conflict) to +10 (major agreement).
-    This makes them easier to understand at a glance.
-    
-    Args:
-        score: Impact score number (-10 to +10)
-    
-    Returns:
-        Descriptive label with emoji (e.g., "🔴 Major Conflict")
-    """
-    if score is None: 
-        return "Neutral"
-    
-    score = float(score)
-    
-    # Negative events
-    if score <= -8: return "🔴 Severe Crisis"
-    if score <= -5: return "🔴 Major Conflict"
-    if score <= -3: return "🟠 Rising Tensions"
-    if score <= -1: return "🟡 Minor Dispute"
-    
-    # Neutral events
-    if score < 1: return "⚪ Neutral"
-    
-    # Positive events
-    if score < 3: return "🟢 Cooperation"
-    if score < 5: return "🟢 Partnership"
-    
-    return "✨ Major Agreement"
-
-def get_intensity_label(score):
-    """
-    Get more detailed intensity description for events.
-    
-    Similar to get_impact_label but with more specific descriptions
-    that are easier for general audience to understand.
-    
-    Args:
-        score: Impact score number (-10 to +10)
-    
-    Returns:
-        Descriptive intensity label (e.g., "⚔️ Armed Conflict")
-    """
-    if score is None: 
-        return "⚪ Neutral Event"
-    
-    score = float(score)
-    
-    # Negative intensities
-    if score <= -8: return "⚔️ Armed Conflict"      # Military action
-    if score <= -6: return "🔴 Major Crisis"        # Severe situation
-    if score <= -4: return "🟠 Serious Tension"     # High stakes
-    if score <= -2: return "🟡 Verbal Dispute"      # Disagreements
-    
-    # Neutral
-    if score < 2: return "⚪ Neutral Event"         # Standard news
-    
-    # Positive intensities
-    if score < 4: return "🟢 Diplomatic Talk"       # Cooperation
-    if score < 6: return "🤝 Active Partnership"    # Joint efforts
-    
-    return "✨ Peace Agreement"                     # Major accord
 
 def clean_headline(text):
     """
@@ -2042,11 +1672,8 @@ def render_ai_chat(c, sql_db):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            # Get query engine
-            qe = get_query_engine(sql_db)
-            if not qe:
-                st.error("❌ AI not available")
-                return
+            # Get query engine (may be None if AI failed to initialize)
+            qe = get_query_engine(sql_db) if sql_db else None
             
             # Get Cerebras LLM
             cerebras_llm = get_cerebras_llm()
@@ -2058,46 +1685,25 @@ def render_ai_chat(c, sql_db):
                 dates = get_dates()
 
                 short_prompt = f"""Query: "{prompt}"
-
 Table: events_dagster
-Columns: DATE (VARCHAR in YYYYMMDD format like '20241206'), MAIN_ACTOR (VARCHAR), ACTOR_COUNTRY_CODE (VARCHAR 3-letter), IMPACT_SCORE (FLOAT), ARTICLE_COUNT (SMALLINT), NEWS_LINK (VARCHAR)
+Columns: DATE (VARCHAR YYYYMMDD), MAIN_ACTOR, ACTOR_COUNTRY_CODE (3-letter ISO code), IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK
 
-CRITICAL: DATE is stored as VARCHAR like '20241206', NOT as date type!
+Rules:
+- DATE is VARCHAR like '20251210'
+- Always include: WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
+- For recent data use: DATE >= '{dates['week_ago']}'
+- LIMIT 10 max
+- ALWAYS include NEWS_LINK in SELECT
 
-MANDATORY FILTERS:
-WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE != ''
+Return only the SQL query."""
 
-For recent events (last 7 days), use: DATE >= '{dates['week_ago']}'
-
-EXAMPLES:
-1. "top 5 countries by event count":
-SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT 5
-
-2. "show crisis events":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' ORDER BY IMPACT_SCORE ASC LIMIT 10
-
-3. "what happened this week":
-SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '{dates['week_ago']}' ORDER BY DATE DESC LIMIT 10
-
-DO NOT use date(), strftime(), or any date functions. Just compare DATE >= '{dates['week_ago']}'.
-
-CRISIS = IMPACT_SCORE < -3
-
-ALWAYS use titled abberviations for countries that are being queried for. For example, US or USA = United States, UK = United Kingdom and so on. It should ALWAYS be titled.
-
-ALWAYS include NEWS_LINK. Write complete SQL only."""
-
-                sql = None  # we'll fill this if/when we get a SQL query
+                sql = None  # will hold SQL query
                 data = None  # will hold query results
 
                 with st.spinner("🔍 Querying..."):
-                    # STEP 1: Get SQL query from AI
-                    response = qe.query(short_prompt)
-                    sql = response.metadata.get('sql_query')
-                    logger.info(f"Generated SQL: {sql}")
-
-                    # FALLBACK #1: Crisis query
-                    if not sql and ('crisis' in prompt.lower() or 'severe' in prompt.lower()):
+                    
+                    # PRIORITY #1: Crisis/severe queries (BEFORE AI - guaranteed correct filter)
+                    if 'crisis' in prompt.lower() or 'severe' in prompt.lower():
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
@@ -2105,14 +1711,23 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' "
                             "ORDER BY IMPACT_SCORE ASC LIMIT 10"
                         )
-                        logger.info(f"Using fallback crisis SQL: {sql}")
-                        st.info("🔧 Using built-in crisis query")
+                        logger.info(f"Using crisis SQL: {sql}")
+                    
+                    # Otherwise, try AI to generate SQL (with fallback if AI fails)
+                    else:
+                        try:
+                            if qe:
+                                response = qe.query(short_prompt)
+                                sql = response.metadata.get('sql_query')
+                                logger.info(f"AI Generated SQL: {sql}")
+                        except Exception as ai_error:
+                            logger.warning(f"AI query failed, using fallback: {ai_error}")
+                            sql = None  # Will trigger fallback below
 
-                    # FALLBACK #2: Top countries query
+                    # FALLBACK: Top countries query  
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
                         limit = 5
-                        import re as _re
-                        match = _re.search(r'top\s+(\d+)', prompt.lower())
+                        match = re.search(r'top\s+(\d+)', prompt.lower())
                         if match:
                             limit = int(match.group(1))
                         sql = (
@@ -2121,11 +1736,52 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             f"AND DATE >= '{dates['week_ago']}' "
                             f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
                         )
-                        logger.info(f"Using fallback top countries SQL: {sql}")
-                        st.info("🔧 Using built-in top countries query")
+                        logger.info(f"Using top countries SQL: {sql}")
 
-                    # FALLBACK #3: What happened query
-                    if not sql and ('what' in prompt.lower() and ('happen' in prompt.lower() or 'event' in prompt.lower())):
+                    # FALLBACK: "What happened" queries
+                    if not sql and ('what' in prompt.lower() and 'happen' in prompt.lower()):
+                        sql = (
+                            "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                            "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND DATE >= '{dates['week_ago']}' "
+                            "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
+                        )
+                        logger.info(f"Using recent events SQL: {sql}")
+
+                    # FALLBACK: Country-specific queries (detect country names in prompt)
+                    if not sql:
+                        # Extract potential country names from prompt
+                        prompt_lower = prompt.lower()
+                        found_codes = []
+                        
+                        # Split prompt into words and check each
+                        words = prompt_lower.replace(',', ' ').replace('and', ' ').split()
+                        for word in words:
+                            if len(word) >= 2:  # Skip very short words
+                                code = get_country_code(word)
+                                if code and code not in found_codes:
+                                    found_codes.append(code)
+                        
+                        if found_codes:
+                            # Build country filter
+                            if len(found_codes) == 1:
+                                country_filter = f"ACTOR_COUNTRY_CODE = '{found_codes[0]}'"
+                            else:
+                                codes_str = "', '".join(found_codes)
+                                country_filter = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
+                            
+                            sql = (
+                                "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
+                                "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
+                                f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                                f"AND {country_filter} AND DATE >= '{dates['week_ago']}' "
+                                "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
+                            )
+                            logger.info(f"Using country-specific SQL: {sql}")
+
+                    # FALLBACK: Default - get most recent events (no country filter)
+                    if not sql:
                         sql = (
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
@@ -2133,27 +1789,136 @@ ALWAYS include NEWS_LINK. Write complete SQL only."""
                             f"AND DATE >= '{dates['week_ago']}' "
                             "ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
                         )
-                        logger.info(f"Using fallback recent events SQL: {sql}")
-                        st.info("🔧 Using built-in recent events query")
+                        logger.info(f"Using default fallback SQL: {sql}")
+
+                    # ========== SAFETY SAFEGUARDS TO PREVENT TOKEN DRAIN ==========
+                    if sql:
+                        sql_upper = sql.upper()
+                        
+                        # SAFEGUARD 1: Add LIMIT 10 if missing
+                        if 'LIMIT' not in sql_upper:
+                            sql = sql.rstrip(';') + ' LIMIT 10'
+                        
+                        # SAFEGUARD 2: Reduce high LIMITs to max 10
+                        else:
+                            limit_match = re.search(r'LIMIT\s+(\d+)', sql_upper)
+                            if limit_match and int(limit_match.group(1)) > 10:
+                                sql = re.sub(r'LIMIT\s+\d+', 'LIMIT 10', sql, flags=re.IGNORECASE)
+                        
+                        logger.info(f"Safe SQL: {sql}")
 
                     # STEP 2: Execute SQL and get results
                     if sql:
                         data = safe_query(c, sql)
                         
                         if not data.empty:
-                            # STEP 3: Generate natural language answer from actual results using Cerebras
-                            new_prompt = f"""Query: {prompt}
+                            # STEP 3: Clean data FIRST (before AI summarization)
+                            data_display = data.copy()
+                            data_display.columns = [col.upper() for col in data_display.columns]
 
-Use the data below to generate a natural language answer to the query:
+                            if 'EVENT_ID' in data_display.columns:
+                                data_display = data_display.drop(columns=['EVENT_ID'])
 
-{data.to_string()}
+                            # Convert country codes to full names and filter invalid ones
+                            if 'ACTOR_COUNTRY_CODE' in data_display.columns:
+                                data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
+                                    lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
+                                )
+                                data_display = data_display[data_display['COUNTRY'].notna()]
+                                data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
 
-Provide a clear, concise answer based on this data."""
-                            
-                            # Use Cerebras to distribute load across API limits
-                            response_og = cerebras_llm.complete(new_prompt)
-                            answer = str(response_og)
-                            st.markdown(answer)
+                            # Rename count columns
+                            if 'COUNT(*)' in data_display.columns:
+                                data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
+                            elif 'COUNT' in data_display.columns:
+                                data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
+
+                            # Add severity labels
+                            if 'IMPACT_SCORE' in data_display.columns:
+                                data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
+
+                            # Format dates
+                            if 'DATE' in data_display.columns:
+                                try:
+                                    data_display['DATE'] = pd.to_datetime(
+                                        data_display['DATE'].astype(str), format='%Y%m%d'
+                                    ).dt.strftime('%b %d')
+                                except:
+                                    pass
+
+                            # Remove rows only if COUNTRY is missing (essential field)
+                            if 'COUNTRY' in data_display.columns:
+                                data_display = data_display[data_display['COUNTRY'].notna()]
+
+                            # Rename link column
+                            if 'NEWS_LINK' in data_display.columns:
+                                data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
+
+                            # Reorder columns
+                            if 'EVENTS' in data_display.columns:
+                                preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
+                            else:
+                                preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
+
+                            link_cols = [col for col in data_display.columns if '🔗' in col]
+                            other_cols = [col for col in data_display.columns if col not in preferred_order and col not in link_cols]
+                            final_order = [col for col in preferred_order if col in data_display.columns] + other_cols + link_cols
+                            data_display = data_display[final_order]
+
+                            # STEP 4: Generate AI summary with safeguards
+                            if not data_display.empty:
+                                # SAFEGUARD 4: Limit to 5 rows max for AI
+                                ai_data = data_display.head(5)
+                                
+                                # SAFEGUARD 6: Remove links from AI (not useful in text)
+                                ai_cols = [c for c in ai_data.columns if '🔗' not in c]
+                                summary_data = ai_data[ai_cols].to_string(index=False)
+                                
+                                # SAFEGUARD 7: Cap data at 3000 chars (reasonable limit)
+                                if len(summary_data) > 3000:
+                                    summary_data = summary_data[:3000]
+                                
+                                new_prompt = f"""Query: {prompt}
+
+Events data:
+{summary_data}
+
+Based on this data, write a news-style summary. For each event:
+- Explain what likely happened in the real world (the actual news story)
+- Don't just repeat the table values - interpret and explain the significance
+- Write 2-3 sentences per event with real-world context
+
+Focus on the news story, not the data columns."""
+                                
+                                response_og = cerebras_llm.complete(new_prompt)
+                                answer = str(response_og)
+                                st.markdown(answer)
+
+                                # STEP 5: Display table (same data as summary)
+                                col_config = {
+                                    "DATE": st.column_config.TextColumn("DATE", width="small"),
+                                    "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
+                                    "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
+                                    "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
+                                    "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
+                                    "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
+                                    "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
+                                }
+                                for col in link_cols:
+                                    col_config[col] = st.column_config.LinkColumn(col, width="small")
+
+                                st.dataframe(
+                                    data_display.head(10),
+                                    hide_index=True,
+                                    width='stretch',
+                                    column_config=col_config
+                                )
+                            else:
+                                st.info("📭 No valid results after filtering")
+                                answer = "No valid results found after filtering."
+
+                            with st.expander("🔍 SQL Query"):
+                                st.code(sql, language='sql')
                         else:
                             st.warning("📭 No results found")
                             answer = "No results found for your query."
@@ -2162,84 +1927,6 @@ Provide a clear, concise answer based on this data."""
                         answer = str(response)
                         st.markdown(answer)
                         st.warning("⚠️ Could not generate SQL query. Try rephrasing your question or use one of the examples above.")
-
-                    # Now continue with table display if we have SQL and data
-                    if sql and data is not None and not data.empty:
-                        data_display = data.copy()
-                        data_display.columns = [c.upper() for c in data_display.columns]
-
-                        if 'EVENT_ID' in data_display.columns:
-                            data_display = data_display.drop(columns=['EVENT_ID'])
-
-                        if 'ACTOR_COUNTRY_CODE' in data_display.columns:
-                            data_display['COUNTRY'] = data_display['ACTOR_COUNTRY_CODE'].apply(
-                                lambda x: get_country(x) if x and isinstance(x, str) and len(x.strip()) > 0 else None
-                            )
-                            data_display = data_display[data_display['COUNTRY'].notna()]
-                            data_display = data_display.drop(columns=['ACTOR_COUNTRY_CODE'])
-
-                        if 'COUNT(*)' in data_display.columns:
-                            data_display = data_display.rename(columns={'COUNT(*)': 'EVENTS'})
-                        elif 'COUNT' in data_display.columns:
-                            data_display = data_display.rename(columns={'COUNT': 'EVENTS'})
-
-                        if 'IMPACT_SCORE' in data_display.columns:
-                            data_display['SEVERITY'] = data_display['IMPACT_SCORE'].apply(get_impact_label)
-
-                        if 'DATE' in data_display.columns:
-                            try:
-                                data_display['DATE'] = pd.to_datetime(
-                                    data_display['DATE'].astype(str), format='%Y%m%d'
-                                ).dt.strftime('%d/%m')
-                            except:
-                                pass
-
-                        for col in data_display.columns:
-                            if data_display[col].dtype == 'object':
-                                data_display = data_display[
-                                    (data_display[col].notna()) &
-                                    (data_display[col].astype(str) != 'None') &
-                                    (data_display[col].astype(str) != '') &
-                                    (data_display[col].astype(str) != 'Unknown')
-                                ]
-
-                        if 'NEWS_LINK' in data_display.columns:
-                            data_display = data_display.rename(columns={'NEWS_LINK': '🔗'})
-
-                        if 'EVENTS' in data_display.columns:
-                            preferred_order = ['COUNTRY', 'EVENTS', 'MAIN_ACTOR']
-                        else:
-                            preferred_order = ['DATE', 'COUNTRY', 'MAIN_ACTOR', 'SEVERITY', 'IMPACT_SCORE', 'ARTICLE_COUNT']
-
-                        link_cols = [c for c in data_display.columns if '🔗' in c]
-                        other_cols = [c for c in data_display.columns if c not in preferred_order and c not in link_cols]
-                        final_order = [c for c in preferred_order if c in data_display.columns] + other_cols + link_cols
-                        data_display = data_display[final_order]
-
-                        col_config = {
-                            "DATE": st.column_config.TextColumn("DATE", width="small"),
-                            "COUNTRY": st.column_config.TextColumn("COUNTRY", width="medium"),
-                            "EVENTS": st.column_config.NumberColumn("EVENTS", format="%d", width="small"),
-                            "MAIN_ACTOR": st.column_config.TextColumn("ACTOR", width="medium"),
-                            "SEVERITY": st.column_config.TextColumn("SEVERITY", width="medium"),
-                            "IMPACT_SCORE": st.column_config.NumberColumn("SCORE", format="%.1f", width="small"),
-                            "ARTICLE_COUNT": st.column_config.NumberColumn("ARTICLES", width="small"),
-                        }
-                        for col in link_cols:
-                            col_config[col] = st.column_config.LinkColumn(col, width="small")
-
-                        if not data_display.empty:
-                            st.dataframe(
-                                data_display.head(10),
-                                hide_index=True,
-                                width='stretch',
-                                column_config=col_config
-                            )
-                        else:
-                            st.info("📭 No valid results after filtering")
-
-                        with st.expander("🔍 SQL Query"):
-                            st.code(sql, language='sql')
 
                     # Save this Q&A into compact history
                     st.session_state.qa_history.append({
@@ -2461,46 +2148,54 @@ def render_about():
     </div>
     """, unsafe_allow_html=True)
 
-    # Cost efficiency section
+    # Cost efficiency section - using Streamlit columns for reliable layout
     st.markdown("""
     <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;margin:2rem 0;">
         <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1.5rem;">💰 COST-EFFICIENT ARCHITECTURE</h4>
-        <div style="color:#94a3b8;font-size:0.9rem;line-height:1.8;">
-            <p style="margin-bottom:1rem;">Built with cost optimization in mind, avoiding expensive enterprise tools while maintaining production-grade quality:</p>
-            
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
-                <div>
-                    <h5 style="color:#f59e0b;font-size:0.85rem;margin-bottom:0.5rem;">❌ AVOIDED (Expensive)</h5>
-                    <ul style="font-size:0.85rem;line-height:1.6;">
-                        <li>Apache Spark / PySpark (~$5-10k/month)</li>
-                        <li>Hadoop clusters (~$3-8k/month)</li>
-                        <li>Azure Synapse (~$2-5k/month)</li>
-                        <li>AWS Redshift (~$2-4k/month)</li>
-                        <li>Databricks (~$3-7k/month)</li>
-                        <li>Snowflake compute (~$1-3k/month)</li>
-                        <li>OpenAI GPT-4 API (~$500-1k/month)</li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h5 style="color:#10b981;font-size:0.85rem;margin-bottom:0.5rem;">✅ USED INSTEAD (Free/Cheap)</h5>
-                    <ul style="font-size:0.85rem;line-height:1.6;">
-                        <li><b>DuckDB:</b> In-process analytics (free)</li>
-                        <li><b>MotherDuck:</b> Serverless DuckDB ($0 free tier)</li>
-                        <li><b>Dagster:</b> Orchestration (free self-hosted)</li>
-                        <li><b>dbt:</b> Transformations (free core)</li>
-                        <li><b>GitHub Actions:</b> CI/CD (free tier)</li>
-                        <li><b>Cerebras:</b> LLM inference (pay-as-you-go)</li>
-                        <li><b>Streamlit:</b> Free hosting + dashboards</li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div style="margin-top:1.5rem;padding:1rem;background:rgba(16,185,129,0.1);border-radius:8px;border-left:3px solid #10b981;text-align:center;">
-                <div style="font-size:1.2rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Savings: $15,000 - $40,000</div>
-                <div style="font-size:0.8rem;color:#94a3b8;">Achieved enterprise-scale data processing at near-zero cost</div>
-            </div>
+        <p style="color:#94a3b8;font-size:0.9rem;text-align:center;margin-bottom:1rem;">Built with cost optimization in mind, avoiding expensive enterprise tools while maintaining production-grade quality</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Use Streamlit columns for side-by-side layout (more reliable than CSS grid)
+    cost_col1, cost_col2 = st.columns(2)
+    
+    with cost_col1:
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
+            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">❌ AVOIDED (Expensive)</h5>
+            <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
+                <li>Apache Spark / PySpark (~$5-10k/month)</li>
+                <li>Hadoop clusters (~$3-8k/month)</li>
+                <li>Azure Synapse (~$2-5k/month)</li>
+                <li>AWS Redshift (~$2-4k/month)</li>
+                <li>Databricks (~$3-7k/month)</li>
+                <li>Snowflake compute (~$1-3k/month)</li>
+                <li>OpenAI GPT-4 API (~$500-1k/month)</li>
+            </ul>
         </div>
+        """, unsafe_allow_html=True)
+    
+    with cost_col2:
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
+            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">✅ USED INSTEAD (Free/Cheap)</h5>
+            <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
+                <li><b style="color:#e2e8f0;">DuckDB:</b> In-process analytics (free)</li>
+                <li><b style="color:#e2e8f0;">MotherDuck:</b> Serverless DuckDB ($0 free tier)</li>
+                <li><b style="color:#e2e8f0;">Dagster:</b> Orchestration (free self-hosted)</li>
+                <li><b style="color:#e2e8f0;">dbt:</b> Transformations (free core)</li>
+                <li><b style="color:#e2e8f0;">GitHub Actions:</b> CI/CD (free tier)</li>
+                <li><b style="color:#e2e8f0;">Cerebras:</b> LLM inference (pay-as-you-go)</li>
+                <li><b style="color:#e2e8f0;">Streamlit:</b> Free hosting + dashboards</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Savings summary
+    st.markdown("""
+    <div style="margin-top:1rem;padding:1.25rem;background:rgba(16,185,129,0.1);border-radius:12px;border-left:4px solid #10b981;text-align:center;">
+        <div style="font-size:1.3rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Savings: $15,000 - $40,000</div>
+        <div style="font-size:0.85rem;color:#94a3b8;">Achieved enterprise-scale data processing at near-zero cost</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -2548,8 +2243,12 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
     
-    # Initialize AI
-    sql_db = get_ai_engine(get_engine())
+    # Initialize AI (with fallback if it fails)
+    try:
+        sql_db = get_ai_engine(get_engine())
+    except Exception as e:
+        logger.warning(f"AI initialization failed, using fallback queries: {e}")
+        sql_db = None
     
     # Render header
     render_header()
