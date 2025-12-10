@@ -1874,20 +1874,22 @@ Return only the SQL query."""
                                 if len(summary_data) > 3000:
                                     summary_data = summary_data[:3000]
                                 
-                                new_prompt = f"""Query: {prompt}
+                                new_prompt = f"""You are summarizing REAL-TIME news data from the LAST 7 DAYS (December 2025).
 
-IMPORTANT: This data is from the LAST 7 DAYS ONLY (not yearly data).
+User question: {prompt}
 
-Events data:
+HERE IS THE ACTUAL DATA (use ONLY these numbers):
 {summary_data}
 
-Based on this data, write a news-style summary. For each event:
-- Explain what likely happened in the real world (the actual news story)
-- Don't just repeat the table values - interpret and explain the significance
-- Write 2-3 sentences per event with real-world context
-- IMPORTANT: Refer to this as "this week's" or "past 7 days" data, NOT "this year"
+STRICT RULES:
+1. ONLY use the exact countries and numbers shown in the data above
+2. DO NOT mention any historical events (no 2023, no Uvalde, no past incidents)
+3. DO NOT make up specific event details not in the data
+4. Say "In the past week" or "This week" - NEVER say "this year"
+5. If the data shows "USA - 6,000,000 events" just say "The US leads with 6 million events this week"
+6. Keep it factual and brief - just describe what the numbers show
 
-Focus on the news story, not the data columns."""
+Write a 2-3 sentence summary using ONLY the data provided above."""
                                 
                                 response_og = cerebras_llm.complete(new_prompt)
                                 answer = str(response_og)
