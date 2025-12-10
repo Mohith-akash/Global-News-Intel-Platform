@@ -101,7 +101,7 @@ for key in REQUIRED_ENVS:
 # SECTION 4: GLOBAL CONSTANTS
 # ============================================================================
 
-GEMINI_MODEL = "llama3.1-8b"  # Cerebras model name
+CEREBRAS_MODEL = "llama3.1-8b"  # Cerebras model name
 
 # Common country aliases not directly handled by pycountry
 COUNTRY_ALIASES = {
@@ -531,19 +531,21 @@ def get_ai_engine(_engine):
         # Initialize Cerebras LLM
         llm = Cerebras(
             api_key=api_key, 
-            model=GEMINI_MODEL,  # Use llama3.1-8b
+            model=CEREBRAS_MODEL,
             temperature=0.1
         )
         
-        # Initialize embedding model
-        embed = GoogleGenAIEmbedding(
-            api_key=os.getenv("GOOGLE_API_KEY") or api_key, 
-            model_name="text-embedding-004"
-        )
+        # Initialize embedding model (requires Google API key)
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if google_api_key:
+            embed = GoogleGenAIEmbedding(
+                api_key=google_api_key, 
+                model_name="text-embedding-004"
+            )
+            Settings.embed_model = embed
         
-        # Set these as global defaults for LlamaIndex
+        # Set LLM as global default
         Settings.llm = llm
-        Settings.embed_model = embed
         
         # Get database connection and find main table
         conn = get_db()
@@ -616,7 +618,7 @@ def get_cerebras_llm():
         
         cerebras_llm = Cerebras(
             api_key=api_key,
-            model="llama3.1-8b",  # Cerebras Llama model
+            model=CEREBRAS_MODEL,  # Use model from constants
             temperature=0.1       # Low temp for factual responses
         )
         
