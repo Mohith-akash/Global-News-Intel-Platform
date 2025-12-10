@@ -103,39 +103,36 @@ for key in REQUIRED_ENVS:
 
 GEMINI_MODEL = "llama3.1-8b"  # Cerebras model name
 
-# Country name to ISO code mapping for query fallbacks
-COUNTRY_CODES = {
-    'usa': 'USA', 'united states': 'USA', 'america': 'USA', 'us': 'USA',
-    'india': 'IND', 'indian': 'IND',
-    'china': 'CHN', 'chinese': 'CHN',
-    'germany': 'DEU', 'german': 'DEU',
-    'uk': 'GBR', 'united kingdom': 'GBR', 'britain': 'GBR', 'british': 'GBR',
+# Common country aliases not directly handled by pycountry
+COUNTRY_ALIASES = {
+    'usa': 'USA', 'us': 'USA', 'america': 'USA',
+    'uk': 'GBR', 'britain': 'GBR', 'british': 'GBR',
     'russia': 'RUS', 'russian': 'RUS',
-    'france': 'FRA', 'french': 'FRA',
-    'japan': 'JPN', 'japanese': 'JPN',
-    'brazil': 'BRA', 'brazilian': 'BRA',
-    'canada': 'CAN', 'canadian': 'CAN',
-    'australia': 'AUS', 'australian': 'AUS',
-    'israel': 'ISR', 'israeli': 'ISR',
+    'korea': 'KOR', 'korean': 'KOR',
     'iran': 'IRN', 'iranian': 'IRN',
-    'ukraine': 'UKR', 'ukrainian': 'UKR',
-    'pakistan': 'PAK', 'pakistani': 'PAK',
-    'mexico': 'MEX', 'mexican': 'MEX',
-    'italy': 'ITA', 'italian': 'ITA',
-    'spain': 'ESP', 'spanish': 'ESP',
-    'korea': 'KOR', 'korean': 'KOR', 'south korea': 'KOR',
-    'turkey': 'TUR', 'turkish': 'TUR',
-    'saudi': 'SAU', 'saudi arabia': 'SAU',
-    'egypt': 'EGY', 'egyptian': 'EGY',
-    'indonesia': 'IDN', 'indonesian': 'IDN',
-    'poland': 'POL', 'polish': 'POL',
-    'netherlands': 'NLD', 'dutch': 'NLD',
-    'sweden': 'SWE', 'swedish': 'SWE',
-    'switzerland': 'CHE', 'swiss': 'CHE',
-    'argentina': 'ARG', 'argentine': 'ARG',
-    'nigeria': 'NGA', 'nigerian': 'NGA',
-    'south africa': 'ZAF',
 }
+
+def get_country_code(name):
+    """
+    Convert country name to 3-letter ISO code using pycountry.
+    Falls back to common aliases for edge cases.
+    """
+    name_lower = name.lower().strip()
+    
+    # Check aliases first (faster for common cases)
+    if name_lower in COUNTRY_ALIASES:
+        return COUNTRY_ALIASES[name_lower]
+    
+    # Try pycountry lookup
+    try:
+        # Try fuzzy search
+        result = pycountry.countries.search_fuzzy(name)
+        if result:
+            return result[0].alpha_3
+    except LookupError:
+        pass
+    
+    return None
 
 def get_dates():
     """
@@ -2157,12 +2154,16 @@ Return only the SQL query."""
 
                     # FALLBACK: Country-specific queries (detect country names in prompt)
                     if not sql:
-                        # Find countries mentioned in prompt using module-level constant
+                        # Extract potential country names from prompt
                         prompt_lower = prompt.lower()
                         found_codes = []
-                        for name, code in COUNTRY_CODES.items():
-                            if name in prompt_lower:
-                                if code not in found_codes:
+                        
+                        # Split prompt into words and check each
+                        words = prompt_lower.replace(',', ' ').replace('and', ' ').split()
+                        for word in words:
+                            if len(word) >= 2:  # Skip very short words
+                                code = get_country_code(word)
+                                if code and code not in found_codes:
                                     found_codes.append(code)
                         
                         if found_codes:
