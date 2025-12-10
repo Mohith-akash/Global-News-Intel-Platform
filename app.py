@@ -1722,6 +1722,15 @@ Return only the SQL query."""
                         )
                         logger.info(f"Using crisis SQL: {sql}")
                     
+                    # PRIORITY #2: Aggregate count queries (total, how many) - skip AI for simple counts
+                    elif query_info['is_aggregate']:
+                        sql = (
+                            "SELECT COUNT(*) as total_events FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND {date_filter}"
+                        )
+                        logger.info(f"Using aggregate COUNT SQL: {sql}")
+                    
                     # Otherwise, try AI to generate SQL (with fallback if AI fails)
                     else:
                         try:
@@ -1732,6 +1741,15 @@ Return only the SQL query."""
                         except Exception as ai_error:
                             logger.warning(f"AI query failed, using fallback: {ai_error}")
                             sql = None  # Will trigger fallback below
+
+                    # FALLBACK: Aggregate count queries (total, how many)
+                    if not sql and query_info['is_aggregate']:
+                        sql = (
+                            "SELECT COUNT(*) as total_events FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND {date_filter}"
+                        )
+                        logger.info(f"Using aggregate COUNT SQL: {sql}")
 
                     # FALLBACK: Top countries query  
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
