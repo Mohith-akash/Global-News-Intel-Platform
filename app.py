@@ -1876,6 +1876,8 @@ Return only the SQL query."""
                                 
                                 new_prompt = f"""Query: {prompt}
 
+IMPORTANT: This data is from the LAST 7 DAYS ONLY (not yearly data).
+
 Events data:
 {summary_data}
 
@@ -1883,6 +1885,7 @@ Based on this data, write a news-style summary. For each event:
 - Explain what likely happened in the real world (the actual news story)
 - Don't just repeat the table values - interpret and explain the significance
 - Write 2-3 sentences per event with real-world context
+- IMPORTANT: Refer to this as "this week's" or "past 7 days" data, NOT "this year"
 
 Focus on the news story, not the data columns."""
                                 
