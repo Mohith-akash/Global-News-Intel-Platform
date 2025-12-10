@@ -32,7 +32,7 @@ from urllib.parse import urlparse, unquote  # Extracts info from web links
 import duckdb                       # Fast database engine
 
 # Local modules (extracted for maintainability)
-from config import CEREBRAS_MODEL, COUNTRY_ALIASES
+from config import CEREBRAS_MODEL, COUNTRY_ALIASES, REQUIRED_ENVS
 from utils import get_country_code, get_dates, get_country, get_impact_label, get_intensity_label
 from styles import inject_css
 
@@ -83,11 +83,7 @@ def get_secret(key):
     except: 
         return None
 
-# List of required API keys - the app won't work without these
-REQUIRED_ENVS = [
-    "MOTHERDUCK_TOKEN",
-    "CEREBRAS_API_KEY"
-]
+# REQUIRED_ENVS imported from config.py
 
 # Check if any required keys are missing
 missing = [k for k in REQUIRED_ENVS if not get_secret(k)]
