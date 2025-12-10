@@ -32,8 +32,8 @@ from urllib.parse import urlparse, unquote  # Extracts info from web links
 import duckdb                       # Fast database engine
 
 # Local modules (extracted for maintainability)
-from config import CEREBRAS_MODEL, COUNTRY_ALIASES
-from utils import get_country_code, get_dates, get_country, get_impact_label, get_intensity_label
+from config import CEREBRAS_MODEL, COUNTRY_ALIASES, REQUIRED_ENVS
+from utils import get_country_code, get_dates, get_country, get_impact_label, get_intensity_label, detect_query_type
 from styles import inject_css
 
 # ============================================================================
@@ -83,11 +83,7 @@ def get_secret(key):
     except: 
         return None
 
-# List of required API keys - the app won't work without these
-REQUIRED_ENVS = [
-    "MOTHERDUCK_TOKEN",
-    "CEREBRAS_API_KEY"
-]
+# REQUIRED_ENVS imported from config.py
 
 # Check if any required keys are missing
 missing = [k for k in REQUIRED_ENVS if not get_secret(k)]
@@ -1683,6 +1679,19 @@ def render_ai_chat(c, sql_db):
 
             try:
                 dates = get_dates()
+                query_info = detect_query_type(prompt)
+                
+                # Build date filter based on query type
+                if query_info['is_specific_date'] and query_info['specific_date']:
+                    date_filter = f"DATE = '{query_info['specific_date']}'"
+                elif query_info['time_period'] == 'all' or query_info['is_aggregate']:
+                    date_filter = f"DATE >= '{dates['three_months_ago']}'"  # All available data
+                elif query_info['time_period'] == 'month':
+                    date_filter = f"DATE >= '{dates['month_ago']}'"
+                elif query_info['time_period'] == 'day':
+                    date_filter = f"DATE = '{dates['today']}'"
+                else:
+                    date_filter = f"DATE >= '{dates['week_ago']}'"  # Default to week
 
                 short_prompt = f"""Query: "{prompt}"
 Table: events_dagster
@@ -1691,7 +1700,7 @@ Columns: DATE (VARCHAR YYYYMMDD), MAIN_ACTOR, ACTOR_COUNTRY_CODE (3-letter ISO c
 Rules:
 - DATE is VARCHAR like '20251210'
 - Always include: WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
-- For recent data use: DATE >= '{dates['week_ago']}'
+- Date filter: {date_filter}
 - LIMIT 10 max
 - ALWAYS include NEWS_LINK in SELECT
 
@@ -1708,10 +1717,19 @@ Return only the SQL query."""
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
                             f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND IMPACT_SCORE < -3 AND DATE >= '{dates['week_ago']}' "
+                            f"AND IMPACT_SCORE < -3 AND {date_filter} "
                             "ORDER BY IMPACT_SCORE ASC LIMIT 10"
                         )
                         logger.info(f"Using crisis SQL: {sql}")
+                    
+                    # PRIORITY #2: Aggregate count queries (total, how many) - skip AI for simple counts
+                    elif query_info['is_aggregate']:
+                        sql = (
+                            "SELECT COUNT(*) as total_events FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND {date_filter}"
+                        )
+                        logger.info(f"Using aggregate COUNT SQL: {sql}")
                     
                     # Otherwise, try AI to generate SQL (with fallback if AI fails)
                     else:
@@ -1724,6 +1742,15 @@ Return only the SQL query."""
                             logger.warning(f"AI query failed, using fallback: {ai_error}")
                             sql = None  # Will trigger fallback below
 
+                    # FALLBACK: Aggregate count queries (total, how many)
+                    if not sql and query_info['is_aggregate']:
+                        sql = (
+                            "SELECT COUNT(*) as total_events FROM events_dagster "
+                            "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
+                            f"AND {date_filter}"
+                        )
+                        logger.info(f"Using aggregate COUNT SQL: {sql}")
+
                     # FALLBACK: Top countries query  
                     if not sql and ('top' in prompt.lower() and 'countr' in prompt.lower()):
                         limit = 5
@@ -1733,7 +1760,7 @@ Return only the SQL query."""
                         sql = (
                             "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as count FROM events_dagster "
                             "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"AND {date_filter} "
                             f"GROUP BY ACTOR_COUNTRY_CODE ORDER BY count DESC LIMIT {limit}"
                         )
                         logger.info(f"Using top countries SQL: {sql}")
@@ -1744,7 +1771,7 @@ Return only the SQL query."""
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
                             "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"AND {date_filter} "
                             "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
                         )
                         logger.info(f"Using recent events SQL: {sql}")
@@ -1775,7 +1802,7 @@ Return only the SQL query."""
                                 "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                                 "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
                                 f"WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                                f"AND {country_filter} AND DATE >= '{dates['week_ago']}' "
+                                f"AND {country_filter} AND {date_filter} "
                                 "ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 10"
                             )
                             logger.info(f"Using country-specific SQL: {sql}")
@@ -1786,7 +1813,7 @@ Return only the SQL query."""
                             "SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, "
                             "ARTICLE_COUNT, NEWS_LINK FROM events_dagster "
                             "WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL "
-                            f"AND DATE >= '{dates['week_ago']}' "
+                            f"AND {date_filter} "
                             "ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 10"
                         )
                         logger.info(f"Using default fallback SQL: {sql}")
@@ -1878,17 +1905,22 @@ Return only the SQL query."""
                                 if len(summary_data) > 3000:
                                     summary_data = summary_data[:3000]
                                 
-                                new_prompt = f"""Query: {prompt}
+                                new_prompt = f"""You are summarizing news data from {query_info['period_label']} (as of December 2025).
 
-Events data:
+User question: {prompt}
+
+HERE IS THE ACTUAL DATA (use ONLY these numbers):
 {summary_data}
 
-Based on this data, write a news-style summary. For each event:
-- Explain what likely happened in the real world (the actual news story)
-- Don't just repeat the table values - interpret and explain the significance
-- Write 2-3 sentences per event with real-world context
+STRICT RULES:
+1. ONLY use the exact countries and numbers shown in the data above
+2. DO NOT mention any historical events (no 2023, no Uvalde, no past incidents)
+3. DO NOT make up specific event details not in the data
+4. Say "in {query_info['period_label']}" when describing the time period
+5. If the data shows "USA - 6,000,000 events" just say "The US leads with 6 million events"
+6. Keep it factual and brief - just describe what the numbers show
 
-Focus on the news story, not the data columns."""
+Write a 2-3 sentence summary using ONLY the data provided above."""
                                 
                                 response_og = cerebras_llm.complete(new_prompt)
                                 answer = str(response_og)
