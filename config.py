@@ -1,11 +1,9 @@
 """
-Configuration constants for the GDELT News Intelligence Platform.
+Configuration for GDELT platform.
 """
 
-# AI Model
 CEREBRAS_MODEL = "llama3.1-8b"
 
-# Common country aliases not handled by pycountry
 COUNTRY_ALIASES = {
     'usa': 'USA', 'us': 'USA', 'america': 'USA',
     'uk': 'GBR', 'britain': 'GBR', 'british': 'GBR',
@@ -14,5 +12,4 @@ COUNTRY_ALIASES = {
     'iran': 'IRN', 'iranian': 'IRN',
 }
 
-# Required environment variables
 REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "CEREBRAS_API_KEY"]
