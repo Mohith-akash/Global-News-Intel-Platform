@@ -2,281 +2,231 @@ import requests
 import datetime
 import zipfile
 import io
+import re
 import pandas as pd
 import duckdb
 import os
 import time
+from urllib.parse import urlparse, unquote
 from dagster import asset, Output, Definitions, ScheduleDefinition, define_asset_job
 from dotenv import load_dotenv
 import logging
 
-# --- CONFIGURATION ---
 load_dotenv()
 TARGET_TABLE = "events_dagster"
 MAX_RETRIES = 3
-RETRY_DELAY = 5  # seconds
+RETRY_DELAY = 5
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- HELPER: Smart GDELT URL ---
-def get_gdelt_url():
-    """
-    Calculates the URL for the GDELT CSV file from 20 minutes ago.
-    This ensures we only ask for files that have definitely finished uploading.
-    """
-    now = datetime.datetime.utcnow() - datetime.timedelta(minutes=20)
+
+def extract_headline_from_url(url):
+    """Extract clean headline from URL at ingestion time."""
+    if not url or not isinstance(url, str):
+        return None
     
-    # Round down to the nearest 15-minute interval (00, 15, 30, 45)
+    try:
+        parsed = urlparse(url)
+        path = unquote(parsed.path)
+        segments = [s for s in path.split('/') if s and len(s) > 8]
+        if not segments:
+            return None
+        
+        for seg in reversed(segments):
+            headline = clean_url_segment(seg)
+            if headline and len(headline) > 20:
+                return headline
+        return None
+    except:
+        return None
+
+
+def clean_url_segment(text):
+    """Clean a URL path segment into a readable headline."""
+    if not text:
+        return None
+    
+    text = str(text).strip()
+    
+    reject_patterns = [
+        r'^[a-f0-9]{8}[-][a-f0-9]{4}',
+        r'^[a-f0-9\-]{20,}$',
+        r'^(article|post|item|id)[-_]?[a-f0-9]{6,}',
+        r'^\d{10,}$',
+    ]
+    
+    for pattern in reject_patterns:
+        if re.match(pattern, text.lower()):
+            return None
+    
+    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml|htm)$', '', text, flags=re.I)
+    text = re.sub(r'^\d{8}[-_]?', '', text)
+    text = re.sub(r'^\d{4}[-/]\d{2}[-/]\d{2}[-_]?', '', text)
+    text = re.sub(r'^\d{4}[-_]', '', text)
+    text = re.sub(r'^[a-f0-9]{6,8}[-_]', '', text)
+    text = re.sub(r'[-_]+', ' ', text)
+    text = re.sub(r'\s+\d{5,}$', '', text)
+    text = re.sub(r'\s+[a-f0-9]{8,}$', '', text, flags=re.I)
+    
+    # Remove trailing numbers (like "988", "956", "123")
+    text = re.sub(r'\s+\d{1,4}$', '', text)
+    text = re.sub(r'[\s,]+\d{1,3}$', '', text)
+    
+    text = ' '.join(text.split())
+    
+    if len(text) < 15 or ' ' not in text:
+        return None
+    
+    words = text.split()
+    if len(words) < 3:
+        return None
+    
+    text_no_spaces = text.replace(' ', '')
+    if text_no_spaces:
+        if sum(c.isdigit() for c in text_no_spaces) / len(text_no_spaces) > 0.2:
+            return None
+        if sum(c in '0123456789abcdefABCDEF' for c in text_no_spaces) / len(text_no_spaces) > 0.35:
+            return None
+    
+    # Proper title case
+    text = text.lower()
+    words = text.split()
+    small_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
+                   'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be'}
+    result = []
+    for i, word in enumerate(words):
+        if i == 0:
+            result.append(word.capitalize())
+        elif word in small_words:
+            result.append(word)
+        else:
+            result.append(word.capitalize())
+    
+    return ' '.join(result)[:100]
+
+
+def get_gdelt_url():
+    now = datetime.datetime.utcnow() - datetime.timedelta(minutes=20)
     rounded_minute = (now.minute // 15) * 15
     rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
-    
     timestamp = rounded_time.strftime("%Y%m%d%H%M00")
     return f"http://data.gdeltproject.org/gdeltv2/{timestamp}.export.CSV.zip"
 
+
 def download_with_retry(url, max_retries=MAX_RETRIES, timeout=30):
-    """Download with exponential backoff retry logic"""
     for attempt in range(max_retries):
         try:
             logger.info(f"Download attempt {attempt + 1}/{max_retries}: {url}")
             response = requests.get(url, timeout=timeout)
-            
             if response.status_code == 200:
-                logger.info(f"✅ Download successful ({len(response.content)} bytes)")
+                logger.info(f"Download successful ({len(response.content)} bytes)")
                 return response
             elif response.status_code == 404:
-                logger.warning(f"⚠️ File not found (404). File may not be ready yet.")
+                logger.warning("File not found (404)")
                 return None
-            else:
-                logger.warning(f"⚠️ Unexpected status code: {response.status_code}")
-                
         except requests.exceptions.Timeout:
-            logger.warning(f"⏱️ Timeout on attempt {attempt + 1}")
+            logger.warning(f"Timeout on attempt {attempt + 1}")
         except requests.exceptions.RequestException as e:
-            logger.warning(f"🌐 Network error on attempt {attempt + 1}: {e}")
+            logger.warning(f"Network error: {e}")
         
         if attempt < max_retries - 1:
-            wait_time = RETRY_DELAY * (2 ** attempt)  # Exponential backoff
-            logger.info(f"⏳ Retrying in {wait_time} seconds...")
-            time.sleep(wait_time)
+            time.sleep(RETRY_DELAY * (2 ** attempt))
     
-    logger.error(f"❌ Failed to download after {max_retries} attempts")
+    logger.error(f"Failed after {max_retries} attempts")
     return None
 
+
 def validate_dataframe(df):
-    """Validate data quality before insertion"""
     if df.empty:
-        logger.warning("⚠️ DataFrame is empty")
         return False
-    
-    # Check for required columns
-    required_cols = ['EVENT_ID', 'DATE']
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        logger.error(f"❌ Missing required columns: {missing_cols}")
+    if 'EVENT_ID' not in df.columns or 'DATE' not in df.columns:
         return False
-    
-    # Check for null EVENT_IDs
-    null_count = df['EVENT_ID'].isna().sum()
-    if null_count > 0:
-        logger.warning(f"⚠️ Found {null_count} rows with null EVENT_ID (will be filtered)")
-        df.dropna(subset=['EVENT_ID'], inplace=True)
-    
-    # Check for duplicates within this batch
-    dup_count = df['EVENT_ID'].duplicated().sum()
-    if dup_count > 0:
-        logger.warning(f"⚠️ Found {dup_count} duplicate EVENT_IDs in batch (will be removed)")
-        df.drop_duplicates(subset=['EVENT_ID'], keep='first', inplace=True)
-    
-    logger.info(f"✅ Data validation passed: {len(df)} valid rows")
+    df.dropna(subset=['EVENT_ID'], inplace=True)
+    df.drop_duplicates(subset=['EVENT_ID'], keep='first', inplace=True)
+    logger.info(f"Validated: {len(df)} rows")
     return True
 
-# --- ASSETS ---
 
 @asset
 def gdelt_raw_data() -> pd.DataFrame:
-    """
-    Extract raw GDELT data - STREAMLINED VERSION
-    Only essential columns, no lat/long, no Actor2
-    """
-    logger.info("🚀 Starting GDELT data extraction")
+    """Extract raw GDELT data with headlines extracted at source."""
+    logger.info("Starting GDELT extraction")
     url = get_gdelt_url()
-    logger.info(f"🔗 Target URL: {url}")
     
-    # Download with retry logic
     response = download_with_retry(url)
     if not response:
-        logger.warning("⚠️ No data retrieved. Returning empty DataFrame.")
         return pd.DataFrame()
     
     try:
-        # Extract ZIP
         z = zipfile.ZipFile(io.BytesIO(response.content))
         csv_name = z.namelist()[0]
-        logger.info(f"📂 Processing: {csv_name}")
         
-        # STREAMLINED: Only 10 essential columns
-        # Removed: lat/long, Actor2, Actor2Country
         with z.open(csv_name) as f:
-            df = pd.read_csv(
-                f, 
-                sep='\t', 
-                header=None,
-                usecols=[0, 1, 6, 7, 29, 30, 31, 34, 60],
-                low_memory=False
-            )
+            df = pd.read_csv(f, sep='\t', header=None, usecols=[0, 1, 6, 7, 29, 30, 31, 34, 60], low_memory=False)
         
-        # Rename columns
-        df.columns = [
-            "EVENT_ID",              # 0: Unique ID
-            "DATE",                  # 1: YYYYMMDD (keep for SQL queries)
-            "MAIN_ACTOR",            # 6: Primary actor
-            "ACTOR_COUNTRY_CODE",    # 7: Country code (keep for SQL, display converts to full name)
-            "EVENT_CATEGORY_CODE",   # 29: CAMEO code
-            "IMPACT_SCORE",          # 30: Goldstein scale
-            "ARTICLE_COUNT",         # 31: Mentions
-            "SENTIMENT_SCORE",       # 34: Tone
-            
-            "NEWS_LINK"              # 60: Source URL
-        ]
+        df.columns = ["EVENT_ID", "DATE", "MAIN_ACTOR", "ACTOR_COUNTRY_CODE", "EVENT_CATEGORY_CODE", 
+                      "IMPACT_SCORE", "ARTICLE_COUNT", "SENTIMENT_SCORE", "NEWS_LINK"]
         
-        # Type conversions
         df['EVENT_ID'] = df['EVENT_ID'].astype(str)
         df['DATE'] = df['DATE'].astype(str)
         
-        # Convert numeric columns
-        numeric_cols = ['IMPACT_SCORE', 'ARTICLE_COUNT', 'SENTIMENT_SCORE']
-        for col in numeric_cols:
+        for col in ['IMPACT_SCORE', 'ARTICLE_COUNT', 'SENTIMENT_SCORE']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # Validate data quality
+        logger.info("Extracting headlines...")
+        df['HEADLINE'] = df['NEWS_LINK'].apply(extract_headline_from_url)
+        logger.info(f"Extracted {df['HEADLINE'].notna().sum():,} headlines from {len(df):,} URLs")
+        
         if not validate_dataframe(df):
-            logger.error("❌ Data validation failed")
             return pd.DataFrame()
         
-        logger.info(f"✅ Successfully extracted {len(df):,} rows with {len(df.columns)} columns")
         return df
-
-    except zipfile.BadZipFile:
-        logger.error("❌ Corrupted ZIP file")
-        return pd.DataFrame()
-    except pd.errors.ParserError as e:
-        logger.error(f"❌ CSV parsing error: {e}")
-        return pd.DataFrame()
     except Exception as e:
-        logger.error(f"❌ Unexpected error during extraction: {e}")
+        logger.error(f"Error: {e}")
         return pd.DataFrame()
+
 
 @asset
 def gdelt_motherduck_table(gdelt_raw_data: pd.DataFrame) -> Output:
-    """
-    Load data into MotherDuck with deduplication.
-    Returns metadata about the operation.
-    """
+    """Load data into MotherDuck with deduplication."""
     if gdelt_raw_data.empty:
-        logger.warning("⚠️ No data to load. Skipping.")
         return Output(None, metadata={"status": "Skipped", "rows": 0})
 
-    start_time = time.time()
-    logger.info(f"🦆 Connecting to MotherDuck...")
     token = os.getenv("MOTHERDUCK_TOKEN")
-    
     if not token:
-        logger.error("❌ MOTHERDUCK_TOKEN not found in environment")
         return Output(None, metadata={"status": "Error", "message": "Missing token"})
     
-    # Use context manager for proper connection handling
     try:
         with duckdb.connect(f'md:gdelt_db?motherduck_token={token}') as con:
-            
-            # Check if table exists and get existing EVENT_IDs for deduplication
             try:
-                existing_ids = con.execute(
-                    f"SELECT EVENT_ID FROM {TARGET_TABLE} WHERE DATE >= '{gdelt_raw_data['DATE'].min()}'"
-                ).df()
-                
-                if not existing_ids.empty:
-                    # Remove duplicates
-                    initial_count = len(gdelt_raw_data)
-                    gdelt_raw_data = gdelt_raw_data[
-                        ~gdelt_raw_data['EVENT_ID'].isin(existing_ids['EVENT_ID'])
-                    ]
-                    removed_count = initial_count - len(gdelt_raw_data)
-                    if removed_count > 0:
-                        logger.info(f"🗑️ Removed {removed_count} duplicate events")
+                existing = con.execute(f"SELECT EVENT_ID FROM {TARGET_TABLE} WHERE DATE >= '{gdelt_raw_data['DATE'].min()}'").df()
+                if not existing.empty:
+                    gdelt_raw_data = gdelt_raw_data[~gdelt_raw_data['EVENT_ID'].isin(existing['EVENT_ID'])]
                 
                 if gdelt_raw_data.empty:
-                    logger.info("✅ All events already exist. No new data to insert.")
-                    return Output(
-                        "No new data", 
-                        metadata={"status": "Skipped", "reason": "All duplicates", "rows": 0}
-                    )
+                    return Output("No new data", metadata={"status": "Skipped", "rows": 0})
                 
-                # Insert new data
-                con.execute(f"INSERT INTO {TARGET_TABLE} SELECT * FROM gdelt_raw_data")
-                logger.info(f"✅ Inserted {len(gdelt_raw_data):,} new rows")
-                
+                con.execute(f"""
+                    INSERT INTO {TARGET_TABLE} 
+                    (EVENT_ID, DATE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, EVENT_CATEGORY_CODE, 
+                     IMPACT_SCORE, ARTICLE_COUNT, SENTIMENT_SCORE, NEWS_LINK, HEADLINE)
+                    SELECT EVENT_ID, DATE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, EVENT_CATEGORY_CODE, 
+                           IMPACT_SCORE, ARTICLE_COUNT, SENTIMENT_SCORE, NEWS_LINK, HEADLINE
+                    FROM gdelt_raw_data
+                """)
             except Exception as e:
-                # Table doesn't exist - create it
-                if "does not exist" in str(e).lower() or "not found" in str(e).lower():
-                    logger.info(f"📋 Creating new table: {TARGET_TABLE}")
-                    con.execute(
-                        f"CREATE TABLE {TARGET_TABLE} AS SELECT * FROM gdelt_raw_data"
-                    )
-                    logger.info(f"✅ Created table with {len(gdelt_raw_data):,} rows")
+                if "does not exist" in str(e).lower():
+                    con.execute(f"CREATE TABLE {TARGET_TABLE} AS SELECT * FROM gdelt_raw_data")
                 else:
                     raise e
             
-            # Get table statistics
-            stats = con.execute(f"SELECT COUNT(*) as total FROM {TARGET_TABLE}").df()
-            total_rows = stats.iloc[0]['total']
-            
-            elapsed = time.time() - start_time
-            logger.info(f"⏱️ Processing completed in {elapsed:.2f} seconds")
-            logger.info(f"📊 Total rows in table: {total_rows:,}")
-            
-            return Output(
-                f"Uploaded {len(gdelt_raw_data):,} rows",
-                metadata={
-                    "status": "Success",
-                    "rows_inserted": len(gdelt_raw_data),
-                    "total_rows": int(total_rows),
-                    "processing_time": round(elapsed, 2),
-                    "columns": len(gdelt_raw_data.columns)
-                }
-            )
-            
+            total = con.execute(f"SELECT COUNT(*) FROM {TARGET_TABLE}").fetchone()[0]
+            return Output(f"Inserted {len(gdelt_raw_data):,}", metadata={"rows": len(gdelt_raw_data), "total": total})
     except Exception as e:
-        logger.error(f"❌ MotherDuck operation failed: {e}")
-        return Output(
-            None, 
-            metadata={"status": "Error", "message": str(e)}
-        )
+        return Output(None, metadata={"status": "Error", "message": str(e)})
 
-# --- JOB DEFINITIONS ---
 
-# Define the job that runs the assets
-gdelt_job = define_asset_job(
-    name="gdelt_ingestion_job", 
-    selection="*",
-    description="Ingest GDELT data into MotherDuck (streamlined version)"
-)
-
-# Define the schedule (Every 30 Minutes)
-gdelt_schedule = ScheduleDefinition(
-    job=gdelt_job,
-    cron_schedule="*/30 * * * *",
-    execution_timezone="UTC",
-    description="Run GDELT ingestion every 30 minutes"
-)
-
-# Bundle everything into Definitions for Dagster to read
-defs = Definitions(
-    assets=[gdelt_raw_data, gdelt_motherduck_table],
-    jobs=[gdelt_job],
-    schedules=[gdelt_schedule]
-)
+gdelt_job = define_asset_job(name="gdelt_ingestion_job", selection="*")
+gdelt_schedule = ScheduleDefinition(job=gdelt_job, cron_schedule="*/30 * * * *", execution_timezone="UTC")
+defs = Definitions(assets=[gdelt_raw_data, gdelt_motherduck_table], jobs=[gdelt_job], schedules=[gdelt_schedule])
