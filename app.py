@@ -759,6 +759,8 @@ def render_ai_chat(c, sql_db):
                 sql = None
                 answer = ""
                 is_country_aggregate = False
+                is_count_aggregate = False
+                country_filter_name = None
                 with st.spinner("🔍 Querying..."):
                     # Determine limit from query (default 5, max 10)
                     limit = 5
@@ -769,19 +771,63 @@ def render_ai_chat(c, sql_db):
                     if m2:
                         limit = min(int(m2.group(1)), 10)
                     
+                    # Helper: detect country codes in prompt
+                    def get_country_codes_from_prompt(text):
+                        codes = []
+                        clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
+                        
+                        # Check for multi-word phrases first
+                        multi_word_regions = [
+                            'middle east', 'united states', 'united kingdom', 'great britain',
+                            'south korea', 'north korea', 'saudi arabia', 'south africa',
+                            'new zealand'
+                        ]
+                        for phrase in multi_word_regions:
+                            if phrase in clean_text:
+                                code = get_country_code(phrase)
+                                if code and code not in codes:
+                                    codes.append(code)
+                        
+                        # Then check individual words
+                        for w in clean_text.split():
+                            if len(w) >= 2:
+                                code = get_country_code(w)
+                                if code and code not in codes: 
+                                    codes.append(code)
+                        return codes
+                    
+                    prompt_lower = prompt.lower()
+                    has_crisis = 'crisis' in prompt_lower or 'severe' in prompt_lower
+                    has_country_word = 'countr' in prompt_lower
+                    
                     # Check for specific query types (ORDER MATTERS!)
-                    if 'crisis' in prompt.lower() or 'severe' in prompt.lower():
+                    
+                    # 1. COUNTRIES WITH CRISIS - must come before plain crisis
+                    if has_crisis and has_country_word:
+                        is_country_aggregate = True
+                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
+                    
+                    # 2. Plain crisis events
+                    elif has_crisis:
                         sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY IMPACT_SCORE ASC LIMIT {limit}"
                     
-                    # TOP COUNTRIES - check this BEFORE is_aggregate
-                    elif 'top' in prompt.lower() and 'countr' in prompt.lower():
+                    # 3. TOP COUNTRIES - check this BEFORE is_aggregate
+                    elif 'top' in prompt_lower and has_country_word:
                         is_country_aggregate = True
                         sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
                     
-                    # Pure aggregate (how many events total)
-                    elif qi['is_aggregate'] and 'countr' not in prompt.lower():
-                        sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
+                    # 4. Aggregate queries (how many, count, total) - now with country support
+                    elif qi['is_aggregate']:
+                        is_count_aggregate = True
+                        codes = get_country_codes_from_prompt(prompt)
+                        if codes:
+                            cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
+                            country_filter_name = get_country(codes[0]) or codes[0]
+                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter}"
+                        else:
+                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
                     
+                    # 5. Default: specific events query
                     else:
                         if qe:
                             try:
@@ -789,11 +835,7 @@ def render_ai_chat(c, sql_db):
                                 sql = resp.metadata.get('sql_query')
                             except: pass
                         if not sql:
-                            codes = []
-                            for w in prompt.lower().replace(',', ' ').split():
-                                if len(w) >= 2:
-                                    code = get_country_code(w)
-                                    if code and code not in codes: codes.append(code)
+                            codes = get_country_codes_from_prompt(prompt)
                             if codes:
                                 if len(codes) == 1:
                                     cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
@@ -818,8 +860,33 @@ def render_ai_chat(c, sql_db):
                             dd = data.copy()
                             dd.columns = [col.upper() for col in dd.columns]
                             
+                            # Handle COUNT(*) aggregate queries
+                            if is_count_aggregate:
+                                total = dd.iloc[0]['TOTAL_EVENTS']
+                                location = f"in {country_filter_name}" if country_filter_name else "globally"
+                                
+                                ai_prompt = f"""Database query result: {total:,} events recorded {location} during {qi['period_label']}.
+
+Question: {prompt}
+
+Provide a brief, factual answer using ONLY this data. State the count clearly."""
+
+                                answer = str(llm.complete(ai_prompt))
+                                st.markdown(answer)
+                                
+                                st.markdown(f"""
+                                <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;text-align:center;margin:1rem 0;">
+                                    <div style="font-size:0.8rem;color:#64748b;text-transform:uppercase;">Total Events {f"in {country_filter_name}" if country_filter_name else ""}</div>
+                                    <div style="font-size:2.5rem;font-weight:700;color:#06b6d4;">{total:,}</div>
+                                    <div style="font-size:0.75rem;color:#94a3b8;">{qi['period_label']}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                                with st.expander("🔍 SQL"):
+                                    st.code(sql, language='sql')
+                            
                             # Handle country aggregate query differently
-                            if is_country_aggregate:
+                            elif is_country_aggregate:
                                 # Convert country codes to names
                                 dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
                                 
@@ -835,7 +902,7 @@ def render_ai_chat(c, sql_db):
 
 Question: {prompt}
 
-Briefly explain why these countries lead and any notable patterns."""
+Briefly explain why these countries lead and any notable patterns. Keep response concise."""
 
                                 answer = str(llm.complete(ai_prompt))
                                 st.markdown(answer)
@@ -890,7 +957,6 @@ Briefly explain why these countries lead and any notable patterns."""
                                     summary_data.append(f"- {headline} | {country} | {date} | Severity: {severity} ({score})")
                                 
                                 summary_text = "\n".join(summary_data)
-                                num_events = len(dd)
                                 
                                 ai_prompt = f"""Events from {qi['period_label']}:
 

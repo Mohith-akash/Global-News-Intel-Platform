@@ -9,15 +9,55 @@ from config import COUNTRY_ALIASES
 
 def get_country_code(name):
     """Convert country name to ISO 3-letter code."""
+    if not name or not isinstance(name, str):
+        return None
+    
     name_lower = name.lower().strip()
     
+    # Skip common English words that might match countries
+    STOPWORDS = {
+        'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+        'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 
+        'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that',
+        'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
+        'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each',
+        'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+        'not', 'only', 'same', 'so', 'than', 'too', 'very', 'just', 'also',
+        'now', 'here', 'there', 'then', 'once', 'many', 'any', 'show', 'get',
+        'events', 'event', 'total', 'count', 'many', 'much', 'last', 'next',
+        'week', 'month', 'year', 'today', 'yesterday', 'happened', 'involving',
+        'about', 'between', 'during', 'before', 'after', 'crisis', 'severe',
+        'top', 'countries', 'country',
+        # Geographic directions (prevent "Middle East", "North Africa", etc. issues)
+        'east', 'west', 'north', 'south', 'middle', 'central', 'eastern', 
+        'western', 'northern', 'southern', 'asia', 'africa', 'europe',
+        'happening', 'going', 'news', 'latest', 'recent', 'new', 'old'
+    }
+    
+    if name_lower in STOPWORDS:
+        return None
+    
+    # Check aliases first (includes common names like 'usa', 'uk', etc.)
     if name_lower in COUNTRY_ALIASES:
         return COUNTRY_ALIASES[name_lower]
     
+    # Explicit check for USA variants (backup in case alias fails)
+    if name_lower in ('usa', 'us', 'america', 'united states', 'u.s.', 'u.s.a.'):
+        return 'USA'
+    
+    # Skip very short words (likely not country names)
+    if len(name_lower) < 3:
+        return None
+    
     try:
-        result = pycountry.countries.search_fuzzy(name)
+        result = pycountry.countries.search_fuzzy(name_lower)
         if result:
-            return result[0].alpha_3
+            code = result[0].alpha_3
+            # Prevent UMI (US Minor Outlying Islands) from matching "usa" queries
+            if code == 'UMI' and 'minor' not in name_lower and 'outlying' not in name_lower:
+                return 'USA'
+            return code
     except LookupError:
         pass
     
