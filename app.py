@@ -1108,277 +1108,164 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
             except Exception as e:
                 st.error(f"❌ Error: {str(e)[:100]}")
 
-def render_arch():
+def render_about():
+    """Combined About page with all project info, ordered by recruiter priority."""
+    
+    # 1. TITLE
     st.markdown("""
-    <div style="text-align:center;margin-bottom:2rem;">
-        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;">🏗️ System Architecture</h2>
-        <p style="color:#64748b;">End-to-end data pipeline processing 100K+ daily events</p>
+    <div style="text-align:center;padding:1rem 0;">
+        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;">🏗️ About This Project</h2>
+        <p style="color:#94a3b8;max-width:700px;margin:0 auto;">
+            Real-time analytics for <b>GDELT</b> — the world's largest open database monitoring global news in 100+ languages
+        </p>
     </div>
     """, unsafe_allow_html=True)
     
+    # 2. ARCHITECTURE DIAGRAM (Most important for recruiters)
     st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;text-align:center;margin-bottom:2rem;">
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">📰 GDELT API</span>
-        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">⚡ Dagster Orchestration</span>
-        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🔧 dbt Transformations</span>
-        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🦆 MotherDuck DWH</span>
-        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🤖 Cerebras AI</span>
-        <span style="color:#06b6d4;margin:0 0.5rem;">→</span>
-        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;margin:0.5rem;">🎨 Streamlit</span>
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem;">
+        <div style="color:#64748b;font-size:0.75rem;margin-bottom:1rem;">DATA PIPELINE ARCHITECTURE</div>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 0.8rem;display:inline-block;margin:0.3rem;font-size:0.85rem;color:#e2e8f0;">📰 GDELT API</span>
+        <span style="color:#06b6d4;margin:0 0.3rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 0.8rem;display:inline-block;margin:0.3rem;font-size:0.85rem;color:#e2e8f0;">⚡ Dagster</span>
+        <span style="color:#06b6d4;margin:0 0.3rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 0.8rem;display:inline-block;margin:0.3rem;font-size:0.85rem;color:#e2e8f0;">🦆 MotherDuck</span>
+        <span style="color:#06b6d4;margin:0 0.3rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 0.8rem;display:inline-block;margin:0.3rem;font-size:0.85rem;color:#e2e8f0;">🤖 Cerebras AI</span>
+        <span style="color:#06b6d4;margin:0 0.3rem;">→</span>
+        <span style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 0.8rem;display:inline-block;margin:0.3rem;font-size:0.85rem;color:#e2e8f0;">🎨 Streamlit</span>
     </div>
     """, unsafe_allow_html=True)
     
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;min-height:260px;">
-            <h4 style="color:#06b6d4;font-size:0.9rem;">📥 DATA INGESTION</h4>
-            <p style="color:#94a3b8;font-size:0.85rem;">GDELT Project monitors 100+ languages, 100K+ daily events</p>
-            <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>15-minute update intervals</li>
-                <li>GitHub Actions scheduler</li>
-                <li>Dagster orchestration</li>
-                <li>Incremental loads</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
-            <h4 style="color:#10b981;font-size:0.9rem;">🔧 TRANSFORMATION</h4>
-            <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>dbt models for data quality</li>
-                <li>Aggregations & metrics</li>
-                <li>Country code mapping</li>
-                <li>Impact scoring</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with c2:
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;min-height:260px;">
-            <h4 style="color:#f59e0b;font-size:0.9rem;">🗄️ DATA WAREHOUSE</h4>
-            <p style="color:#94a3b8;font-size:0.85rem;">Migrated from Snowflake → MotherDuck</p>
-            <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>DuckDB columnar format</li>
-                <li>Sub-second queries</li>
-                <li>Serverless architecture</li>
-                <li><b>Saved:</b> ~$100/month vs Snowflake</li>
-            </ul>
-            <div style="margin-top:0.5rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;border-left:3px solid #10b981;">
-                <span style="color:#10b981;font-size:0.75rem;">💰 CURRENT COST: $0/month</span>
+    # 3. ENTERPRISE VS MY STACK (Shows industry knowledge)
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">💰 ENTERPRISE TOOLS vs MY STACK</h4>
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <tr style="border-bottom:1px solid #1e3a5f;">
+                <th style="text-align:left;padding:0.5rem;color:#f59e0b;">Enterprise Tool</th>
+                <th style="text-align:center;padding:0.5rem;color:#64748b;">→</th>
+                <th style="text-align:left;padding:0.5rem;color:#10b981;">My Alternative</th>
+            </tr>
+            <tr style="border-bottom:1px solid #1e3a5f33;">
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Databricks / Spark</b></td>
+                <td style="text-align:center;color:#06b6d4;">→</td>
+                <td style="padding:0.5rem;color:#e2e8f0;"><b>DuckDB</b></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e3a5f33;">
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Snowflake / Redshift</b></td>
+                <td style="text-align:center;color:#06b6d4;">→</td>
+                <td style="padding:0.5rem;color:#e2e8f0;"><b>MotherDuck</b></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e3a5f33;">
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Apache Airflow</b></td>
+                <td style="text-align:center;color:#06b6d4;">→</td>
+                <td style="padding:0.5rem;color:#e2e8f0;"><b>Dagster</b></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e3a5f33;">
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Hadoop HDFS</b></td>
+                <td style="text-align:center;color:#06b6d4;">→</td>
+                <td style="padding:0.5rem;color:#e2e8f0;"><b>GitHub Actions</b></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e3a5f33;">
+                <td style="padding:0.5rem;color:#94a3b8;"><b>OpenAI GPT-4</b></td>
+                <td style="text-align:center;color:#06b6d4;">→</td>
+                <td style="padding:0.5rem;color:#e2e8f0;"><b>Cerebras</b> (Llama 3.1)</td>
+            </tr>
+            <tr>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Tableau / Power BI</b></td>
+                <td style="text-align:center;color:#06b6d4;">→</td>
+                <td style="padding:0.5rem;color:#e2e8f0;"><b>Streamlit</b> + Plotly</td>
+            </tr>
+        </table>
+        <div style="display:flex;justify-content:space-around;margin-top:1rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
+            <div style="text-align:center;">
+                <div style="color:#ef4444;font-size:1.1rem;font-weight:700;">$500 - $10,000+</div>
+                <div style="color:#64748b;font-size:0.7rem;">Enterprise monthly</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#10b981;font-size:1.1rem;font-weight:700;">$0</div>
+                <div style="color:#64748b;font-size:0.7rem;">My monthly cost</div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:200px;">
-            <h4 style="color:#8b5cf6;font-size:0.9rem;">🤖 AI LAYER</h4>
-            <ul style="color:#94a3b8;font-size:0.85rem;">
-                <li>Cerebras Llama 3.1 8B</li>
-                <li>Previously tested: Gemini, Groq</li>
-                <li>LlamaIndex text-to-SQL</li>
-                <li>Natural language queries</li>
-                <li>Free tier usage</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    
+    # 4. TECHNOLOGY EVOLUTION (Shows learning and decision-making)
     st.markdown("""
-    <h3 style="text-align:center;color:#e2e8f0;margin-bottom:1rem;">🛠️ Tech Stack Evolution</h3>
-    <div style="text-align:center;padding:1rem;">
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">🔄 TECHNOLOGY EVOLUTION</h4>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;background:#1a2332;border-radius:8px;padding:1rem;">
+                <div style="color:#06b6d4;font-size:0.75rem;margin-bottom:0.5rem;">DATA WAREHOUSE</div>
+                <div style="color:#e2e8f0;font-size:0.9rem;">❄️ Snowflake → 🦆 MotherDuck</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:#1a2332;border-radius:8px;padding:1rem;">
+                <div style="color:#8b5cf6;font-size:0.75rem;margin-bottom:0.5rem;">AI/LLM PROVIDER</div>
+                <div style="color:#e2e8f0;font-size:0.9rem;">✨ Gemini → ⚡ Groq → 🧠 Cerebras</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 5. TECH STACK BADGES (Quick keyword scan)
+    st.markdown("""
+    <div style="text-align:center;margin-bottom:1.5rem;">
+        <div style="color:#64748b;font-size:0.75rem;margin-bottom:0.75rem;">TECH STACK</div>
         <span class="tech-badge">🐍 Python</span>
-        <span class="tech-badge">❄️ Snowflake</span>
         <span class="tech-badge">🦆 DuckDB</span>
         <span class="tech-badge">☁️ MotherDuck</span>
         <span class="tech-badge">⚙️ Dagster</span>
-        <span class="tech-badge">🔧 dbt</span>
-        <span class="tech-badge">🤖 Gen AI</span>
         <span class="tech-badge">🦙 LlamaIndex</span>
         <span class="tech-badge">⚡ Cerebras</span>
         <span class="tech-badge">📊 Plotly</span>
         <span class="tech-badge">🎨 Streamlit</span>
         <span class="tech-badge">🔄 GitHub Actions</span>
     </div>
-        <div style="margin-top:1rem;">
-            <div style="color:#64748b;font-size:0.75rem;margin-bottom:0.5rem;text-align:center;">PREVIOUSLY TESTED</div>
-            <div style="text-align:center;">
-                <span style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.8rem;display:inline-block;margin:0.25rem;font-size:0.75rem;color:#64748b;">❄️ Snowflake</span>
-                <span style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.8rem;display:inline-block;margin:0.25rem;font-size:0.75rem;color:#64748b;">✨ Gemini</span>
-                <span style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.8rem;display:inline-block;margin:0.25rem;font-size:0.75rem;color:#64748b;">⚡ Groq</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-def render_about():
-    st.markdown("""
-    <div style="text-align:center;padding:1.5rem 0 1rem;">
-        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;">👋 About This Project</h2>
-        <p style="color:#94a3b8;max-width:750px;margin:0 auto;font-size:1.1rem;">
-            Real-time analytics for <b>GDELT</b> — the world's largest open database monitoring global news in 100+ languages
-        </p>
-    </div>
     """, unsafe_allow_html=True)
     
-    # COST-EFFICIENT ARCHITECTURE - Compact version
+    # 6. KEY METRICS (Quantifiable achievements)
     st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;margin-bottom:1rem;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.5rem;">💰 ENTERPRISE TOOLS vs MY STACK</h4>
-        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin:0;">Same capabilities, fraction of the cost</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    cost_col1, cost_col2 = st.columns(2)
-    
-    with cost_col1:
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
-            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">🏢 ENTERPRISE APPROACH</h5>
-            <ul style="font-size:0.8rem;line-height:1.7;color:#94a3b8;padding-left:1.2rem;">
-                <li><b>Databricks</b> - Unified analytics</li>
-                <li><b>Apache Spark/PySpark</b> - Big data processing</li>
-                <li><b>Hadoop</b> - Distributed storage</li>
-                <li><b>Apache Airflow</b> - Workflow orchestration</li>
-                <li><b>Snowflake/Redshift</b> - Cloud data warehouse</li>
-                <li><b>OpenAI GPT-4</b> - LLM inference</li>
-            </ul>
-            <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(239,68,68,0.1);border-radius:6px;text-align:center;">
-                <span style="color:#ef4444;font-size:0.8rem;">💸 $500 - $10,000+/month</span>
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">📈 KEY METRICS</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem;">
+            <div style="text-align:center;padding:0.75rem;background:rgba(6,182,212,0.1);border-radius:8px;">
+                <div style="font-size:1.5rem;font-weight:700;color:#06b6d4;">100K+</div>
+                <div style="font-size:0.7rem;color:#94a3b8;">Daily Events</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with cost_col2:
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
-            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">🚀 MY APPROACH (FREE)</h5>
-            <ul style="font-size:0.8rem;line-height:1.7;color:#94a3b8;padding-left:1.2rem;">
-                <li><b style="color:#e2e8f0;">DuckDB</b> → replaces Spark for analytics</li>
-                <li><b style="color:#e2e8f0;">MotherDuck</b> → replaces Snowflake/Redshift</li>
-                <li><b style="color:#e2e8f0;">Dagster</b> → replaces Airflow</li>
-                <li><b style="color:#e2e8f0;">GitHub Actions</b> → replaces managed schedulers</li>
-                <li><b style="color:#e2e8f0;">Cerebras</b> → replaces OpenAI</li>
-                <li><b style="color:#e2e8f0;">Streamlit</b> → replaces BI tools</li>
-            </ul>
-            <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;text-align:center;">
-                <span style="color:#10b981;font-size:0.8rem;">✨ $0/month (free tiers)</span>
+            <div style="text-align:center;padding:0.75rem;background:rgba(16,185,129,0.1);border-radius:8px;">
+                <div style="font-size:1.5rem;font-weight:700;color:#10b981;">$0</div>
+                <div style="font-size:0.7rem;color:#94a3b8;">Monthly Cost</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style="margin-top:1rem;padding:1rem;background:#1a2332;border-radius:8px;text-align:center;">
-        <div style="font-size:0.85rem;color:#94a3b8;">
-            <b style="color:#e2e8f0;">Key Insight:</b> For datasets under 100GB, modern tools like DuckDB outperform 
-            Spark clusters at a fraction of the complexity and cost.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # TECHNOLOGY EVOLUTION
-    st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">🔄 TECHNOLOGY EVOLUTION</h4>
-        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin-bottom:1rem;">This project evolved through iterations to optimize cost and performance</p>
-        <div style="background:#1a2332;border-radius:8px;padding:1rem;margin-bottom:0.75rem;">
-            <div style="color:#06b6d4;font-size:0.8rem;margin-bottom:0.5rem;">DATA WAREHOUSE</div>
-            <div style="color:#e2e8f0;font-size:0.9rem;">❄️ Snowflake (trial) → 🦆 MotherDuck (free tier)</div>
-        </div>
-        <div style="background:#1a2332;border-radius:8px;padding:1rem;">
-            <div style="color:#8b5cf6;font-size:0.8rem;margin-bottom:0.5rem;">AI/LLM PROVIDER</div>
-            <div style="color:#e2e8f0;font-size:0.9rem;">✨ Gemini 2.0/2.5 → ⚡ Groq Llama 3.3 70B → 🧠 Cerebras Llama 3.1 8B</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # PROJECT GOALS & TECHNICAL SKILLS
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:280px;">
-            <h4 style="color:#06b6d4;font-size:0.9rem;">🎯 PROJECT GOALS</h4>
-            <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
-                <li>Demonstrate production-ready data pipelines</li>
-                <li>Showcase modern data stack (Dagster, dbt, DuckDB)</li>
-                <li>Integrate AI/LLM capabilities (Cerebras, LlamaIndex)</li>
-                <li>Build scalable, cost-effective architecture</li>
-                <li>Create intuitive data visualizations</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with c2:
-        st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;min-height:280px;">
-            <h4 style="color:#10b981;font-size:0.9rem;">🛠️ TECHNICAL SKILLS</h4>
-            <ul style="color:#94a3b8;font-size:0.85rem;line-height:1.8;">
-                <li><b>Languages:</b> Python, SQL</li>
-                <li><b>Data Engineering:</b> ETL/ELT, Data Modeling</li>
-                <li><b>Orchestration:</b> Dagster, dbt, GitHub Actions</li>
-                <li><b>Cloud:</b> Snowflake, MotherDuck (DuckDB)</li>
-                <li><b>AI/ML:</b> LLMs, RAG, Text-to-SQL</li>
-                <li><b>Visualization:</b> Streamlit, Plotly</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # PROJECT HIGHLIGHTS
-    st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:2rem;margin:2rem 0;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">📈 PROJECT HIGHLIGHTS</h4>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
-            <div style="text-align:center;padding:1rem;background:rgba(6,182,212,0.1);border-radius:8px;">
-                <div style="font-size:2rem;font-weight:700;color:#06b6d4;">100K+</div>
-                <div style="font-size:0.75rem;color:#94a3b8;">Daily Events Processed</div>
+            <div style="text-align:center;padding:0.75rem;background:rgba(245,158,11,0.1);border-radius:8px;">
+                <div style="font-size:1.5rem;font-weight:700;color:#f59e0b;">&lt;1s</div>
+                <div style="font-size:0.7rem;color:#94a3b8;">Query Time</div>
             </div>
-            <div style="text-align:center;padding:1rem;background:rgba(16,185,129,0.1);border-radius:8px;">
-                <div style="font-size:2rem;font-weight:700;color:#10b981;">$0</div>
-                <div style="font-size:0.75rem;color:#94a3b8;">Monthly Operating Cost</div>
-            </div>
-            <div style="text-align:center;padding:1rem;background:rgba(245,158,11,0.1);border-radius:8px;">
-                <div style="font-size:2rem;font-weight:700;color:#f59e0b;">&lt;1s</div>
-                <div style="font-size:0.75rem;color:#94a3b8;">Average Query Time</div>
-            </div>
-            <div style="text-align:center;padding:1rem;background:rgba(139,92,246,0.1);border-radius:8px;">
-                <div style="font-size:2rem;font-weight:700;color:#8b5cf6;">100+</div>
-                <div style="font-size:0.75rem;color:#94a3b8;">Languages Monitored</div>
+            <div style="text-align:center;padding:0.75rem;background:rgba(139,92,246,0.1);border-radius:8px;">
+                <div style="font-size:1.5rem;font-weight:700;color:#8b5cf6;">100+</div>
+                <div style="font-size:0.7rem;color:#94a3b8;">Languages</div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    
-    # CONTACT
+    # 7. CONTACT (Call to action)
     st.markdown("""
     <div style="text-align:center;">
-        <h4 style="color:#e2e8f0;">📬 CONTACT</h4>
-        <p style="color:#94a3b8;margin-bottom:1rem;">Interested in data engineering roles or collaborations</p>
+        <h4 style="color:#e2e8f0;margin-bottom:0.75rem;">📬 CONTACT</h4>
+        <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem;">Open to data engineering opportunities</p>
         <div style="display:flex;justify-content:center;gap:1rem;flex-wrap:wrap;">
-            <a href="https://github.com/Mohith-akash" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem 1.25rem;color:#e2e8f0;text-decoration:none;display:inline-block;">
+            <a href="https://github.com/Mohith-akash" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 1rem;color:#e2e8f0;text-decoration:none;">
                 ⭐ GitHub
             </a>
-            <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem 1.25rem;color:#e2e8f0;text-decoration:none;display:inline-block;">
+            <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.6rem 1rem;color:#e2e8f0;text-decoration:none;">
                 💼 LinkedIn
             </a>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+
 
 # =============================================================================
 # MAIN APPLICATION
@@ -1395,7 +1282,7 @@ def main():
         sql_db = None
     
     render_header()
-    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🤖 AI", "🏗️ TECH", "👤 ABOUT"])
+    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🤖 AI", "👤 ABOUT"])
     
     with tabs[0]:
         render_metrics(conn, tbl)
@@ -1457,9 +1344,6 @@ def main():
             </div>''', unsafe_allow_html=True)
     
     with tabs[3]:
-        render_arch()
-    
-    with tabs[4]:
         render_about()
     
     st.markdown('''<div class="footer">
