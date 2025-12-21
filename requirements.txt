@@ -7,8 +7,7 @@ duckdb-engine>=0.13.0
 sqlalchemy==2.0.35
 llama-index-core>=0.10.40
 llama-index-llms-cerebras>=0.1.0
-llama-index-embeddings-google-genai>=0.1.0
-google-generativeai>=0.7.0
 pycountry>=24.6.1
 dagster>=1.5.0
 dagster-duckdb>=0.21.0
+requests>=2.31.0
