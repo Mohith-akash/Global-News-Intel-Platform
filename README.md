@@ -1,0 +1,244 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Streamlit-1.35+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/DuckDB-Motherduck-FDD023?style=for-the-badge&logo=duckdb&logoColor=black" alt="DuckDB">
+  <img src="https://img.shields.io/badge/Dagster-Orchestration-4F43DD?style=for-the-badge&logo=dagster&logoColor=white" alt="Dagster">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
+</p>
+
+<h1 align="center">🌐 Global News Intelligence Platform</h1>
+
+<p align="center">
+  <strong>Real-time global news analytics powered by GDELT, AI, and modern data engineering</strong>
+</p>
+
+<p align="center">
+  <a href="#-features">Features</a> •
+  <a href="#%EF%B8%8F-architecture">Architecture</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-cost-efficiency">Cost Efficiency</a>
+</p>
+
+---
+
+## 🎯 Overview
+
+A production-grade data engineering platform that ingests, processes, and visualizes **100,000+ daily global news events** from the GDELT Project. Features AI-powered natural language querying and real-time analytics dashboard.
+
+### What is GDELT?
+The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news media from nearly every country in 100+ languages, identifying people, locations, themes, and emotions driving global society.
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **📊 Real-Time Dashboard** | Live metrics, trending news, sentiment analysis, geographic distribution |
+| **🤖 AI Chat Interface** | Ask questions in plain English → Get SQL-powered answers |
+| **⚡ Automated Pipeline** | 30-minute refresh cycles via GitHub Actions + Dagster |
+| **🌍 Global Coverage** | Events from 200+ countries with intelligent country code mapping |
+| **📈 Trend Analysis** | 30-day time series, intensity tracking, actor monitoring |
+| **🎨 Modern UI** | Dark theme, glassmorphism, responsive design |
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   GDELT API     │────▶│ GitHub Actions   │────▶│    Dagster      │
+│  (Raw Events)   │     │  (Scheduler)     │     │ (Orchestrator)  │
+└─────────────────┘     └──────────────────┘     └────────┬────────┘
+                                                          │
+                                                          ▼
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Streamlit     │◀────│   Cerebras AI    │◀────│   MotherDuck    │
+│  (Dashboard)    │     │  (LLM Layer)     │     │   (DuckDB DWH)  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+### Data Flow
+1. **Extract**: GDELT API provides 15-minute update intervals
+2. **Transform**: Headlines extracted, country codes mapped, scores normalized
+3. **Load**: Deduplicated data inserted into MotherDuck (serverless DuckDB)
+4. **Serve**: Streamlit dashboard with Plotly visualizations
+5. **Query**: Cerebras LLM + LlamaIndex for natural language → SQL
+
+---
+
+## 🛠️ Tech Stack
+
+### Data Engineering
+| Tool | Purpose |
+|------|---------|
+| **Dagster** | Pipeline orchestration with asset-based design |
+| **DuckDB** | In-process OLAP database for fast analytics |
+| **MotherDuck** | Serverless cloud DuckDB warehouse |
+| **GitHub Actions** | CI/CD and scheduled pipeline execution |
+
+### AI/ML
+| Tool | Purpose |
+|------|---------|
+| **Cerebras** | Ultra-fast LLM inference (Llama 3.1 8B) |
+| **LlamaIndex** | Text-to-SQL query engine |
+
+### Frontend
+| Tool | Purpose |
+|------|---------|
+| **Streamlit** | Interactive dashboard framework |
+| **Plotly** | Dynamic charts and visualizations |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.10+
+- [MotherDuck Account](https://motherduck.com/) (free tier)
+- [Cerebras API Key](https://cloud.cerebras.ai/) (free tier)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/Mohith-akash/gdelt-intelligence.git
+cd gdelt-intelligence
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or
+.\venv\Scripts\activate   # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Configuration
+
+Create a `.env` file in the project root:
+
+```env
+MOTHERDUCK_TOKEN=your_motherduck_token
+CEREBRAS_API_KEY=your_cerebras_api_key
+```
+
+### Run the Dashboard
+
+```bash
+streamlit run app.py
+```
+
+### Run the Pipeline Manually
+
+```bash
+python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
+```
+
+---
+
+## 💰 Cost Efficiency
+
+This project demonstrates how to build production-grade data pipelines at **zero cost**:
+
+| If I Used Enterprise Tools | What I Used Instead |
+|---------------------------|--------------------|
+| Snowflake (~$50-200/mo for this scale) | MotherDuck ($0 free tier) |
+| OpenAI GPT-4 (~$20-50/mo) | Cerebras ($0 free tier) |
+| Managed Airflow (~$100+/mo) | Dagster + GitHub Actions (free) |
+| Cloud VM for hosting | Streamlit Community Cloud (free) |
+
+### 💵 Total Monthly Cost: $0
+
+---
+
+## 🔄 Technology Evolution
+
+This project evolved through multiple iterations to optimize for cost and performance:
+
+### Data Warehouse
+```
+❄️ Snowflake (trial) → 🦆 MotherDuck (free tier)
+```
+- Started with Snowflake trial for learning enterprise DWH
+- Migrated to MotherDuck to eliminate costs while keeping SQL compatibility
+
+### AI/LLM Provider
+```
+✨ Gemini 2.0/2.5 Flash → ⚡ Groq (Llama 3.3 70B) → 🧠 Cerebras (Llama 3.1 8B)
+```
+- Tested Gemini models for natural language queries
+- Tried Groq's fast inference with larger Llama models
+- Settled on Cerebras for reliable free tier and good performance
+
+**Key Learning**: The best tool isn't always the most expensive—it's the one that solves your problem within constraints.
+
+---
+
+## 📁 Project Structure
+
+```
+gdelt_project/
+├── app.py              # Streamlit dashboard (1,400+ lines)
+├── pipeline.py         # Dagster ETL pipeline
+├── config.py           # Configuration constants
+├── utils.py            # Utility functions
+├── styles.py           # CSS styling
+├── requirements.txt    # Python dependencies
+├── .env                # Environment variables (not in repo)
+└── .github/
+    └── workflows/
+        └── hourly_update.yml  # GitHub Actions scheduler
+```
+
+---
+
+## 📊 Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| **Daily Events Processed** | 100,000+ |
+| **Languages Monitored** | 100+ |
+| **Countries Covered** | 200+ |
+| **Average Query Time** | <1 second |
+| **Monthly Cost** | $0 |
+| **Pipeline Frequency** | Every 30 minutes |
+
+---
+
+## 🔮 Future Enhancements
+
+- [ ] Add dbt transformations for advanced modeling
+- [ ] Implement event clustering with ML
+- [ ] Add email/Slack alerts for crisis events
+- [ ] Expand AI chat with multi-turn conversations
+- [ ] Add export functionality (CSV, PDF reports)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 📬 Contact
+
+**Mohith Akash**
+
+[![GitHub](https://img.shields.io/badge/GitHub-Mohith--akash-181717?style=flat&logo=github)](https://github.com/Mohith-akash)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-mohith--akash-0A66C2?style=flat&logo=linkedin)](https://www.linkedin.com/in/mohith-akash/)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  <sub>Built with ☕ and curiosity • Data sourced from <a href="https://www.gdeltproject.org/">GDELT Project</a></sub>
+</p>

@@ -88,7 +88,7 @@ def detect_table(_conn):
                 if 'event' in name.lower():
                     return name
             return result.iloc[0, 0]
-    except:
+    except Exception:
         pass
     return 'events_dagster'
 
@@ -135,7 +135,7 @@ def get_query_engine(_sql_db):
         if target:
             return NLSQLTableQueryEngine(sql_database=_sql_db, tables=[target])
         return NLSQLTableQueryEngine(sql_database=_sql_db)
-    except:
+    except Exception:
         return None
 
 @st.cache_resource
@@ -913,7 +913,7 @@ def render_ai_chat(c, sql_db):
                             try:
                                 resp = qe.query(prompt)
                                 sql = resp.metadata.get('sql_query')
-                            except: pass
+                            except Exception: pass
                         if not sql:
                             codes = get_country_codes_from_prompt(prompt)
                             if codes:
@@ -1043,7 +1043,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                 if 'DATE' in dd.columns:
                                     try: 
                                         dd['DATE'] = pd.to_datetime(dd['DATE'].astype(str), format='%Y%m%d').dt.strftime('%b %d')
-                                    except: pass
+                                    except Exception: pass
                                 
                                 # Check if we have any valid data after filtering
                                 if dd.empty:
@@ -1102,6 +1102,9 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
                         answer = "Could not process query."
                 
                 st.session_state.qa_history.append({"question": prompt, "answer": answer, "sql": sql})
+                # Limit history to 50 messages to prevent unbounded memory growth
+                if len(st.session_state.qa_history) > 50:
+                    st.session_state.qa_history = st.session_state.qa_history[-50:]
             except Exception as e:
                 st.error(f"❌ Error: {str(e)[:100]}")
 
@@ -1228,8 +1231,8 @@ def render_about():
     # COST-EFFICIENT ARCHITECTURE - Compact version
     st.markdown("""
     <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;margin-bottom:1rem;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.5rem;">💰 COST-EFFICIENT ARCHITECTURE</h4>
-        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin:0;">Avoiding expensive enterprise tools while maintaining quality</p>
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.5rem;">💰 BUILT AT ZERO COST</h4>
+        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin:0;">Production-grade pipeline without enterprise spending</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1238,15 +1241,12 @@ def render_about():
     with cost_col1:
         st.markdown("""
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
-            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">❌ AVOIDED (Expensive)</h5>
+            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">❌ IF I USED PAID TOOLS</h5>
             <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
-                <li>Apache Spark / PySpark (~$5-10k/month)</li>
-                <li>Hadoop clusters (~$3-8k/month)</li>
-                <li>Azure Synapse (~$2-5k/month)</li>
-                <li>AWS Redshift (~$2-4k/month)</li>
-                <li>Databricks (~$3-7k/month)</li>
-                <li>Snowflake compute (~$1-3k/month)</li>
-                <li>OpenAI GPT-4 API (~$500-1k/month)</li>
+                <li>Snowflake (~$50-200/month)</li>
+                <li>OpenAI GPT-4 (~$20-50/month)</li>
+                <li>Managed Airflow (~$100+/month)</li>
+                <li>Cloud VM hosting (~$20-50/month)</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -1254,25 +1254,40 @@ def render_about():
     with cost_col2:
         st.markdown("""
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
-            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">✅ USED INSTEAD (Free/Cheap)</h5>
+            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">✅ WHAT I USED (FREE)</h5>
             <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
-                <li><b style="color:#e2e8f0;">DuckDB:</b> In-process analytics (free)</li>
-                <li><b style="color:#e2e8f0;">MotherDuck:</b> Serverless DuckDB ($0 free tier)</li>
-                <li><b style="color:#e2e8f0;">Dagster:</b> Orchestration (free self-hosted)</li>
-                <li><b style="color:#e2e8f0;">dbt:</b> Transformations (free core)</li>
-                <li><b style="color:#e2e8f0;">GitHub Actions:</b> CI/CD (free tier)</li>
-                <li><b style="color:#e2e8f0;">Cerebras:</b> LLM inference (pay-as-you-go)</li>
-                <li><b style="color:#e2e8f0;">Streamlit:</b> Free hosting + dashboards</li>
+                <li><b style="color:#e2e8f0;">MotherDuck:</b> Serverless DuckDB ($0)</li>
+                <li><b style="color:#e2e8f0;">Cerebras:</b> LLM inference ($0 free tier)</li>
+                <li><b style="color:#e2e8f0;">Dagster + GitHub Actions:</b> Free</li>
+                <li><b style="color:#e2e8f0;">Streamlit Cloud:</b> Free hosting</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("""
     <div style="margin-top:1rem;padding:1.25rem;background:rgba(16,185,129,0.1);border-radius:12px;border-left:4px solid #10b981;text-align:center;">
-        <div style="font-size:1.3rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Savings: $15,000 - $40,000</div>
-        <div style="font-size:0.85rem;color:#94a3b8;">Large-scale data processing at near-zero cost</div>
+        <div style="font-size:1.3rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Cost: $0</div>
+        <div style="font-size:0.85rem;color:#94a3b8;">100% free tier across all services</div>
     </div>
     """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # TECHNOLOGY EVOLUTION
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;margin-bottom:1rem;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;">🔄 TECHNOLOGY EVOLUTION</h4>
+        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin-bottom:1rem;">This project evolved through iterations to optimize cost and performance</p>
+        <div style="background:#1a2332;border-radius:8px;padding:1rem;margin-bottom:0.75rem;">
+            <div style="color:#06b6d4;font-size:0.8rem;margin-bottom:0.5rem;">DATA WAREHOUSE</div>
+            <div style="color:#e2e8f0;font-size:0.9rem;">❄️ Snowflake (trial) → 🦆 MotherDuck (free tier)</div>
+        </div>
+        <div style="background:#1a2332;border-radius:8px;padding:1rem;">
+            <div style="color:#8b5cf6;font-size:0.8rem;margin-bottom:0.5rem;">AI/LLM PROVIDER</div>
+            <div style="color:#e2e8f0;font-size:0.9rem;">✨ Gemini 2.0/2.5 → ⚡ Groq Llama 3.3 70B → 🧠 Cerebras Llama 3.1 8B</div>
+        </div>
+    </div>
+    """​, unsafe_allow_html=True)
     
     st.markdown("---")
     

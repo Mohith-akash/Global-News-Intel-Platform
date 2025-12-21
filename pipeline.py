@@ -38,7 +38,7 @@ def extract_headline_from_url(url):
             if headline and len(headline) > 20:
                 return headline
         return None
-    except:
+    except Exception:
         return None
 
 

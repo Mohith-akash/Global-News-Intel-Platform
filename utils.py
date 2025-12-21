@@ -176,7 +176,7 @@ def get_country(code):
                 return country.name
         
         return None
-    except:
+    except Exception:
         return None
 
 
