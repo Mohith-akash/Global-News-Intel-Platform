@@ -1231,8 +1231,8 @@ def render_about():
     # COST-EFFICIENT ARCHITECTURE - Compact version
     st.markdown("""
     <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;margin-bottom:1rem;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.5rem;">💰 BUILT AT ZERO COST</h4>
-        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin:0;">Production-grade pipeline without enterprise spending</p>
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.5rem;">💰 ENTERPRISE TOOLS vs MY STACK</h4>
+        <p style="color:#94a3b8;font-size:0.85rem;text-align:center;margin:0;">Same capabilities, fraction of the cost</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1241,33 +1241,45 @@ def render_about():
     with cost_col1:
         st.markdown("""
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
-            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">❌ IF I USED PAID TOOLS</h5>
-            <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
-                <li>Snowflake (~$50-200/month)</li>
-                <li>OpenAI GPT-4 (~$20-50/month)</li>
-                <li>Managed Airflow (~$100+/month)</li>
-                <li>Cloud VM hosting (~$20-50/month)</li>
+            <h5 style="color:#f59e0b;font-size:0.9rem;margin-bottom:1rem;">🏢 ENTERPRISE APPROACH</h5>
+            <ul style="font-size:0.8rem;line-height:1.7;color:#94a3b8;padding-left:1.2rem;">
+                <li><b>Databricks</b> - Unified analytics</li>
+                <li><b>Apache Spark/PySpark</b> - Big data processing</li>
+                <li><b>Hadoop</b> - Distributed storage</li>
+                <li><b>Apache Airflow</b> - Workflow orchestration</li>
+                <li><b>Snowflake/Redshift</b> - Cloud data warehouse</li>
+                <li><b>OpenAI GPT-4</b> - LLM inference</li>
             </ul>
+            <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(239,68,68,0.1);border-radius:6px;text-align:center;">
+                <span style="color:#ef4444;font-size:0.8rem;">💸 $500 - $10,000+/month</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
     with cost_col2:
         st.markdown("""
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;height:100%;">
-            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">✅ WHAT I USED (FREE)</h5>
-            <ul style="font-size:0.85rem;line-height:1.8;color:#94a3b8;padding-left:1.2rem;">
-                <li><b style="color:#e2e8f0;">MotherDuck:</b> Serverless DuckDB ($0)</li>
-                <li><b style="color:#e2e8f0;">Cerebras:</b> LLM inference ($0 free tier)</li>
-                <li><b style="color:#e2e8f0;">Dagster + GitHub Actions:</b> Free</li>
-                <li><b style="color:#e2e8f0;">Streamlit Cloud:</b> Free hosting</li>
+            <h5 style="color:#10b981;font-size:0.9rem;margin-bottom:1rem;">🚀 MY APPROACH (FREE)</h5>
+            <ul style="font-size:0.8rem;line-height:1.7;color:#94a3b8;padding-left:1.2rem;">
+                <li><b style="color:#e2e8f0;">DuckDB</b> → replaces Spark for analytics</li>
+                <li><b style="color:#e2e8f0;">MotherDuck</b> → replaces Snowflake/Redshift</li>
+                <li><b style="color:#e2e8f0;">Dagster</b> → replaces Airflow</li>
+                <li><b style="color:#e2e8f0;">GitHub Actions</b> → replaces managed schedulers</li>
+                <li><b style="color:#e2e8f0;">Cerebras</b> → replaces OpenAI</li>
+                <li><b style="color:#e2e8f0;">Streamlit</b> → replaces BI tools</li>
             </ul>
+            <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;text-align:center;">
+                <span style="color:#10b981;font-size:0.8rem;">✨ $0/month (free tiers)</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("""
-    <div style="margin-top:1rem;padding:1.25rem;background:rgba(16,185,129,0.1);border-radius:12px;border-left:4px solid #10b981;text-align:center;">
-        <div style="font-size:1.3rem;font-weight:700;color:#10b981;margin-bottom:0.5rem;">Total Monthly Cost: $0</div>
-        <div style="font-size:0.85rem;color:#94a3b8;">100% free tier across all services</div>
+    <div style="margin-top:1rem;padding:1rem;background:#1a2332;border-radius:8px;text-align:center;">
+        <div style="font-size:0.85rem;color:#94a3b8;">
+            <b style="color:#e2e8f0;">Key Insight:</b> For datasets under 100GB, modern tools like DuckDB outperform 
+            Spark clusters at a fraction of the complexity and cost.
+        </div>
     </div>
     """, unsafe_allow_html=True)
     

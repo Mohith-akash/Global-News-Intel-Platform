@@ -139,18 +139,27 @@ python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
 
 ---
 
-## 💰 Cost Efficiency
+## 💰 Enterprise Tools vs My Stack
 
-This project demonstrates how to build production-grade data pipelines at **zero cost**:
+This project demonstrates how to achieve enterprise-grade capabilities at **zero cost**:
 
-| If I Used Enterprise Tools | What I Used Instead |
-|---------------------------|--------------------|
-| Snowflake (~$50-200/mo for this scale) | MotherDuck ($0 free tier) |
-| OpenAI GPT-4 (~$20-50/mo) | Cerebras ($0 free tier) |
-| Managed Airflow (~$100+/mo) | Dagster + GitHub Actions (free) |
-| Cloud VM for hosting | Streamlit Community Cloud (free) |
+| Enterprise Tool | Purpose | My Alternative |
+|-----------------|---------|----------------|
+| **Databricks** | Unified analytics | DuckDB + MotherDuck |
+| **Apache Spark/PySpark** | Big data processing | DuckDB (faster for <100GB) |
+| **Hadoop** | Distributed storage | MotherDuck (serverless) |
+| **Apache Airflow** | Workflow orchestration | Dagster |
+| **Snowflake/Redshift** | Cloud data warehouse | MotherDuck ($0) |
+| **OpenAI GPT-4** | LLM inference | Cerebras ($0 free tier) |
+| **Power BI/Tableau** | Dashboards | Streamlit |
 
-### 💵 Total Monthly Cost: $0
+### 💵 Cost Comparison
+| Approach | Monthly Cost |
+|----------|--------------|
+| Enterprise Stack | $500 - $10,000+ |
+| **My Stack** | **$0** |
+
+> **Key Insight**: For datasets under 100GB, modern tools like DuckDB outperform Spark clusters at a fraction of the complexity and cost.
 
 ---
 
