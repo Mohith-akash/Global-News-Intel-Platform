@@ -33,6 +33,17 @@
 
 A full-stack data engineering project that ingests, processes, and visualizes **100,000+ daily global news events** from the GDELT Project. Includes AI chat for natural language queries and a live analytics dashboard.
 
+### 📊 By the Numbers
+| Metric | Value |
+|--------|-------|
+| **Cumulative Events** | 12M+ processed |
+| **Daily Ingestion** | 100K+ events/day |
+| **Data History** | 3.5+ months live data |
+| **Languages** | 100+ monitored |
+| **Countries** | 200+ covered |
+| **Query Speed** | <1 second |
+| **Monthly Cost** | $0 |
+
 ### What is GDELT?
 The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news media from nearly every country in 100+ languages, identifying people, locations, themes, and emotions driving global society.
 
