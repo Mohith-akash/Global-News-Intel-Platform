@@ -130,8 +130,8 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 
 ```bash
 # Clone the repository
-git clone https://github.com/Mohith-akash/gdelt-intelligence.git
-cd gdelt-intelligence
+git clone https://github.com/Mohith-akash/Global-News-Intel-Platform.git
+cd Global-News-Intel-Platform
 
 # Create virtual environment
 python -m venv venv
