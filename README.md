@@ -9,7 +9,7 @@
 <h1 align="center">🌐 Global News Intelligence Platform</h1>
 
 <p align="center">
-  <strong>Real-time global news analytics powered by GDELT, AI, and modern data engineering</strong>
+  <strong>Global news analytics with GDELT + AI + modern data stack</strong>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 ## 🎯 Overview
 
-A production-grade data engineering platform that ingests, processes, and visualizes **100,000+ daily global news events** from the GDELT Project. Features AI-powered natural language querying and real-time analytics dashboard.
+A full-stack data engineering project that ingests, processes, and visualizes **100,000+ daily global news events** from the GDELT Project. Includes AI chat for natural language queries and a live analytics dashboard.
 
 ### What is GDELT?
 The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news media from nearly every country in 100+ languages, identifying people, locations, themes, and emotions driving global society.
@@ -38,9 +38,9 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **📊 Real-Time Dashboard** | Live metrics, trending news, sentiment analysis, geographic distribution |
 | **🤖 AI Chat Interface** | Ask questions in plain English → Get SQL-powered answers |
 | **⚡ Automated Pipeline** | 30-minute refresh cycles via GitHub Actions + Dagster |
-| **🌍 Global Coverage** | Events from 200+ countries with intelligent country code mapping |
+| **🌍 Global Coverage** | Events from 200+ countries with country code mapping |
 | **📈 Trend Analysis** | 30-day time series, intensity tracking, actor monitoring |
-| **🎨 Modern UI** | Dark theme, glassmorphism, responsive design |
+| **🎨 Dark Mode UI** | Custom dark theme, responsive Plotly charts |
 
 ---
 
@@ -71,24 +71,33 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ## 🛠️ Tech Stack
 
 ### Data Engineering
-| Tool | Purpose |
-|------|---------|
-| **Dagster** | Pipeline orchestration with asset-based design |
-| **DuckDB** | In-process OLAP database for fast analytics |
-| **MotherDuck** | Serverless cloud DuckDB warehouse |
-| **GitHub Actions** | CI/CD and scheduled pipeline execution |
+| Tool | Purpose | Replaces |
+|------|---------|----------|
+| **Dagster** | Pipeline orchestration with asset-based design | Apache Airflow |
+| **DuckDB** | In-process OLAP database for fast analytics | Apache Spark |
+| **MotherDuck** | Serverless cloud DuckDB warehouse | Snowflake/Redshift |
+| **GitHub Actions** | CI/CD and scheduled pipeline execution | AWS Lambda |
+| **SQL** | Data transformations in pipeline.py | dbt Cloud |
 
 ### AI/ML
-| Tool | Purpose |
-|------|---------|
-| **Cerebras** | Ultra-fast LLM inference (Llama 3.1 8B) |
-| **LlamaIndex** | Text-to-SQL query engine |
+| Tool | Purpose | Replaces |
+|------|---------|----------|
+| **Cerebras** | Ultra-fast LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
+| **LlamaIndex** | Text-to-SQL query engine | Custom NLP |
 
 ### Frontend
-| Tool | Purpose |
-|------|---------|
-| **Streamlit** | Interactive dashboard framework |
-| **Plotly** | Dynamic charts and visualizations |
+| Tool | Purpose | Replaces |
+|------|---------|----------|
+| **Streamlit** | Interactive dashboard framework | Tableau/Power BI |
+| **Plotly** | Dynamic charts and visualizations | D3.js |
+
+### Other Skills Demonstrated
+- **Python** (Pandas, Requests, RegEx)
+- **SQL** (Complex queries, aggregations, CTEs)
+- **ETL/ELT** (Extract, Transform, Load patterns)
+- **API Integration** (REST, JSON parsing)
+- **CI/CD** (GitHub Actions, cron scheduling)
+- **Cloud** (Serverless architecture)
 
 ---
 
@@ -143,21 +152,16 @@ python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
 
 This project demonstrates how to achieve enterprise-grade capabilities at **zero cost**:
 
-| Enterprise Tool | Purpose | My Alternative |
-|-----------------|---------|----------------|
-| **Databricks** | Unified analytics | DuckDB + MotherDuck |
-| **Apache Spark/PySpark** | Big data processing | DuckDB (faster for <100GB) |
-| **Hadoop** | Distributed storage | MotherDuck (serverless) |
-| **Apache Airflow** | Workflow orchestration | Dagster |
-| **Snowflake/Redshift** | Cloud data warehouse | MotherDuck ($0) |
-| **OpenAI GPT-4** | LLM inference | Cerebras ($0 free tier) |
-| **Power BI/Tableau** | Dashboards | Streamlit |
-
-### 💵 Cost Comparison
-| Approach | Monthly Cost |
-|----------|--------------|
-| Enterprise Stack | $500 - $10,000+ |
-| **My Stack** | **$0** |
+| Enterprise Tool | Monthly Cost | My Alternative | My Cost |
+|-----------------|--------------|----------------|---------|
+| **Apache Spark/PySpark** | ~$500 | DuckDB | $0 |
+| **Snowflake/Hadoop** | ~$300 | MotherDuck | $0 |
+| **Managed Airflow** | ~$300 | Dagster | $0 |
+| **dbt Cloud** | ~$100 | SQL in Python | $0 |
+| **AWS Lambda/CI** | ~$100 | GitHub Actions | $0 |
+| **OpenAI GPT-4** | ~$50 | Cerebras (Llama 3.1 8B) | $0 |
+| **Tableau/Power BI** | ~$70 | Streamlit | $0 |
+| **TOTAL** | **$1,420+** | | **$0** |
 
 > **Key Insight**: For datasets under 100GB, modern tools like DuckDB outperform Spark clusters at a fraction of the complexity and cost.
 
@@ -190,7 +194,7 @@ This project evolved through multiple iterations to optimize for cost and perfor
 
 ```
 gdelt_project/
-├── app.py              # Streamlit dashboard (1,400+ lines)
+├── app.py              # Streamlit dashboard (1,300+ lines)
 ├── pipeline.py         # Dagster ETL pipeline
 ├── config.py           # Configuration constants
 ├── utils.py            # Utility functions

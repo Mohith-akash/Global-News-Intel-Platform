@@ -622,23 +622,23 @@ def render_sentiment(c, t):
         status, color = ("✨ POSITIVE", "#06b6d4")
     
     st.markdown(f'''
-        <div class="sentiment-card">
-            <div class="sentiment-label">Weekly Sentiment</div>
-            <div class="sentiment-status" style="color:{color};">{status}</div>
-            <div class="sentiment-avg">Avg: <span style="color:{color}">{avg:.2f}</span></div>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem;text-align:center;margin-bottom:0.5rem;">
+            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;margin-bottom:0.25rem;">Weekly Sentiment</div>
+            <div style="font-size:1.25rem;font-weight:700;color:{color};">{status}</div>
+            <div style="font-size:0.7rem;color:#94a3b8;">Avg: <span style="color:{color}">{avg:.2f}</span></div>
         </div>
-        <div class="sentiment-grid">
-            <div class="sentiment-box" style="background:rgba(239,68,68,0.1);">
-                <div class="sentiment-value" style="color:#ef4444;">{neg:,}</div>
-                <div class="sentiment-box-label">Negative</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;">
+            <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.5rem;text-align:center;">
+                <div style="font-size:1rem;font-weight:700;color:#ef4444;">{neg:,}</div>
+                <div style="font-size:0.6rem;color:#64748b;">Negative</div>
             </div>
-            <div class="sentiment-box" style="background:rgba(107,114,128,0.1);">
-                <div class="sentiment-value" style="color:#9ca3af;">{total:,}</div>
-                <div class="sentiment-box-label">Total</div>
+            <div style="background:rgba(107,114,128,0.1);border:1px solid rgba(107,114,128,0.2);border-radius:8px;padding:0.5rem;text-align:center;">
+                <div style="font-size:1rem;font-weight:700;color:#9ca3af;">{total:,}</div>
+                <div style="font-size:0.6rem;color:#64748b;">Total</div>
             </div>
-            <div class="sentiment-box" style="background:rgba(16,185,129,0.1);">
-                <div class="sentiment-value" style="color:#10b981;">{pos:,}</div>
-                <div class="sentiment-box-label">Positive</div>
+            <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:0.5rem;text-align:center;">
+                <div style="font-size:1rem;font-weight:700;color:#10b981;">{pos:,}</div>
+                <div style="font-size:0.6rem;color:#64748b;">Positive</div>
             </div>
         </div>
     ''', unsafe_allow_html=True)
@@ -704,11 +704,11 @@ def render_countries(c, t):
         text=df['events'].apply(fmt), textposition='outside', textfont=dict(color='#94a3b8', size=10)
     ))
     fig.update_layout(
-        height=200, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(showgrid=False, tickfont=dict(color='#94a3b8', size=9), tickangle=-45),
+        xaxis=dict(showgrid=False, tickfont=dict(color='#94a3b8', size=10), tickangle=-45),
         yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', showticklabels=False),
-        bargap=0.4
+        bargap=0.35
     )
     st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='countries_chart')
 
@@ -1118,174 +1118,177 @@ def render_about():
     </div>
     """, unsafe_allow_html=True)
     
-    # ARCHITECTURE - No outer box, bigger boxes, full width
+    # ARCHITECTURE - Full width edge to edge
     st.markdown("""
-    <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:0.5rem;padding:1rem 0;margin-bottom:0.5rem;">
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
-            <div style="font-size:1.5rem;">📰</div>
-            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">GDELT API</div>
-            <div style="color:#64748b;font-size:0.65rem;">100K+ events/day</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:1rem 0;margin-bottom:0.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;text-align:center;flex:1;margin-right:0.5rem;">
+            <div style="font-size:1.75rem;">📰</div>
+            <div style="color:#e2e8f0;font-size:0.85rem;font-weight:600;">GDELT API</div>
+            <div style="color:#64748b;font-size:0.7rem;">100K+ events/day</div>
         </div>
-        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
-            <div style="font-size:1.5rem;">⚡</div>
-            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">Dagster</div>
-            <div style="color:#64748b;font-size:0.65rem;">Orchestration</div>
+        <span style="color:#06b6d4;font-size:1.75rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;text-align:center;flex:1;margin:0 0.5rem;">
+            <div style="font-size:1.75rem;">⚡</div>
+            <div style="color:#e2e8f0;font-size:0.85rem;font-weight:600;">Dagster</div>
+            <div style="color:#64748b;font-size:0.7rem;">Orchestration</div>
         </div>
-        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
-            <div style="font-size:1.5rem;">🦆</div>
-            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">MotherDuck</div>
-            <div style="color:#64748b;font-size:0.65rem;">Cloud DuckDB</div>
+        <span style="color:#06b6d4;font-size:1.75rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;text-align:center;flex:1;margin:0 0.5rem;">
+            <div style="font-size:1.75rem;">🦆</div>
+            <div style="color:#e2e8f0;font-size:0.85rem;font-weight:600;">MotherDuck</div>
+            <div style="color:#64748b;font-size:0.7rem;">Cloud DuckDB</div>
         </div>
-        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
-            <div style="font-size:1.5rem;">🦙</div>
-            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">LlamaIndex</div>
-            <div style="color:#64748b;font-size:0.65rem;">Text-to-SQL</div>
+        <span style="color:#06b6d4;font-size:1.75rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;text-align:center;flex:1;margin:0 0.5rem;">
+            <div style="font-size:1.75rem;">🦙</div>
+            <div style="color:#e2e8f0;font-size:0.85rem;font-weight:600;">LlamaIndex</div>
+            <div style="color:#64748b;font-size:0.7rem;">Text-to-SQL</div>
         </div>
-        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
-            <div style="font-size:1.5rem;">🧠</div>
-            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">Cerebras</div>
-            <div style="color:#64748b;font-size:0.65rem;">Llama 3.1 8B</div>
+        <span style="color:#06b6d4;font-size:1.75rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;text-align:center;flex:1;margin:0 0.5rem;">
+            <div style="font-size:1.75rem;">🧠</div>
+            <div style="color:#e2e8f0;font-size:0.85rem;font-weight:600;">Cerebras</div>
+            <div style="color:#64748b;font-size:0.7rem;">Llama 3.1 8B</div>
         </div>
-        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
-            <div style="font-size:1.5rem;">🎨</div>
-            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">Streamlit</div>
-            <div style="color:#64748b;font-size:0.65rem;">Dashboard</div>
+        <span style="color:#06b6d4;font-size:1.75rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem 1.5rem;text-align:center;flex:1;margin-left:0.5rem;">
+            <div style="font-size:1.75rem;">🎨</div>
+            <div style="color:#e2e8f0;font-size:0.85rem;font-weight:600;">Streamlit</div>
+            <div style="color:#64748b;font-size:0.7rem;">Dashboard</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # TWO COLUMNS
-    # ENTERPRISE vs MY STACK - Full width, comprehensive with explanations
+    # ENTERPRISE vs MY STACK - Full width, bigger font
     st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;margin-bottom:1rem;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;font-size:1rem;">💰 ENTERPRISE TOOLS vs MY STACK</h4>
-        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:1.1rem;">💰 ENTERPRISE TOOLS vs MY STACK</h4>
+        <table style="width:100%;border-collapse:collapse;font-size:0.95rem;">
             <tr style="border-bottom:1px solid #1e3a5f;">
-                <th style="text-align:left;padding:0.5rem;color:#f59e0b;width:25%;">Enterprise Tool</th>
-                <th style="text-align:left;padding:0.5rem;color:#10b981;width:20%;">My Alternative</th>
+                <th style="text-align:left;padding:0.5rem;color:#f59e0b;width:28%;">Enterprise Tool</th>
+                <th style="text-align:left;padding:0.5rem;color:#10b981;width:18%;">My Stack</th>
                 <th style="text-align:left;padding:0.5rem;color:#64748b;">How I Replaced It</th>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.5rem;color:#94a3b8;"><b>Spark/PySpark</b> <span style="color:#ef4444;font-size:0.7rem;">~$500/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Spark/PySpark</b> <span style="color:#ef4444;font-size:0.75rem;">~$500/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>DuckDB</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Columnar OLAP for 100K+ events — no cluster needed, runs in-process</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.5rem;color:#94a3b8;"><b>Snowflake/Hadoop</b> <span style="color:#ef4444;font-size:0.7rem;">~$300/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Snowflake/Hadoop</b> <span style="color:#ef4444;font-size:0.75rem;">~$300/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>MotherDuck</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Serverless cloud DWH, same SQL syntax, free tier handles my scale</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.5rem;color:#94a3b8;"><b>Managed Airflow</b> <span style="color:#ef4444;font-size:0.7rem;">~$300/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Managed Airflow</b> <span style="color:#ef4444;font-size:0.75rem;">~$300/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>Dagster</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Asset-based DAGs with lineage tracking — modern orchestration UI</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.5rem;color:#94a3b8;"><b>dbt Cloud</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>dbt Cloud</b> <span style="color:#ef4444;font-size:0.75rem;">~$100/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>SQL in Python</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Data transformations via raw SQL in pipeline.py — same result, no cost</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.5rem;color:#94a3b8;"><b>AWS Lambda/CI</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>AWS Lambda/CI</b> <span style="color:#ef4444;font-size:0.75rem;">~$100/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>GitHub Actions</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Scheduled ETL runs every 30 min — free CI/CD with cron triggers</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.5rem;color:#94a3b8;"><b>OpenAI GPT-4</b> <span style="color:#ef4444;font-size:0.7rem;">~$50/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>OpenAI GPT-4</b> <span style="color:#ef4444;font-size:0.75rem;">~$50/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>Cerebras</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Llama 3.1 8B via free tier — fastest LLM inference for Text-to-SQL</td>
             </tr>
             <tr>
-                <td style="padding:0.5rem;color:#94a3b8;"><b>Tableau/Power BI</b> <span style="color:#ef4444;font-size:0.7rem;">~$70/mo</span></td>
+                <td style="padding:0.5rem;color:#94a3b8;"><b>Tableau/Power BI</b> <span style="color:#ef4444;font-size:0.75rem;">~$70/mo</span></td>
                 <td style="padding:0.5rem;color:#e2e8f0;"><b>Streamlit</b></td>
                 <td style="padding:0.5rem;color:#64748b;">Python-native dashboards with Plotly — free Streamlit Cloud hosting</td>
             </tr>
         </table>
         <div style="display:flex;justify-content:space-around;margin-top:1rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
             <div style="text-align:center;">
-                <div style="color:#ef4444;font-size:1.75rem;font-weight:700;">$1,420+</div>
-                <div style="color:#64748b;font-size:0.75rem;">Enterprise monthly</div>
+                <div style="color:#ef4444;font-size:1.5rem;font-weight:700;">$1,420+</div>
+                <div style="color:#64748b;font-size:0.8rem;">Enterprise monthly</div>
             </div>
             <div style="text-align:center;">
-                <div style="color:#10b981;font-size:2.25rem;font-weight:700;">$0</div>
-                <div style="color:#64748b;font-size:0.75rem;">My monthly cost</div>
+                <div style="color:#10b981;font-size:1.75rem;font-weight:700;">$0</div>
+                <div style="color:#64748b;font-size:0.8rem;">My monthly cost</div>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # KEY METRICS - Inline
-    st.markdown("""
-    <div style="display:flex;justify-content:center;gap:2.5rem;flex-wrap:wrap;padding:1rem 0;">
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:700;color:#06b6d4;">100K+</div>
-            <div style="font-size:0.8rem;color:#64748b;">Daily Events</div>
-        </div>
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:700;color:#10b981;">$0</div>
-            <div style="font-size:0.8rem;color:#64748b;">Monthly Cost</div>
-        </div>
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:700;color:#f59e0b;">&lt;1s</div>
-            <div style="font-size:0.8rem;color:#64748b;">Query Time</div>
-        </div>
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:700;color:#8b5cf6;">100+</div>
-            <div style="font-size:0.8rem;color:#64748b;">Languages</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # TWO COLUMNS - Evolution (left) + Tech Stack with Metrics (right)
+    col1, col2 = st.columns([1, 1])
     
-    # EVOLUTION - Full width at bottom
-    st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;margin-top:0.5rem;">
-        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.9rem;">🔄 TECHNOLOGY EVOLUTION</h4>
-        <div style="display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;">
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem 1rem;">
-                <span style="color:#06b6d4;font-size:0.65rem;">WAREHOUSE</span>
-                <span style="color:#e2e8f0;font-size:0.85rem;margin-left:0.5rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></span>
+    with col1:
+        # EVOLUTION - Half width
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;margin-top:0.75rem;">
+            <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.95rem;">🔄 TECHNOLOGY EVOLUTION</h4>
+            <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
+                <div><span style="color:#06b6d4;font-size:0.7rem;">DATA WAREHOUSE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Migrated for $0 cost, same SQL syntax</div>
             </div>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem 1rem;">
-                <span style="color:#8b5cf6;font-size:0.65rem;">AI/LLM</span>
-                <span style="color:#e2e8f0;font-size:0.85rem;margin-left:0.5rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></span>
+            <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
+                <div><span style="color:#8b5cf6;font-size:0.7rem;">AI / LLM</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Best free tier + fastest inference speed</div>
             </div>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem 1rem;">
-                <span style="color:#f59e0b;font-size:0.65rem;">MODELS</span>
-                <span style="color:#e2e8f0;font-size:0.85rem;margin-left:0.5rem;">Llama 70B → <b>Llama 3.1 8B</b></span>
+            <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
+                <div><span style="color:#f59e0b;font-size:0.7rem;">MODELS</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">Llama 70B → <b>Llama 3.1 8B</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Smaller model, faster, good enough for task</div>
             </div>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem 1rem;">
-                <span style="color:#10b981;font-size:0.65rem;">PIPELINE</span>
-                <span style="color:#e2e8f0;font-size:0.85rem;margin-left:0.5rem;">Manual → <b>Automated 30min</b></span>
+            <div style="background:#1a2332;border-radius:6px;padding:0.6rem;">
+                <div><span style="color:#10b981;font-size:0.7rem;">PIPELINE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">Manual → <b>GitHub Actions 30min</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Fully automated, zero maintenance</div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
-    # TECH STACK BADGES
-    st.markdown("""
-    <div style="text-align:center;margin-top:1.25rem;">
-        <span class="tech-badge">🐍 Python</span>
-        <span class="tech-badge">📝 SQL</span>
-        <span class="tech-badge">🐼 Pandas</span>
-        <span class="tech-badge">🦆 DuckDB</span>
-        <span class="tech-badge">☁️ MotherDuck</span>
-        <span class="tech-badge">⚙️ Dagster</span>
-        <span class="tech-badge">🦙 LlamaIndex</span>
-        <span class="tech-badge">⚡ Cerebras</span>
-        <span class="tech-badge">📊 Plotly</span>
-        <span class="tech-badge">🎨 Streamlit</span>
-        <span class="tech-badge">🔄 GitHub Actions</span>
-    </div>
-    """, unsafe_allow_html=True)
+    with col2:
+        # TECH STACK + KEY METRICS combined
+        st.markdown("""
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;margin-top:0.75rem;">
+            <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.95rem;">🛠️ TECH STACK</h4>
+            <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;">
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">🐍 Python</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">📝 SQL</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">🐼 Pandas</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">🦆 DuckDB</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">☁️ MotherDuck</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">⚙️ Dagster</span>
+            </div>
+            <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">🦙 LlamaIndex</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">⚡ Cerebras</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">📊 Plotly</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">🎨 Streamlit</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.5rem 0.75rem;color:#e2e8f0;font-size:0.85rem;">🔄 GitHub Actions</span>
+            </div>
+            <div style="display:flex;justify-content:space-around;padding-top:0.75rem;border-top:1px solid #1e3a5f;">
+                <div style="text-align:center;">
+                    <div style="font-size:1.25rem;font-weight:700;color:#06b6d4;">100K+</div>
+                    <div style="font-size:0.65rem;color:#64748b;">Events/day</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.25rem;font-weight:700;color:#10b981;">$0</div>
+                    <div style="font-size:0.65rem;color:#64748b;">Cost</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.25rem;font-weight:700;color:#f59e0b;">&lt;1s</div>
+                    <div style="font-size:0.65rem;color:#64748b;">Query</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.25rem;font-weight:700;color:#8b5cf6;">100+</div>
+                    <div style="font-size:0.65rem;color:#64748b;">Languages</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # CONTACT
     st.markdown("""
-    <div style="text-align:center;margin-top:1.5rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
+    <div style="text-align:center;margin-top:1.25rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
         <span style="color:#94a3b8;font-size:0.9rem;">📬 Open to opportunities</span>
         <a href="https://github.com/Mohith-akash" target="_blank" style="margin-left:1rem;background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 1rem;color:#e2e8f0;text-decoration:none;">⭐ GitHub</a>
         <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="margin-left:0.5rem;background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 1rem;color:#e2e8f0;text-decoration:none;">💼 LinkedIn</a>
@@ -1317,26 +1320,26 @@ def main():
         st.markdown("---")
         c1, c2 = st.columns([6, 4])
         with c1:
-            st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending News</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending News</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
             render_trending(conn, tbl)
         with c2:
-            st.markdown('<div class="card-hdr"><span>⚡</span><span class="card-title">Weekly Sentiment</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-hdr"><span>⚡</span><span class="card-title">Weekly Sentiment</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(7 Days)</span></div>', unsafe_allow_html=True)
             render_sentiment(conn, tbl)
+            st.markdown('<div class="card-hdr" style="margin-top:1rem;"><span>📊</span><span class="card-title">Tone Breakdown</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
+            render_distribution(conn, tbl, 'home_dist')
         st.markdown("---")
         c1, c2 = st.columns([6, 4])
         with c1:
-            st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Most Mentioned</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Most Mentioned</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
             render_actors(conn, tbl)
         with c2:
-            st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Tone Breakdown</span></div>', unsafe_allow_html=True)
-            render_distribution(conn, tbl, 'home_dist')
-            st.markdown('<div class="card-hdr" style="margin-top:1rem;"><span>🏆</span><span class="card-title">Top Countries</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-hdr"><span>🏆</span><span class="card-title">Top Countries</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(30 Days)</span></div>', unsafe_allow_html=True)
             render_countries(conn, tbl)
     
     with tabs[1]:
         c1, c2 = st.columns([7, 3])
         with c1:
-            st.markdown('<div class="card-hdr"><span>📋</span><span class="card-title">Recent Events Feed</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-hdr"><span>📋</span><span class="card-title">Recent Events Feed</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
             render_feed(conn, tbl)
         with c2:
             st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Intensity Guide</span></div>', unsafe_allow_html=True)
@@ -1351,8 +1354,6 @@ def main():
                 <div class="intensity-item intensity-green"><div class="intensity-title">🤝 Partnership</div><div class="intensity-score">Score: 4 to 6</div></div>
                 <div class="intensity-item intensity-cyan"><div class="intensity-title">✨ Peace Agreement</div><div class="intensity-score">Score: 6+</div></div>
             </div>''', unsafe_allow_html=True)
-            st.markdown('<div class="card-hdr" style="margin-top:1rem;"><span>📈</span><span class="card-title">This Week</span></div>', unsafe_allow_html=True)
-            render_distribution(conn, tbl, 'trends_dist')
         st.markdown("---")
         st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">30-Day Trend Analysis</span></div>', unsafe_allow_html=True)
         render_timeseries(conn, tbl)
