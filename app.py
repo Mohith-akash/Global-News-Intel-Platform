@@ -1109,75 +1109,148 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
                 st.error(f"❌ Error: {str(e)[:100]}")
 
 def render_about():
-    """Compact About page - Enterprise comparison + Evolution side by side."""
+    """Visually impressive About page - showcases the project professionally."""
     
-    # TITLE + PIPELINE (compact)
+    # HERO HEADER (compact)
     st.markdown("""
-    <div style="text-align:center;padding:0.5rem 0 1rem;">
-        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;margin-bottom:0.5rem;">🏗️ About This Project</h2>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;display:inline-block;">
-            <span style="color:#e2e8f0;font-size:0.8rem;">📰 GDELT</span>
-            <span style="color:#06b6d4;margin:0 0.25rem;">→</span>
-            <span style="color:#e2e8f0;font-size:0.8rem;">⚡ Dagster</span>
-            <span style="color:#06b6d4;margin:0 0.25rem;">→</span>
-            <span style="color:#e2e8f0;font-size:0.8rem;">🦆 MotherDuck</span>
-            <span style="color:#06b6d4;margin:0 0.25rem;">→</span>
-            <span style="color:#e2e8f0;font-size:0.8rem;">🤖 Cerebras</span>
-            <span style="color:#06b6d4;margin:0 0.25rem;">→</span>
-            <span style="color:#e2e8f0;font-size:0.8rem;">🎨 Streamlit</span>
+    <div style="text-align:center;padding:1rem 0;">
+        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;font-size:1.5rem;margin-bottom:0.25rem;">
+            🏗️ About This Project
+        </h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # PIPELINE ARCHITECTURE (with LlamaIndex)
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;margin-bottom:1rem;">
+        <div style="text-align:center;color:#64748b;font-size:0.7rem;margin-bottom:0.75rem;letter-spacing:0.1rem;">ARCHITECTURE</div>
+        <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:0.25rem;">
+            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
+                <div style="font-size:1rem;">📰</div>
+                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">GDELT</div>
+            </div>
+            <span style="color:#06b6d4;font-size:1rem;">→</span>
+            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
+                <div style="font-size:1rem;">⚡</div>
+                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">Dagster</div>
+            </div>
+            <span style="color:#06b6d4;font-size:1rem;">→</span>
+            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
+                <div style="font-size:1rem;">🦆</div>
+                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">MotherDuck</div>
+            </div>
+            <span style="color:#06b6d4;font-size:1rem;">→</span>
+            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
+                <div style="font-size:1rem;">🦙</div>
+                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">LlamaIndex</div>
+            </div>
+            <span style="color:#06b6d4;font-size:1rem;">→</span>
+            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
+                <div style="font-size:1rem;">🧠</div>
+                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">Cerebras</div>
+            </div>
+            <span style="color:#06b6d4;font-size:1rem;">→</span>
+            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
+                <div style="font-size:1rem;">🎨</div>
+                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">Streamlit</div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # TWO COLUMNS: Enterprise vs Stack (left) + Evolution (right)
-    col1, col2 = st.columns([3, 2])
+    # TWO COLUMNS: Enterprise vs Stack + Evolution
+    col1, col2 = st.columns([1, 1])
     
     with col1:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;">
             <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.9rem;">💰 ENTERPRISE vs MY STACK</h4>
             <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
                 <tr style="border-bottom:1px solid #1e3a5f;">
-                    <th style="text-align:left;padding:0.35rem;color:#f59e0b;">Enterprise</th>
-                    <th style="padding:0.35rem;color:#64748b;">→</th>
-                    <th style="text-align:left;padding:0.35rem;color:#10b981;">My Stack</th>
+                    <th style="text-align:left;padding:0.4rem;color:#f59e0b;">Enterprise</th>
+                    <th style="text-align:left;padding:0.4rem;color:#10b981;">My Stack</th>
                 </tr>
-                <tr><td style="padding:0.3rem;color:#94a3b8;">Databricks/Spark</td><td style="color:#06b6d4;text-align:center;">→</td><td style="padding:0.3rem;color:#e2e8f0;"><b>DuckDB</b></td></tr>
-                <tr><td style="padding:0.3rem;color:#94a3b8;">Snowflake/Redshift</td><td style="color:#06b6d4;text-align:center;">→</td><td style="padding:0.3rem;color:#e2e8f0;"><b>MotherDuck</b></td></tr>
-                <tr><td style="padding:0.3rem;color:#94a3b8;">Apache Airflow</td><td style="color:#06b6d4;text-align:center;">→</td><td style="padding:0.3rem;color:#e2e8f0;"><b>Dagster</b></td></tr>
-                <tr><td style="padding:0.3rem;color:#94a3b8;">Hadoop HDFS</td><td style="color:#06b6d4;text-align:center;">→</td><td style="padding:0.3rem;color:#e2e8f0;"><b>GitHub Actions</b></td></tr>
-                <tr><td style="padding:0.3rem;color:#94a3b8;">OpenAI GPT-4</td><td style="color:#06b6d4;text-align:center;">→</td><td style="padding:0.3rem;color:#e2e8f0;"><b>Cerebras</b></td></tr>
-                <tr><td style="padding:0.3rem;color:#94a3b8;">Tableau/Power BI</td><td style="color:#06b6d4;text-align:center;">→</td><td style="padding:0.3rem;color:#e2e8f0;"><b>Streamlit</b></td></tr>
+                <tr style="border-bottom:1px solid #1e3a5f22;">
+                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Databricks/Spark</td>
+                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>DuckDB</b> <span style="color:#64748b;font-size:0.7rem;">- in-process</span></td>
+                </tr>
+                <tr style="border-bottom:1px solid #1e3a5f22;">
+                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Snowflake/Redshift</td>
+                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>MotherDuck</b> <span style="color:#64748b;font-size:0.7rem;">- serverless</span></td>
+                </tr>
+                <tr style="border-bottom:1px solid #1e3a5f22;">
+                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Apache Airflow</td>
+                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>Dagster</b> <span style="color:#64748b;font-size:0.7rem;">- asset-based</span></td>
+                </tr>
+                <tr style="border-bottom:1px solid #1e3a5f22;">
+                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">OpenAI GPT-4</td>
+                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>Cerebras</b> <span style="color:#64748b;font-size:0.7rem;">- free tier</span></td>
+                </tr>
+                <tr>
+                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Tableau/Power BI</td>
+                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>Streamlit</b> <span style="color:#64748b;font-size:0.7rem;">- Python native</span></td>
+                </tr>
             </table>
             <div style="display:flex;justify-content:space-around;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #1e3a5f;">
-                <div style="text-align:center;"><span style="color:#ef4444;font-weight:700;">$500-10K</span><div style="color:#64748b;font-size:0.65rem;">Enterprise</div></div>
-                <div style="text-align:center;"><span style="color:#10b981;font-weight:700;font-size:1.2rem;">$0</span><div style="color:#64748b;font-size:0.65rem;">My cost</div></div>
+                <div style="text-align:center;"><span style="color:#ef4444;font-weight:700;">$500-10K</span><div style="color:#64748b;font-size:0.65rem;">Enterprise/mo</div></div>
+                <div style="text-align:center;"><span style="color:#10b981;font-weight:700;font-size:1.25rem;">$0</span><div style="color:#64748b;font-size:0.65rem;">My cost/mo</div></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;height:100%;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;">
             <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.9rem;">🔄 EVOLUTION</h4>
-            <div style="background:#1a2332;border-radius:6px;padding:0.75rem;margin-bottom:0.5rem;">
-                <div style="color:#06b6d4;font-size:0.7rem;">DATA WAREHOUSE</div>
-                <div style="color:#e2e8f0;font-size:0.85rem;">❄️ Snowflake → 🦆 MotherDuck</div>
+            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;margin-bottom:0.5rem;">
+                <div style="color:#06b6d4;font-size:0.65rem;margin-bottom:0.25rem;">DATA WAREHOUSE</div>
+                <div style="color:#e2e8f0;font-size:0.85rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></div>
             </div>
-            <div style="background:#1a2332;border-radius:6px;padding:0.75rem;">
-                <div style="color:#8b5cf6;font-size:0.7rem;">AI/LLM</div>
-                <div style="color:#e2e8f0;font-size:0.85rem;">✨ Gemini → ⚡ Groq → 🧠 Cerebras</div>
+            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;margin-bottom:0.5rem;">
+                <div style="color:#8b5cf6;font-size:0.65rem;margin-bottom:0.25rem;">AI / LLM</div>
+                <div style="color:#e2e8f0;font-size:0.85rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></div>
             </div>
-            <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(16,185,129,0.1);border-radius:6px;text-align:center;">
-                <span style="color:#10b981;font-size:0.75rem;">Cost-optimized while learning</span>
+            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;margin-bottom:0.5rem;">
+                <div style="color:#f59e0b;font-size:0.65rem;margin-bottom:0.25rem;">MODELS</div>
+                <div style="color:#e2e8f0;font-size:0.85rem;">Llama 70B → <b>Llama 3.1 8B</b></div>
+            </div>
+            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;">
+                <div style="color:#10b981;font-size:0.65rem;margin-bottom:0.25rem;">DATA</div>
+                <div style="color:#e2e8f0;font-size:0.85rem;">Manual → <b>Automated 30min</b></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
     
-    # TECH BADGES + METRICS (compact row)
+    # KEY METRICS - Impressive display
     st.markdown("""
-    <div style="margin-top:1rem;">
-        <div style="text-align:center;margin-bottom:0.75rem;">
+    <div style="background:linear-gradient(135deg,#111827 0%,#1a2332 100%);border:1px solid #1e3a5f;border-radius:16px;padding:1.5rem;margin-top:1.5rem;">
+        <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1.25rem;font-size:1rem;">📈 KEY METRICS</h4>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;">
+            <div style="text-align:center;padding:1rem;background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.3);border-radius:12px;">
+                <div style="font-size:2rem;font-weight:700;color:#06b6d4;">100K+</div>
+                <div style="font-size:0.8rem;color:#94a3b8;">Daily Events</div>
+            </div>
+            <div style="text-align:center;padding:1rem;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:12px;">
+                <div style="font-size:2rem;font-weight:700;color:#10b981;">$0</div>
+                <div style="font-size:0.8rem;color:#94a3b8;">Monthly Cost</div>
+            </div>
+            <div style="text-align:center;padding:1rem;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;">
+                <div style="font-size:2rem;font-weight:700;color:#f59e0b;">&lt;1s</div>
+                <div style="font-size:0.8rem;color:#94a3b8;">Query Time</div>
+            </div>
+            <div style="text-align:center;padding:1rem;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:12px;">
+                <div style="font-size:2rem;font-weight:700;color:#8b5cf6;">100+</div>
+                <div style="font-size:0.8rem;color:#94a3b8;">Languages</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # TECH STACK BADGES
+    st.markdown("""
+    <div style="text-align:center;margin-top:1.5rem;">
+        <div style="color:#64748b;font-size:0.8rem;margin-bottom:1rem;letter-spacing:0.1rem;">TECH STACK</div>
+        <div>
             <span class="tech-badge">🐍 Python</span>
             <span class="tech-badge">🦆 DuckDB</span>
             <span class="tech-badge">☁️ MotherDuck</span>
@@ -1186,22 +1259,24 @@ def render_about():
             <span class="tech-badge">⚡ Cerebras</span>
             <span class="tech-badge">📊 Plotly</span>
             <span class="tech-badge">🎨 Streamlit</span>
-        </div>
-        <div style="display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;">
-            <div style="text-align:center;"><span style="font-size:1.3rem;font-weight:700;color:#06b6d4;">100K+</span><div style="font-size:0.7rem;color:#64748b;">Daily Events</div></div>
-            <div style="text-align:center;"><span style="font-size:1.3rem;font-weight:700;color:#10b981;">$0</span><div style="font-size:0.7rem;color:#64748b;">Monthly</div></div>
-            <div style="text-align:center;"><span style="font-size:1.3rem;font-weight:700;color:#f59e0b;">&lt;1s</span><div style="font-size:0.7rem;color:#64748b;">Queries</div></div>
-            <div style="text-align:center;"><span style="font-size:1.3rem;font-weight:700;color:#8b5cf6;">100+</span><div style="font-size:0.7rem;color:#64748b;">Languages</div></div>
+            <span class="tech-badge">🔄 GitHub Actions</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # CONTACT (inline)
+    # CONTACT SECTION
     st.markdown("""
-    <div style="text-align:center;margin-top:1.25rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
-        <span style="color:#94a3b8;font-size:0.85rem;">Open to opportunities</span>
-        <a href="https://github.com/Mohith-akash" target="_blank" style="margin-left:1rem;background:#111827;border:1px solid #1e3a5f;border-radius:6px;padding:0.4rem 0.75rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;">⭐ GitHub</a>
-        <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="margin-left:0.5rem;background:#111827;border:1px solid #1e3a5f;border-radius:6px;padding:0.4rem 0.75rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;">💼 LinkedIn</a>
+    <div style="text-align:center;margin-top:2rem;padding:1.5rem;background:linear-gradient(135deg,#111827 0%,#1a2332 100%);border:1px solid #1e3a5f;border-radius:16px;">
+        <h4 style="color:#e2e8f0;margin-bottom:0.5rem;">📬 Open to Opportunities</h4>
+        <p style="color:#94a3b8;font-size:0.9rem;margin-bottom:1rem;">Interested in data engineering roles and collaborations</p>
+        <div style="display:flex;justify-content:center;gap:1rem;flex-wrap:wrap;">
+            <a href="https://github.com/Mohith-akash" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem 1.5rem;color:#e2e8f0;text-decoration:none;font-weight:500;transition:all 0.2s;">
+                ⭐ GitHub
+            </a>
+            <a href="https://www.linkedin.com/in/mohith-akash/" target="_blank" style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem 1.5rem;color:#e2e8f0;text-decoration:none;font-weight:500;transition:all 0.2s;">
+                💼 LinkedIn
+            </a>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
