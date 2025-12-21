@@ -226,19 +226,6 @@ gdelt_project/
 
 ---
 
-## 📊 Key Metrics
-
-| Metric | Value |
-|--------|-------|
-| **Daily Events Processed** | 100,000+ |
-| **Languages Monitored** | 100+ |
-| **Countries Covered** | 200+ |
-| **Average Query Time** | <1 second |
-| **Monthly Cost** | $0 |
-| **Pipeline Frequency** | Every 30 minutes |
-
----
-
 ## 🔮 Future Enhancements
 
 - [ ] Add dbt transformations for advanced modeling
