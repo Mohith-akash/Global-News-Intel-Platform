@@ -1109,114 +1109,147 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
                 st.error(f"❌ Error: {str(e)[:100]}")
 
 def render_about():
-    """Visually impressive About page - showcases the project professionally."""
+    """About page with architecture, tool comparison, and evolution."""
     
-    # HERO HEADER (compact)
+    # TITLE
     st.markdown("""
-    <div style="text-align:center;padding:1rem 0;">
-        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;font-size:1.5rem;margin-bottom:0.25rem;">
-            🏗️ About This Project
-        </h2>
+    <div style="text-align:center;padding:0.75rem 0;">
+        <h2 style="font-family:JetBrains Mono;color:#e2e8f0;font-size:1.5rem;margin:0;">🏗️ About This Project</h2>
     </div>
     """, unsafe_allow_html=True)
     
-    # PIPELINE ARCHITECTURE (with LlamaIndex)
+    # ARCHITECTURE - No outer box, bigger boxes, full width
     st.markdown("""
-    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;margin-bottom:1rem;">
-        <div style="text-align:center;color:#64748b;font-size:0.7rem;margin-bottom:0.75rem;letter-spacing:0.1rem;">ARCHITECTURE</div>
-        <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:0.25rem;">
-            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
-                <div style="font-size:1rem;">📰</div>
-                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">GDELT</div>
-            </div>
-            <span style="color:#06b6d4;font-size:1rem;">→</span>
-            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
-                <div style="font-size:1rem;">⚡</div>
-                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">Dagster</div>
-            </div>
-            <span style="color:#06b6d4;font-size:1rem;">→</span>
-            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
-                <div style="font-size:1rem;">🦆</div>
-                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">MotherDuck</div>
-            </div>
-            <span style="color:#06b6d4;font-size:1rem;">→</span>
-            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
-                <div style="font-size:1rem;">🦙</div>
-                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">LlamaIndex</div>
-            </div>
-            <span style="color:#06b6d4;font-size:1rem;">→</span>
-            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
-                <div style="font-size:1rem;">🧠</div>
-                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">Cerebras</div>
-            </div>
-            <span style="color:#06b6d4;font-size:1rem;">→</span>
-            <div style="background:#1a2332;border:1px solid #1e3a5f;border-radius:8px;padding:0.5rem 0.75rem;text-align:center;">
-                <div style="font-size:1rem;">🎨</div>
-                <div style="color:#e2e8f0;font-size:0.65rem;font-weight:600;">Streamlit</div>
-            </div>
+    <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:0.5rem;padding:1rem 0;margin-bottom:0.5rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
+            <div style="font-size:1.5rem;">📰</div>
+            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">GDELT API</div>
+            <div style="color:#64748b;font-size:0.65rem;">100K+ events/day</div>
+        </div>
+        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
+            <div style="font-size:1.5rem;">⚡</div>
+            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">Dagster</div>
+            <div style="color:#64748b;font-size:0.65rem;">Orchestration</div>
+        </div>
+        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
+            <div style="font-size:1.5rem;">🦆</div>
+            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">MotherDuck</div>
+            <div style="color:#64748b;font-size:0.65rem;">Cloud DuckDB</div>
+        </div>
+        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
+            <div style="font-size:1.5rem;">🦙</div>
+            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">LlamaIndex</div>
+            <div style="color:#64748b;font-size:0.65rem;">Text-to-SQL</div>
+        </div>
+        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
+            <div style="font-size:1.5rem;">🧠</div>
+            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">Cerebras</div>
+            <div style="color:#64748b;font-size:0.65rem;">Llama 3.1 8B</div>
+        </div>
+        <span style="color:#06b6d4;font-size:1.5rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:0.75rem 1.25rem;text-align:center;">
+            <div style="font-size:1.5rem;">🎨</div>
+            <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">Streamlit</div>
+            <div style="color:#64748b;font-size:0.65rem;">Dashboard</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # TWO COLUMNS: Enterprise vs Stack + Evolution
-    col1, col2 = st.columns([1, 1])
+    # TWO COLUMNS
+    col1, col2 = st.columns([3, 2])
     
     with col1:
+        # ENTERPRISE vs MY STACK - Bigger with full explanations and costs
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;">
-            <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.9rem;">💰 ENTERPRISE vs MY STACK</h4>
-            <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;">
+            <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;font-size:1rem;">💰 ENTERPRISE vs MY STACK</h4>
+            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
                 <tr style="border-bottom:1px solid #1e3a5f;">
-                    <th style="text-align:left;padding:0.4rem;color:#f59e0b;">Enterprise</th>
-                    <th style="text-align:left;padding:0.4rem;color:#10b981;">My Stack</th>
+                    <th style="text-align:left;padding:0.5rem;color:#f59e0b;width:45%;">Enterprise Tool</th>
+                    <th style="text-align:left;padding:0.5rem;color:#10b981;">My Alternative</th>
                 </tr>
                 <tr style="border-bottom:1px solid #1e3a5f22;">
-                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Databricks/Spark</td>
-                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>DuckDB</b> <span style="color:#64748b;font-size:0.7rem;">- in-process</span></td>
+                    <td style="padding:0.6rem 0.5rem;color:#94a3b8;">
+                        <b>Databricks</b> <span style="color:#ef4444;font-size:0.75rem;">~$500/mo</span>
+                    </td>
+                    <td style="padding:0.6rem 0.5rem;color:#e2e8f0;">
+                        <b>DuckDB</b> — In-process OLAP, no cluster needed, runs on single machine
+                    </td>
                 </tr>
                 <tr style="border-bottom:1px solid #1e3a5f22;">
-                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Snowflake/Redshift</td>
-                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>MotherDuck</b> <span style="color:#64748b;font-size:0.7rem;">- serverless</span></td>
+                    <td style="padding:0.6rem 0.5rem;color:#94a3b8;">
+                        <b>Snowflake</b> <span style="color:#ef4444;font-size:0.75rem;">~$200/mo</span>
+                    </td>
+                    <td style="padding:0.6rem 0.5rem;color:#e2e8f0;">
+                        <b>MotherDuck</b> — Serverless DuckDB cloud, free tier, same SQL
+                    </td>
                 </tr>
                 <tr style="border-bottom:1px solid #1e3a5f22;">
-                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Apache Airflow</td>
-                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>Dagster</b> <span style="color:#64748b;font-size:0.7rem;">- asset-based</span></td>
+                    <td style="padding:0.6rem 0.5rem;color:#94a3b8;">
+                        <b>Airflow</b> <span style="color:#ef4444;font-size:0.75rem;">~$300/mo</span>
+                    </td>
+                    <td style="padding:0.6rem 0.5rem;color:#e2e8f0;">
+                        <b>Dagster</b> — Asset-based orchestration, better lineage, modern UI
+                    </td>
                 </tr>
                 <tr style="border-bottom:1px solid #1e3a5f22;">
-                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">OpenAI GPT-4</td>
-                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>Cerebras</b> <span style="color:#64748b;font-size:0.7rem;">- free tier</span></td>
+                    <td style="padding:0.6rem 0.5rem;color:#94a3b8;">
+                        <b>OpenAI GPT-4</b> <span style="color:#ef4444;font-size:0.75rem;">~$50/mo</span>
+                    </td>
+                    <td style="padding:0.6rem 0.5rem;color:#e2e8f0;">
+                        <b>Cerebras</b> — Free tier, Llama 3.1 8B, fastest inference
+                    </td>
                 </tr>
                 <tr>
-                    <td style="padding:0.35rem 0.4rem;color:#94a3b8;">Tableau/Power BI</td>
-                    <td style="padding:0.35rem 0.4rem;color:#e2e8f0;"><b>Streamlit</b> <span style="color:#64748b;font-size:0.7rem;">- Python native</span></td>
+                    <td style="padding:0.6rem 0.5rem;color:#94a3b8;">
+                        <b>Tableau</b> <span style="color:#ef4444;font-size:0.75rem;">~$70/mo</span>
+                    </td>
+                    <td style="padding:0.6rem 0.5rem;color:#e2e8f0;">
+                        <b>Streamlit</b> — Python-native dashboards, free cloud hosting
+                    </td>
                 </tr>
             </table>
-            <div style="display:flex;justify-content:space-around;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #1e3a5f;">
-                <div style="text-align:center;"><span style="color:#ef4444;font-weight:700;">$500-10K</span><div style="color:#64748b;font-size:0.65rem;">Enterprise/mo</div></div>
-                <div style="text-align:center;"><span style="color:#10b981;font-weight:700;font-size:1.25rem;">$0</span><div style="color:#64748b;font-size:0.65rem;">My cost/mo</div></div>
+            <div style="display:flex;justify-content:space-around;margin-top:1rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
+                <div style="text-align:center;">
+                    <div style="color:#ef4444;font-size:1.5rem;font-weight:700;">$1,000+</div>
+                    <div style="color:#64748b;font-size:0.75rem;">Enterprise monthly</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="color:#10b981;font-size:2rem;font-weight:700;">$0</div>
+                    <div style="color:#64748b;font-size:0.75rem;">My monthly cost</div>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
+        # EVOLUTION
         st.markdown("""
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1rem;">
-            <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.9rem;">🔄 EVOLUTION</h4>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div style="color:#06b6d4;font-size:0.65rem;margin-bottom:0.25rem;">DATA WAREHOUSE</div>
-                <div style="color:#e2e8f0;font-size:0.85rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></div>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.25rem;height:100%;">
+            <h4 style="color:#e2e8f0;text-align:center;margin-bottom:1rem;font-size:1rem;">🔄 EVOLUTION</h4>
+            <div style="background:#1a2332;border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;">
+                <div style="color:#06b6d4;font-size:0.7rem;margin-bottom:0.3rem;">DATA WAREHOUSE</div>
+                <div style="color:#e2e8f0;font-size:0.9rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></div>
+                <div style="color:#64748b;font-size:0.7rem;margin-top:0.2rem;">Migrated for $0 cost, same SQL</div>
             </div>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div style="color:#8b5cf6;font-size:0.65rem;margin-bottom:0.25rem;">AI / LLM</div>
-                <div style="color:#e2e8f0;font-size:0.85rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></div>
+            <div style="background:#1a2332;border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;">
+                <div style="color:#8b5cf6;font-size:0.7rem;margin-bottom:0.3rem;">AI / LLM</div>
+                <div style="color:#e2e8f0;font-size:0.9rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></div>
+                <div style="color:#64748b;font-size:0.7rem;margin-top:0.2rem;">Best free tier + fastest inference</div>
             </div>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div style="color:#f59e0b;font-size:0.65rem;margin-bottom:0.25rem;">MODELS</div>
-                <div style="color:#e2e8f0;font-size:0.85rem;">Llama 70B → <b>Llama 3.1 8B</b></div>
+            <div style="background:#1a2332;border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;">
+                <div style="color:#f59e0b;font-size:0.7rem;margin-bottom:0.3rem;">MODELS</div>
+                <div style="color:#e2e8f0;font-size:0.9rem;">Llama 70B → <b>Llama 3.1 8B</b></div>
+                <div style="color:#64748b;font-size:0.7rem;margin-top:0.2rem;">Smaller model, faster, good enough</div>
             </div>
-            <div style="background:#1a2332;border-radius:8px;padding:0.6rem;">
-                <div style="color:#10b981;font-size:0.65rem;margin-bottom:0.25rem;">DATA</div>
-                <div style="color:#e2e8f0;font-size:0.85rem;">Manual → <b>Automated 30min</b></div>
+            <div style="background:#1a2332;border-radius:8px;padding:0.75rem;">
+                <div style="color:#10b981;font-size:0.7rem;margin-bottom:0.3rem;">PIPELINE</div>
+                <div style="color:#e2e8f0;font-size:0.9rem;">Manual → <b>GitHub Actions 30min</b></div>
+                <div style="color:#64748b;font-size:0.7rem;margin-top:0.2rem;">Fully automated, zero maintenance</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
