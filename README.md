@@ -13,6 +13,13 @@
 </p>
 
 <p align="center">
+  <a href="https://global-news-intel-platform.streamlit.app/">
+    <img src="https://img.shields.io/badge/🚀_LIVE_DEMO-Click_Here-FF4B4B?style=for-the-badge" alt="Live Demo">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://global-news-intel-platform.streamlit.app/">Live Demo</a> •
   <a href="#-features">Features</a> •
   <a href="#%EF%B8%8F-architecture">Architecture</a> •
   <a href="#-tech-stack">Tech Stack</a> •
