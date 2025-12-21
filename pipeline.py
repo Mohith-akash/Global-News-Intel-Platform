@@ -49,11 +49,17 @@ def clean_url_segment(text):
     
     text = str(text).strip()
     
+    # Remove leading/trailing punctuation
+    text = re.sub(r'^[.,;:\'"!?\-_\s]+', '', text)
+    text = re.sub(r'[.,;:\'"!?\-_\s]+$', '', text)
+    
     reject_patterns = [
         r'^[a-f0-9]{8}[-][a-f0-9]{4}',
         r'^[a-f0-9\-]{20,}$',
         r'^(article|post|item|id)[-_]?[a-f0-9]{6,}',
         r'^\d{10,}$',
+        r'^\d+$',  # Pure numbers
+        r'^[A-Z]{2,5}\s*\d{5,}',  # Code like "ABC 123456"
     ]
     
     for pattern in reject_patterns:
@@ -66,28 +72,68 @@ def clean_url_segment(text):
     text = re.sub(r'^\d{4}[-_]', '', text)
     text = re.sub(r'^[a-f0-9]{6,8}[-_]', '', text)
     text = re.sub(r'[-_]+', ' ', text)
+    
+    # Remove garbage patterns anywhere
     text = re.sub(r'\s+\d{5,}$', '', text)
     text = re.sub(r'\s+[a-f0-9]{8,}$', '', text, flags=re.I)
+    text = re.sub(r'\s+[a-z]{1,3}\d[a-z\d]{3,}', ' ', text, flags=re.I)  # Like "P5nc8"
     
-    # Remove trailing numbers (like "988", "956", "123")
-    text = re.sub(r'\s+\d{1,4}$', '', text)
-    text = re.sub(r'[\s,]+\d{1,3}$', '', text)
+    # Remove trailing junk (numbers, short codes)
+    text = re.sub(r'\s+\d{1,8}$', '', text)
+    text = re.sub(r'\s+[A-Za-z]\d[A-Za-z0-9]{1,5}$', '', text)  # Codes like "P5nc"
+    text = re.sub(r'\s+[A-Z]{1,3}\d+$', '', text)  # Like "ABC123"
+    text = re.sub(r'[\s,]+\d{1,6}$', '', text)
     
     text = ' '.join(text.split())
     
-    if len(text) < 15 or ' ' not in text:
+    # Must be at least 20 chars and have spaces
+    if len(text) < 20 or ' ' not in text:
         return None
     
+    # Must have at least 4 words
     words = text.split()
-    if len(words) < 3:
+    if len(words) < 4:
+        return None
+    
+    # Reject if it's just a country/city name (all caps, short)
+    if text.isupper() and len(words) <= 3:
         return None
     
     text_no_spaces = text.replace(' ', '')
     if text_no_spaces:
-        if sum(c.isdigit() for c in text_no_spaces) / len(text_no_spaces) > 0.2:
+        if sum(c.isdigit() for c in text_no_spaces) / len(text_no_spaces) > 0.15:
             return None
-        if sum(c in '0123456789abcdefABCDEF' for c in text_no_spaces) / len(text_no_spaces) > 0.35:
+        if sum(c in '0123456789abcdefABCDEF' for c in text_no_spaces) / len(text_no_spaces) > 0.3:
             return None
+    
+    # Reject if last word looks like a code
+    last_word = words[-1]
+    if re.match(r'^[A-Za-z]{0,2}\d+[A-Za-z]*$', last_word) and len(last_word) < 8:
+        words = words[:-1]
+        text = ' '.join(words)
+        if len(words) < 4:
+            return None
+    
+    # Remove trailing prepositions and fragments
+    trailing_junk = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
+                     'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be', 'if',
+                     'with', 'from', 'into', 'that', 'this', 'than', 'when', 'where',
+                     'n', 'b', 'na', 'th', 'wh', 's', 't'}
+    
+    words = text.split()
+    while words and (words[-1].lower() in trailing_junk or len(words[-1]) <= 2):
+        words.pop()
+        if len(words) < 4:
+            return None
+    
+    if len(words) < 4:
+        return None
+    
+    text = ' '.join(words)
+    
+    # Truncate to 100 chars but don't cut mid-word
+    if len(text) > 100:
+        text = text[:100].rsplit(' ', 1)[0]
     
     # Proper title case
     text = text.lower()
@@ -103,7 +149,7 @@ def clean_url_segment(text):
         else:
             result.append(word.capitalize())
     
-    return ' '.join(result)[:100]
+    return ' '.join(result)
 
 
 def get_gdelt_url():

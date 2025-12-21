@@ -137,6 +137,33 @@ def get_country(code):
     if len(code) < 2: 
         return None
     
+    # Handle regional/continental codes that aren't real countries
+    REGIONAL_CODES = {
+        'AFR': 'Africa',
+        'EUR': 'Europe',
+        'ASA': 'Asia',
+        'SAS': 'South Asia',
+        'EAS': 'East Asia',
+        'NAM': 'North America',
+        'SAM': 'South America',
+        'LAM': 'Latin America',
+        'MDE': 'Middle East',
+        'OCE': 'Oceania',
+        'CAR': 'Caribbean',
+        'CAS': 'Central Asia',
+        'SEA': 'Southeast Asia',
+        'NAF': 'North Africa',
+        'WAF': 'West Africa',
+        'EAF': 'East Africa',
+        'SAF': 'Southern Africa',
+        'WEU': 'Western Europe',
+        'EEU': 'Eastern Europe',
+        'SCN': 'Scandinavia',
+    }
+    
+    if code in REGIONAL_CODES:
+        return REGIONAL_CODES[code]
+    
     try:
         if len(code) == 2:
             country = pycountry.countries.get(alpha_2=code)

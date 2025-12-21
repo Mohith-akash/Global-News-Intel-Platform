@@ -160,96 +160,158 @@ def clean_headline(text):
     
     text = str(text).strip()
     
-    # Reject garbage patterns
+    # Remove leading/trailing punctuation
+    text = re.sub(r'^[.,;:\'"!?\-_\s]+', '', text)
+    text = re.sub(r'[.,;:\'"!?\-_\s]+$', '', text)
+    
+    # Reject if too short or single word
+    if len(text) < 20 or ' ' not in text:
+        return None
+    
+    words = text.split()
+    if len(words) < 4:
+        return None
+    
+    # Reject if it's just a country/city/entity name (all caps single concept)
+    if text.isupper() and len(words) <= 3:
+        return None
+    
+    # Reject common garbage patterns
     reject_patterns = [
         r'^[a-f0-9]{8}[-\s][a-f0-9]{4}',
         r'^[a-f0-9\s\-]{20,}$',
         r'^(article|post|item|id)[\s\-_]*[a-f0-9]{8}',
+        r'^\d+$',
+        r'^[A-Z]{2,5}\s*\d{5,}',
     ]
     
     for pattern in reject_patterns:
         if re.match(pattern, text.lower()): 
             return None
     
-    # Remove date patterns
+    # Remove date patterns at start
     for _ in range(5):
-        text = re.sub(r'^\d{4}\s+\d{1,2}\s+\d{1,2}\s+', '', text)
-        text = re.sub(r'^\d{1,2}\s+\d{1,2}\s+', '', text)
-        text = re.sub(r'^\d{1,2}[/\-\.]\d{1,2}\s+', '', text)
-        text = re.sub(r'^\d{4}\s+', '', text)
+        text = re.sub(r'^\d{4}\s*\d{1,2}\s*\d{1,2}\s+', '', text)
         text = re.sub(r'^\d{8}\s*', '', text)
         text = re.sub(r'^\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}\s*', '', text)
+        text = re.sub(r'^\d{4}\s+', '', text)
+        text = re.sub(r'^\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\s*', '', text)
     
-    # Remove garbage patterns
+    # Remove garbage patterns anywhere
     text = re.sub(r'\s+\d{1,2}\.\d{5,}', ' ', text)
-    text = re.sub(r'\s+\d{5,}', ' ', text)
-    text = re.sub(r'\s+[a-z]{3,5}\d[a-z\d]{4,}', ' ', text, flags=re.I)
-    text = re.sub(r'\s+[a-z0-9]{12,}(?=\s|$)', ' ', text, flags=re.I)
+    text = re.sub(r'\s+\d{4,}', ' ', text)  # Remove 4+ digit numbers anywhere
+    text = re.sub(r'\s+[a-z]{1,3}\d[a-z\d]{3,}', ' ', text, flags=re.I)
+    text = re.sub(r'\s+[a-z0-9]{10,}(?=\s|$)', ' ', text, flags=re.I)
     text = re.sub(r'\.(html?|php|aspx?|jsp|shtml)$', '', text, flags=re.I)
     text = re.sub(r'[-_]+', ' ', text)
     
-    # Remove trailing numbers (like "988", "956", "123")
-    text = re.sub(r'\s+\d{1,4}$', '', text)
-    text = re.sub(r'[\s,]+\d{1,3}$', '', text)
+    # Remove trailing junk
+    text = re.sub(r'\s+\d{1,8}$', '', text)
+    text = re.sub(r'\s+[A-Za-z]\d[A-Za-z0-9]{1,5}$', '', text)
+    text = re.sub(r'\s+[A-Z]{1,3}\d+$', '', text)
+    text = re.sub(r'[\s,]+\d{1,6}$', '', text)
+    text = re.sub(r'^[A-Za-z]{1,2}\d+\s+', '', text)
     
     text = ' '.join(text.split())
     
-    # Quality checks
-    if len(text) < 10: 
+    # Quality checks - must have at least 4 words and 20 chars
+    words = text.split()
+    if len(text) < 20 or len(words) < 4:
         return None
     
     text_no_spaces = text.replace(' ', '')
     if text_no_spaces:
         num_count = sum(c.isdigit() for c in text_no_spaces)
-        if num_count > len(text_no_spaces) * 0.2: 
+        if num_count > len(text_no_spaces) * 0.15:
             return None
     
     hex_count = sum(c in '0123456789abcdefABCDEF' for c in text_no_spaces)
-    if hex_count > len(text_no_spaces) * 0.35: 
+    if hex_count > len(text_no_spaces) * 0.3:
         return None
     
-    if ' ' not in text: 
-        return None
+    # Reject if last word looks like a code
+    last_word = words[-1]
+    if re.match(r'^[A-Za-z]{0,2}\d+[A-Za-z]*$', last_word) and len(last_word) < 8:
+        words = words[:-1]
+        text = ' '.join(words)
+        if len(words) < 4:
+            return None
+    
+    # Truncate to 100 chars but don't cut mid-word
+    if len(text) > 100:
+        text = text[:100].rsplit(' ', 1)[0]
+    
+    # Remove trailing prepositions and fragments
+    trailing_junk = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
+                     'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be', 'if',
+                     'with', 'from', 'into', 'that', 'this', 'than', 'when', 'where',
+                     'n', 'b', 'na', 'th', 'wh', 's', 't'}
     
     words = text.split()
-    if len(words) < 3: 
+    while words and (words[-1].lower() in trailing_junk or len(words[-1]) <= 2):
+        words.pop()
+        if len(words) < 4:
+            return None
+    
+    text = ' '.join(words)
+    
+    if len(text) < 20 or len(text.split()) < 4:
         return None
     
-    return text[:100]
+    return text
 
 def enhance_headline(text, impact_score=None, actor=None):
     """Proper title case - capitalize first letter of each significant word."""
     if not text: 
         return None
     
-    # Convert to lowercase first, then apply title case
-    text = text.lower()
-    words = text.split()
+    # Remove leading/trailing punctuation first
+    text = re.sub(r'^[.,;:\'"!?\-_\s]+', '', text)
+    text = re.sub(r'[.,;:\'"!?\-_\s]+$', '', text)
     
-    # Small words to keep lowercase (unless first word)
+    # Remove trailing numbers (like "1396")
+    text = re.sub(r'\s+\d{3,}$', '', text)
+    
+    if not text or len(text) < 20:
+        return None
+    
+    # Must have at least 4 words
+    words = text.split()
+    if len(words) < 4:
+        return None
+    
+    # Remove trailing prepositions and fragments
+    trailing_junk = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
+                     'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be', 'if',
+                     'with', 'from', 'into', 'that', 'this', 'than', 'when', 'where',
+                     'n', 'b', 'na', 'th', 'wh', 's', 't'}
+    
+    while words and (words[-1].lower() in trailing_junk or len(words[-1]) <= 2):
+        words.pop()
+        if len(words) < 4:
+            return None
+    
+    if len(words) < 4:
+        return None
+    
+    # Convert to title case
+    result = []
     small_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
                    'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be'}
     
-    result = []
     for i, word in enumerate(words):
+        word_lower = word.lower()
         if i == 0:
-            # First word always capitalized
-            result.append(word.capitalize())
-        elif word in small_words:
-            # Small words stay lowercase (unless they're acronyms like UK, UN, US)
-            result.append(word)
+            result.append(word_lower.capitalize())
+        elif word_lower in small_words:
+            result.append(word_lower)
         else:
-            # Other words get capitalized
-            result.append(word.capitalize())
+            result.append(word_lower.capitalize())
     
     return ' '.join(result)
 
 def extract_headline(url, actor=None, impact_score=None):
     """Extract a readable headline from a news article URL."""
-    if not url and actor:
-        cleaned = clean_headline(actor)
-        return enhance_headline(cleaned, impact_score, actor) if cleaned else None
-    
     if not url: 
         return None
     
@@ -257,22 +319,15 @@ def extract_headline(url, actor=None, impact_score=None):
         parsed = urlparse(str(url))
         path = unquote(parsed.path)
         
-        segments = [s for s in path.split('/') if s and len(s) > 8]
+        segments = [s for s in path.split('/') if s and len(s) > 15]
         
         for seg in reversed(segments):
             cleaned = clean_headline(seg)
-            if cleaned and len(cleaned) > 20:
+            if cleaned and len(cleaned) > 20 and len(cleaned.split()) >= 4:
                 return enhance_headline(cleaned, impact_score, actor)
-        
-        if actor:
-            cleaned = clean_headline(actor)
-            return enhance_headline(cleaned, impact_score, actor) if cleaned else None
         
         return None
     except:
-        if actor:
-            cleaned = clean_headline(actor)
-            return enhance_headline(cleaned, impact_score, actor) if cleaned else None
         return None
 
 def process_df(df):
@@ -283,15 +338,32 @@ def process_df(df):
     df = df.copy()
     df.columns = [c.upper() for c in df.columns]
     
-    # Extract headlines from URLs
+    # Use database HEADLINE if available, otherwise extract from URL
     headlines = []
     for _, row in df.iterrows():
-        headline = extract_headline(
-            row.get('NEWS_LINK', ''), 
-            row.get('MAIN_ACTOR', ''), 
-            row.get('IMPACT_SCORE', None)
-        )
-        headlines.append(headline if headline else None)
+        headline = None
+        
+        # First try database headline - must be at least 25 chars and 4 words
+        db_headline = row.get('HEADLINE')
+        if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 25:
+            # Skip if it's just a country/city name (all caps, short)
+            if not (db_headline.isupper() and len(db_headline.split()) <= 3):
+                cleaned = clean_headline(db_headline)
+                if cleaned and len(cleaned.split()) >= 4:
+                    headline = enhance_headline(cleaned)
+        
+        # Fall back to URL extraction only
+        if not headline:
+            headline = extract_headline(
+                row.get('NEWS_LINK', ''), 
+                None,  # Don't use actor
+                row.get('IMPACT_SCORE', None)
+            )
+            # Validate extracted headline - must be 4+ words
+            if headline and len(headline.split()) < 4:
+                headline = None
+        
+        headlines.append(headline)
     
     df['HEADLINE'] = headlines
     df = df[df['HEADLINE'].notna()]
@@ -357,27 +429,27 @@ def get_alerts(_c, t):
 def get_headlines(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
-        FROM {t} WHERE NEWS_LINK IS NOT NULL AND ARTICLE_COUNT > 5 AND DATE >= '{dates['week_ago']}' 
-        ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 60
+        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
+        FROM {t} WHERE NEWS_LINK IS NOT NULL AND ARTICLE_COUNT > 5 AND DATE >= '{dates['week_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL
+        ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 500
     """)
 
 @st.cache_data(ttl=300)
 def get_trending(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT 
-        FROM {t} WHERE DATE >= '{dates['week_ago']}' AND ARTICLE_COUNT > 3 AND NEWS_LINK IS NOT NULL 
-        ORDER BY ARTICLE_COUNT DESC LIMIT 60
+        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT 
+        FROM {t} WHERE DATE >= '{dates['week_ago']}' AND ARTICLE_COUNT > 3 AND NEWS_LINK IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
+        ORDER BY ARTICLE_COUNT DESC LIMIT 500
     """)
 
 @st.cache_data(ttl=300)
 def get_feed(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
-        FROM {t} WHERE DATE >= '{dates['week_ago']}' AND NEWS_LINK IS NOT NULL 
-        ORDER BY DATE DESC LIMIT 60
+        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
+        FROM {t} WHERE DATE >= '{dates['week_ago']}' AND NEWS_LINK IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
+        ORDER BY DATE DESC LIMIT 500
     """)
 
 @st.cache_data(ttl=300)
@@ -645,7 +717,7 @@ def render_trending(c, t):
     if df.empty:
         st.info("🔥 Loading...")
         return
-    df = process_df(df).head(15)
+    df = process_df(df).head(20)
     if df.empty:
         st.info("🔥 No stories")
         return
@@ -668,7 +740,7 @@ def render_feed(c, t):
     if df.empty:
         st.info("📋 Loading...")
         return
-    df = process_df(df).head(30)
+    df = process_df(df).head(50)
     if df.empty:
         st.info("📋 No events")
         return
@@ -762,7 +834,7 @@ def render_ai_chat(c, sql_db):
                 is_count_aggregate = False
                 country_filter_name = None
                 with st.spinner("🔍 Querying..."):
-                    # Determine limit from query (default 5, max 10)
+                    # Determine display limit from query (default 5, max 10)
                     limit = 5
                     m = re.search(r'(\d+)\s*(events?|results?|items?)', prompt.lower())
                     if m: 
@@ -770,6 +842,9 @@ def render_ai_chat(c, sql_db):
                     m2 = re.search(r'top\s+(\d+)', prompt.lower())
                     if m2:
                         limit = min(int(m2.group(1)), 10)
+                    
+                    # Fetch more rows to account for filtering and deduplication
+                    fetch_limit = limit * 20  # Fetch 20x more since many headlines will be filtered or duplicated
                     
                     # Helper: detect country codes in prompt
                     def get_country_codes_from_prompt(text):
@@ -799,6 +874,7 @@ def render_ai_chat(c, sql_db):
                     prompt_lower = prompt.lower()
                     has_crisis = 'crisis' in prompt_lower or 'severe' in prompt_lower
                     has_country_word = 'countr' in prompt_lower
+                    has_major = 'major' in prompt_lower or 'important' in prompt_lower or 'significant' in prompt_lower or 'biggest' in prompt_lower or 'trending' in prompt_lower
                     
                     # Check for specific query types (ORDER MATTERS!)
                     
@@ -809,14 +885,18 @@ def render_ai_chat(c, sql_db):
                     
                     # 2. Plain crisis events
                     elif has_crisis:
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY IMPACT_SCORE ASC LIMIT {limit}"
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY IMPACT_SCORE ASC LIMIT {fetch_limit}"
                     
-                    # 3. TOP COUNTRIES - check this BEFORE is_aggregate
+                    # 3. MAJOR/IMPORTANT events - high article count (trending stories)
+                    elif has_major:
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 50 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
+                    
+                    # 4. TOP COUNTRIES - check this BEFORE is_aggregate
                     elif 'top' in prompt_lower and has_country_word:
                         is_country_aggregate = True
                         sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
                     
-                    # 4. Aggregate queries (how many, count, total) - now with country support
+                    # 5. Aggregate queries (how many, count, total) - now with country support
                     elif qi['is_aggregate']:
                         is_count_aggregate = True
                         codes = get_country_codes_from_prompt(prompt)
@@ -827,7 +907,7 @@ def render_ai_chat(c, sql_db):
                         else:
                             sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
                     
-                    # 5. Default: specific events query
+                    # 6. Default: specific events query - prioritize high article count
                     else:
                         if qe:
                             try:
@@ -842,17 +922,15 @@ def render_ai_chat(c, sql_db):
                                 else:
                                     codes_str = "', '".join(codes)
                                     cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {limit}"
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
                             else:
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT {limit}"
+                                # Default: get high article count events (most covered stories)
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                     
-                    # Enforce max limit of 10
-                    if sql:
+                    # Enforce LIMIT on aggregate queries only (event queries need more rows for filtering)
+                    if sql and (is_count_aggregate or is_country_aggregate):
                         if 'LIMIT' not in sql.upper():
-                            sql = sql.rstrip(';') + ' LIMIT 10'
-                        else:
-                            # Replace any limit > 10 with 10
-                            sql = re.sub(r'LIMIT\s+(\d+)', lambda m: f'LIMIT {min(int(m.group(1)), 10)}', sql, flags=re.I)
+                            sql = sql.rstrip(';') + f' LIMIT {limit}'
                     
                     if sql:
                         data = safe_query(c, sql)
@@ -928,13 +1006,34 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                 if 'NEWS_LINK' in dd.columns:
                                     headlines = []
                                     for _, row in dd.iterrows():
-                                        headline = extract_headline(
-                                            row.get('NEWS_LINK', ''),
-                                            row.get('MAIN_ACTOR', ''),
-                                            row.get('IMPACT_SCORE', None)
-                                        )
-                                        headlines.append(headline or row.get('MAIN_ACTOR', 'Unknown Event')[:50])
+                                        headline = None
+                                        
+                                        # First try database HEADLINE
+                                        db_headline = row.get('HEADLINE')
+                                        if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 25:
+                                            if not (db_headline.isupper() and len(db_headline.split()) <= 3):
+                                                cleaned = clean_headline(db_headline)
+                                                if cleaned and len(cleaned.split()) >= 4:
+                                                    headline = enhance_headline(cleaned)
+                                        
+                                        # Fall back to URL extraction
+                                        if not headline:
+                                            headline = extract_headline(
+                                                row.get('NEWS_LINK', ''),
+                                                None,
+                                                row.get('IMPACT_SCORE', None)
+                                            )
+                                            if headline and len(headline.split()) < 4:
+                                                headline = None
+                                        
+                                        headlines.append(headline)
                                     dd['HEADLINE'] = headlines
+                                    
+                                    # Filter out rows with no valid headline
+                                    dd = dd[dd['HEADLINE'].notna()]
+                                    
+                                    # Deduplicate by headline to avoid showing same story multiple times
+                                    dd = dd.drop_duplicates(subset=['HEADLINE'])
                                 
                                 # Add severity label
                                 if 'IMPACT_SCORE' in dd.columns:
@@ -946,19 +1045,24 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         dd['DATE'] = pd.to_datetime(dd['DATE'].astype(str), format='%Y%m%d').dt.strftime('%b %d')
                                     except: pass
                                 
-                                # Prepare data for AI summary (include headlines)
-                                summary_data = []
-                                for _, row in dd.head(min(len(dd), 10)).iterrows():
-                                    headline = row.get('HEADLINE', row.get('MAIN_ACTOR', 'Event'))
-                                    country = row.get('COUNTRY', row.get('ACTOR_COUNTRY_CODE', 'Global'))
-                                    date = row.get('DATE', '')
-                                    severity = row.get('SEVERITY', '')
-                                    score = row.get('IMPACT_SCORE', 0)
-                                    summary_data.append(f"- {headline} | {country} | {date} | Severity: {severity} ({score})")
-                                
-                                summary_text = "\n".join(summary_data)
-                                
-                                ai_prompt = f"""Events from {qi['period_label']}:
+                                # Check if we have any valid data after filtering
+                                if dd.empty:
+                                    st.warning("📭 No events with proper headlines found for this query")
+                                    answer = "No events with valid headlines were found."
+                                else:
+                                    # Prepare data for AI summary (include headlines)
+                                    summary_data = []
+                                    for _, row in dd.head(limit).iterrows():
+                                        headline = row.get('HEADLINE', 'Event')
+                                        country = row.get('COUNTRY', row.get('ACTOR_COUNTRY_CODE', 'Global'))
+                                        date = row.get('DATE', '')
+                                        severity = row.get('SEVERITY', '')
+                                        score = row.get('IMPACT_SCORE', 0)
+                                        summary_data.append(f"- {headline} | {country} | {date} | Severity: {severity} ({score})")
+                                    
+                                    summary_text = "\n".join(summary_data)
+                                    
+                                    ai_prompt = f"""Events from {qi['period_label']}:
 
 {summary_text}
 
@@ -966,27 +1070,27 @@ Question: {prompt}
 
 Give 2-3 sentences about each event - what happened, who's involved, why it matters."""
 
-                                answer = str(llm.complete(ai_prompt))
-                                st.markdown(answer)
-                                
-                                display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY']
-                                if 'NEWS_LINK' in dd.columns:
-                                    display_cols.append('NEWS_LINK')
-                                
-                                display_cols = [col for col in display_cols if col in dd.columns]
-                                
-                                st.dataframe(
-                                    dd[display_cols].head(10),
-                                    hide_index=True,
-                                    width='stretch',
-                                    column_config={
-                                        "DATE": st.column_config.TextColumn("Date", width=70),
-                                        "HEADLINE": st.column_config.TextColumn("Event", width=None),
-                                        "COUNTRY": st.column_config.TextColumn("Country", width=100),
-                                        "SEVERITY": st.column_config.TextColumn("Severity", width=120),
-                                        "NEWS_LINK": st.column_config.LinkColumn("🔗", width=40)
-                                    }
-                                )
+                                    answer = str(llm.complete(ai_prompt))
+                                    st.markdown(answer)
+                                    
+                                    display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY']
+                                    if 'NEWS_LINK' in dd.columns:
+                                        display_cols.append('NEWS_LINK')
+                                    
+                                    display_cols = [col for col in display_cols if col in dd.columns]
+                                    
+                                    st.dataframe(
+                                        dd[display_cols].head(limit),
+                                        hide_index=True,
+                                        width='stretch',
+                                        column_config={
+                                            "DATE": st.column_config.TextColumn("Date", width=70),
+                                            "HEADLINE": st.column_config.TextColumn("Event", width=None),
+                                            "COUNTRY": st.column_config.TextColumn("Country", width=100),
+                                            "SEVERITY": st.column_config.TextColumn("Severity", width=120),
+                                            "NEWS_LINK": st.column_config.LinkColumn("🔗", width=40)
+                                        }
+                                    )
                                 
                                 with st.expander("🔍 SQL"):
                                     st.code(sql, language='sql')
