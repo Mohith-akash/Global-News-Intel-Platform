@@ -1287,7 +1287,7 @@ def render_about():
             <div style="color:#e2e8f0;font-size:0.9rem;">✨ Gemini 2.0/2.5 → ⚡ Groq Llama 3.3 70B → 🧠 Cerebras Llama 3.1 8B</div>
         </div>
     </div>
-    """​, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     
