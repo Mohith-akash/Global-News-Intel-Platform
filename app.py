@@ -1231,16 +1231,16 @@ def render_about():
                 <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Migrated for $0 cost, same SQL syntax</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div><span style="color:#8b5cf6;font-size:0.7rem;">AI / LLM</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Best free tier + fastest inference speed</div>
+                <div><span style="color:#8b5cf6;font-size:0.7rem;">AI / LLM (RAG)</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">✨ Gemini → ⚡ Groq → 🧠 <b>Cerebras</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">LlamaIndex RAG + Text-to-SQL pipeline</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
                 <div><span style="color:#f59e0b;font-size:0.7rem;">MODELS</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">Llama 70B → <b>Llama 3.1 8B</b></span></div>
                 <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Smaller model, faster, good enough for task</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;">
-                <div><span style="color:#10b981;font-size:0.7rem;">PIPELINE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">Manual → <b>GitHub Actions 30min</b></span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Fully automated, zero maintenance</div>
+                <div><span style="color:#10b981;font-size:0.7rem;">ETL PIPELINE (CI/CD)</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">Manual → <b>GitHub Actions 30min</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Dagster orchestration, fully automated</div>
             </div>
         </div>
         """, unsafe_allow_html=True)

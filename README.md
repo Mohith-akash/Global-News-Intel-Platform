@@ -77,12 +77,12 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
-### Data Flow
+### Data Flow (ETL/ELT Pipeline)
 1. **Extract**: GDELT API provides 15-minute update intervals
 2. **Transform**: Headlines extracted, country codes mapped, scores normalized
 3. **Load**: Deduplicated data inserted into MotherDuck (serverless DuckDB)
 4. **Serve**: Streamlit dashboard with Plotly visualizations
-5. **Query**: Cerebras LLM + LlamaIndex for natural language → SQL
+5. **AI Query**: LlamaIndex RAG → Cerebras LLM → SQL generation
 
 ---
 
@@ -100,8 +100,8 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### AI/ML
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Cerebras** | Ultra-fast LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
-| **LlamaIndex** | Text-to-SQL query engine | Custom NLP |
+| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
+| **LlamaIndex** | RAG + Text-to-SQL query engine | Custom NLP |
 
 ### Frontend
 | Tool | Purpose | Replaces |
