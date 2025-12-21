@@ -130,8 +130,8 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 
 ```bash
 # Clone the repository
-git clone https://github.com/Mohith-akash/gdelt-intelligence.git
-cd gdelt-intelligence
+git clone https://github.com/Mohith-akash/Global-News-Intel-Platform.git
+cd Global-News-Intel-Platform
 
 # Create virtual environment
 python -m venv venv
@@ -223,19 +223,6 @@ gdelt_project/
     └── workflows/
         └── hourly_update.yml  # GitHub Actions scheduler
 ```
-
----
-
-## 📊 Key Metrics
-
-| Metric | Value |
-|--------|-------|
-| **Daily Events Processed** | 100,000+ |
-| **Languages Monitored** | 100+ |
-| **Countries Covered** | 200+ |
-| **Average Query Time** | <1 second |
-| **Monthly Cost** | $0 |
-| **Pipeline Frequency** | Every 30 minutes |
 
 ---
 
