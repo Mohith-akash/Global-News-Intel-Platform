@@ -265,10 +265,22 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     dd['HEADLINE'] = headlines
                                     
                                     # Filter out rows with no valid headline
-                                    dd = dd[dd['HEADLINE'].notna()]
+                                    dd_filtered = dd[dd['HEADLINE'].notna()]
+                                    
+                                    # Fallback: if all headlines were filtered out, use raw database HEADLINE
+                                    if dd_filtered.empty and 'HEADLINE' in data.columns:
+                                        dd = data.copy()
+                                        dd.columns = [col.upper() for col in dd.columns]
+                                        # Use raw HEADLINE, filter out only completely empty ones
+                                        dd = dd[dd['HEADLINE'].notna() & (dd['HEADLINE'] != '')]
+                                        if 'ACTOR_COUNTRY_CODE' in dd.columns:
+                                            dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
+                                    else:
+                                        dd = dd_filtered
                                     
                                     # Deduplicate by headline to avoid showing same story multiple times
-                                    dd = dd.drop_duplicates(subset=['HEADLINE'])
+                                    if not dd.empty and 'HEADLINE' in dd.columns:
+                                        dd = dd.drop_duplicates(subset=['HEADLINE'])
                                 
                                 # Add severity label
                                 if 'IMPACT_SCORE' in dd.columns:
