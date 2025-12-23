@@ -8,10 +8,10 @@ import os
 from dotenv import load_dotenv
 import logging
 
-from config import REQUIRED_ENVS
-from styles import inject_css
-from database import get_db, get_engine, detect_table
-from ai_engine import get_ai_engine
+from src.config import REQUIRED_ENVS
+from src.styles import inject_css
+from src.database import get_db, get_engine, detect_table
+from src.ai_engine import get_ai_engine
 from components import (
     render_header,
     render_metrics,
