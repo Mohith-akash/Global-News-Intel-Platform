@@ -155,9 +155,6 @@ def render_ai_chat(c, sql_db):
                                     codes_str = "', '".join(codes)
                                     cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
                                 sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
-                            elif qi['is_specific_date']:
-                                # For specific date queries, don't filter by article count
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                             else:
                                 # Default: get high article count events (most covered stories)
                                 sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
@@ -248,7 +245,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 25:
                                             if not (db_headline.isupper() and len(db_headline.split()) <= 3):
                                                 cleaned = clean_headline(db_headline)
-                                                if cleaned and len(cleaned.split()) >= 3:
+                                                if cleaned and len(cleaned.split()) >= 4:
                                                     headline = enhance_headline(cleaned)
                                         
                                         # Fall back to URL extraction
@@ -258,43 +255,17 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                                 None,
                                                 row.get('IMPACT_SCORE', None)
                                             )
-                                            if headline and len(headline.split()) < 3:
+                                            if headline and len(headline.split()) < 4:
                                                 headline = None
                                         
                                         headlines.append(headline)
                                     dd['HEADLINE'] = headlines
                                     
                                     # Filter out rows with no valid headline
-                                    dd_filtered = dd[dd['HEADLINE'].notna()]
-                                    
-                                    # Fallback: if all headlines were filtered out, create from MAIN_ACTOR
-                                    if dd_filtered.empty:
-                                        dd = data.copy()
-                                        dd.columns = [col.upper() for col in dd.columns]
-                                        # Create headline from MAIN_ACTOR if available
-                                        def create_fallback_headline(row):
-                                            actor = row.get('MAIN_ACTOR', '')
-                                            country = row.get('ACTOR_COUNTRY_CODE', '')
-                                            score = row.get('IMPACT_SCORE', 0)
-                                            if actor and len(str(actor)) > 3:
-                                                country_name = get_country(country) if country else ''
-                                                if score and score < -3:
-                                                    return f"Crisis event involving {actor}" + (f" in {country_name}" if country_name else "")
-                                                elif score and score > 3:
-                                                    return f"Positive development: {actor}" + (f" in {country_name}" if country_name else "")
-                                                else:
-                                                    return f"Event: {actor}" + (f" ({country_name})" if country_name else "")
-                                            return None
-                                        dd['HEADLINE'] = dd.apply(create_fallback_headline, axis=1)
-                                        dd = dd[dd['HEADLINE'].notna()]
-                                        if 'ACTOR_COUNTRY_CODE' in dd.columns:
-                                            dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
-                                    else:
-                                        dd = dd_filtered
+                                    dd = dd[dd['HEADLINE'].notna()]
                                     
                                     # Deduplicate by headline to avoid showing same story multiple times
-                                    if not dd.empty and 'HEADLINE' in dd.columns:
-                                        dd = dd.drop_duplicates(subset=['HEADLINE'])
+                                    dd = dd.drop_duplicates(subset=['HEADLINE'])
                                 
                                 # Add severity label
                                 if 'IMPACT_SCORE' in dd.columns:
