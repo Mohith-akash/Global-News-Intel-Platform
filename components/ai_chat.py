@@ -268,11 +268,11 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     dd_filtered = dd[dd['HEADLINE'].notna()]
                                     
                                     # Fallback: if all headlines were filtered out, use raw database HEADLINE
-                                    if dd_filtered.empty and 'HEADLINE' in data.columns:
+                                    if dd_filtered.empty and 'headline' in [c.lower() for c in data.columns]:
                                         dd = data.copy()
                                         dd.columns = [col.upper() for col in dd.columns]
                                         # Use raw HEADLINE, filter out only completely empty ones
-                                        dd = dd[dd['HEADLINE'].notna() & (dd['HEADLINE'] != '')]
+                                        dd = dd[dd['HEADLINE'].notna() & (dd['HEADLINE'].astype(str).str.strip() != '')]
                                         if 'ACTOR_COUNTRY_CODE' in dd.columns:
                                             dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
                                     else:
