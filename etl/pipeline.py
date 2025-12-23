@@ -153,7 +153,7 @@ def clean_url_segment(text):
 
 
 def get_gdelt_url():
-    now = datetime.datetime.utcnow() - datetime.timedelta(minutes=20)
+    now = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=20)
     rounded_minute = (now.minute // 15) * 15
     rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
     timestamp = rounded_time.strftime("%Y%m%d%H%M00")

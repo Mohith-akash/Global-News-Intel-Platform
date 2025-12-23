@@ -161,7 +161,7 @@ streamlit run app.py
 ### Run the Pipeline Manually
 
 ```bash
-python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
+python -m dagster job execute -f etl/pipeline.py -j gdelt_ingestion_job
 ```
 
 ---
@@ -212,13 +212,23 @@ This project evolved through multiple iterations to optimize for cost and perfor
 
 ```
 gdelt_project/
-├── app.py              # Streamlit dashboard (1,300+ lines)
-├── pipeline.py         # Dagster ETL pipeline
-├── config.py           # Configuration constants
-├── utils.py            # Utility functions
-├── styles.py           # CSS styling
-├── requirements.txt    # Python dependencies
-├── .env                # Environment variables (not in repo)
+├── app.py                # Streamlit dashboard entry point
+├── src/                  # Core modules
+│   ├── config.py         # Configuration constants
+│   ├── database.py       # Database connection
+│   ├── queries.py        # SQL query functions
+│   ├── ai_engine.py      # LLM/AI setup
+│   ├── data_processing.py# Headline extraction
+│   ├── utils.py          # Utility functions
+│   └── styles.py         # CSS styling
+├── etl/                  # Data pipeline
+│   └── pipeline.py       # Dagster ETL pipeline
+├── components/           # UI components
+│   ├── render.py         # Dashboard rendering
+│   ├── ai_chat.py        # AI chat interface
+│   └── about.py          # About page
+├── requirements.txt      # Python dependencies
+├── .env                  # Environment variables (not in repo)
 └── .github/
     └── workflows/
         └── hourly_update.yml  # GitHub Actions scheduler

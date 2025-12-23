@@ -32,7 +32,6 @@ jobs:
     - name: Execute Dagster Job
       env:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       run: |
         echo "🚀 Starting MotherDuck Ingestion..."
         
@@ -41,6 +40,6 @@ jobs:
         # We use 'python -m dagster' instead of just 'dagster'.
         # This ensures the runner finds the package we just installed.
         # ---------------------------------------------------------
-        python -m dagster job execute -f pipeline.py -j gdelt_ingestion_job
+        python -m dagster job execute -f etl/pipeline.py -j gdelt_ingestion_job
         
         echo "✅ Data Refresh Complete."
