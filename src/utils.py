@@ -32,7 +32,11 @@ def get_country_code(name):
         # Geographic directions (prevent "Middle East", "North Africa", etc. issues)
         'east', 'west', 'north', 'south', 'middle', 'central', 'eastern', 
         'western', 'northern', 'southern', 'asia', 'africa', 'europe',
-        'happening', 'going', 'news', 'latest', 'recent', 'new', 'old'
+        'happening', 'going', 'news', 'latest', 'recent', 'new', 'old',
+        # Month names and abbreviations (prevent 'dec' → 'CZE' bug)
+        'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+        'january', 'february', 'march', 'april', 'june', 'july', 'august',
+        'september', 'october', 'november', 'december'
     }
     
     if name_lower in STOPWORDS:
