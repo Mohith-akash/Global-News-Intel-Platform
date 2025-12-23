@@ -155,6 +155,9 @@ def render_ai_chat(c, sql_db):
                                     codes_str = "', '".join(codes)
                                     cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
                                 sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
+                            elif qi['is_specific_date']:
+                                # For specific date queries, don't filter by article count
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                             else:
                                 # Default: get high article count events (most covered stories)
                                 sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
@@ -260,6 +263,12 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         
                                         headlines.append(headline)
                                     dd['HEADLINE'] = headlines
+                                    
+                                    # Fallback: if no headline, use MAIN_ACTOR as display text
+                                    dd['HEADLINE'] = dd.apply(
+                                        lambda row: row['HEADLINE'] if row['HEADLINE'] else (row.get('MAIN_ACTOR', 'Event')[:60] if row.get('MAIN_ACTOR') else None),
+                                        axis=1
+                                    )
                                     
                                     # Filter out rows with no valid headline
                                     dd = dd[dd['HEADLINE'].notna()]
