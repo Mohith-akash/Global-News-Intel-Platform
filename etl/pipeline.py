@@ -49,56 +49,65 @@ def clean_url_segment(text):
     
     text = str(text).strip()
     
-    # Remove leading/trailing punctuation
-    text = re.sub(r'^[.,;:\'"!?\-_\s]+', '', text)
-    text = re.sub(r'[.,;:\'"!?\-_\s]+$', '', text)
-    
+    # Reject common garbage patterns early
     reject_patterns = [
         r'^[a-f0-9]{8}[-][a-f0-9]{4}',
         r'^[a-f0-9\-]{20,}$',
         r'^(article|post|item|id)[-_]?[a-f0-9]{6,}',
         r'^\d{10,}$',
-        r'^\d+$',  # Pure numbers
-        r'^[A-Z]{2,5}\s*\d{5,}',  # Code like "ABC 123456"
+        r'^\d+$',
+        r'^[A-Z]{2,5}\s*\d{5,}',
     ]
     
     for pattern in reject_patterns:
         if re.match(pattern, text.lower()):
             return None
     
-    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml|htm)$', '', text, flags=re.I)
+    # Remove file extensions
+    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml)$', '', text, flags=re.I)
+    
+    # Remove date patterns at start
     text = re.sub(r'^\d{8}[-_]?', '', text)
     text = re.sub(r'^\d{4}[-/]\d{2}[-/]\d{2}[-_]?', '', text)
     text = re.sub(r'^\d{4}[-_]', '', text)
+    
+    # Remove hex codes
     text = re.sub(r'^[a-f0-9]{6,8}[-_]', '', text)
+    
+    # Convert hyphens and underscores to spaces
     text = re.sub(r'[-_]+', ' ', text)
     
     # Remove garbage patterns anywhere
     text = re.sub(r'\s+\d{5,}$', '', text)
     text = re.sub(r'\s+[a-f0-9]{8,}$', '', text, flags=re.I)
-    text = re.sub(r'\s+[a-z]{1,3}\d[a-z\d]{3,}', ' ', text, flags=re.I)  # Like "P5nc8"
+    text = re.sub(r'\s+[a-z]{1,3}\d[a-z\d]{3,}', ' ', text, flags=re.I)
     
-    # Remove trailing junk (numbers, short codes)
+    # Remove trailing junk
     text = re.sub(r'\s+\d{1,8}$', '', text)
-    text = re.sub(r'\s+[A-Za-z]\d[A-Za-z0-9]{1,5}$', '', text)  # Codes like "P5nc"
-    text = re.sub(r'\s+[A-Z]{1,3}\d+$', '', text)  # Like "ABC123"
+    text = re.sub(r'\s+[A-Za-z]\d[A-Za-z0-9]{1,5}$', '', text)
+    text = re.sub(r'\s+[A-Z]{1,3}\d+$', '', text)
     text = re.sub(r'[\s,]+\d{1,6}$', '', text)
     
+    # Normalize whitespace
     text = ' '.join(text.split())
     
-    # Must be at least 20 chars and have spaces
-    if len(text) < 20 or ' ' not in text:
+    # NOW remove leading/trailing punctuation (AFTER all replacements)
+    text = re.sub(r'^[.,;:\'\"!?\-_\s]+', '', text)
+    text = re.sub(r'[.,;:\'\"!?\-_\s]+$', '', text)
+    
+    # Validate length and word count
+    if len(text) < 15 or ' ' not in text:
         return None
     
-    # Must have at least 4 words
     words = text.split()
-    if len(words) < 4:
+    if len(words) < 3:
         return None
     
     # Reject if it's just a country/city name (all caps, short)
     if text.isupper() and len(words) <= 3:
         return None
     
+    # Check for excessive numbers or hex characters
     text_no_spaces = text.replace(' ', '')
     if text_no_spaces:
         if sum(c.isdigit() for c in text_no_spaces) / len(text_no_spaces) > 0.15:
@@ -111,22 +120,22 @@ def clean_url_segment(text):
     if re.match(r'^[A-Za-z]{0,2}\d+[A-Za-z]*$', last_word) and len(last_word) < 8:
         words = words[:-1]
         text = ' '.join(words)
-        if len(words) < 4:
+        if len(words) < 3:
             return None
     
-    # Remove trailing prepositions and fragments
+    # Remove trailing junk words
     trailing_junk = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
                      'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be', 'if',
                      'with', 'from', 'into', 'that', 'this', 'than', 'when', 'where',
                      'n', 'b', 'na', 'th', 'wh', 's', 't'}
     
     words = text.split()
-    while words and (words[-1].lower() in trailing_junk or len(words[-1]) <= 2):
+    while words and (words[-1].lower() in trailing_junk or len(words[-1]) <= 1):
         words.pop()
-        if len(words) < 4:
+        if len(words) < 3:
             return None
     
-    if len(words) < 4:
+    if len(words) < 3:
         return None
     
     text = ' '.join(words)
@@ -135,7 +144,11 @@ def clean_url_segment(text):
     if len(text) > 100:
         text = text[:100].rsplit(' ', 1)[0]
     
-    # Proper title case
+    # Final validation
+    if len(text) < 15:
+        return None
+    
+    # Apply proper title case
     text = text.lower()
     words = text.split()
     small_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
@@ -189,14 +202,68 @@ def validate_dataframe(df):
     if 'EVENT_ID' not in df.columns or 'DATE' not in df.columns:
         return False
     df.dropna(subset=['EVENT_ID'], inplace=True)
-    df.drop_duplicates(subset=['EVENT_ID'], keep='first', inplace=True)
-    logger.info(f"Validated: {len(df)} rows")
+    # DON'T deduplicate here - we'll do smart deduplication with best headlines
+    logger.info(f"Validated: {len(df)} rows (before headline selection)")
     return True
+
+
+def select_best_headline_per_event(df):
+    """Group by EVENT_ID, try all URLs, keep row with best headline."""
+    if df.empty:
+        return df
+    
+    logger.info(f"Selecting best headlines from {len(df):,} rows...")
+    
+    # Group by EVENT_ID
+    grouped = df.groupby('EVENT_ID')
+    
+    best_rows = []
+    for event_id, group in grouped:
+        best_headline = None
+        best_row = None
+        best_score = 0
+        url_count = len(group)  # Our own article count
+        
+        for idx, row in group.iterrows():
+            url = row.get('NEWS_LINK', '')
+            if not url:
+                continue
+            
+            # Try to extract headline
+            headline = extract_headline_from_url(url)
+            
+            if headline:
+                # Score by length and word count
+                score = len(headline) + len(headline.split()) * 5
+                if score > best_score:
+                    best_score = score
+                    best_headline = headline
+                    best_row = row.copy()
+        
+        # If we found a good headline, use that row
+        if best_row is not None and best_headline:
+            best_row['HEADLINE'] = best_headline
+            best_row['ARTICLE_COUNT'] = url_count  # Our own count
+            best_rows.append(best_row)
+        elif len(group) > 0:
+            # No good headline found, keep first row but with our count
+            first_row = group.iloc[0].copy()
+            first_row['ARTICLE_COUNT'] = url_count
+            first_row['HEADLINE'] = None
+            best_rows.append(first_row)
+    
+    if best_rows:
+        result = pd.DataFrame(best_rows)
+        headlines_found = result['HEADLINE'].notna().sum()
+        logger.info(f"Selected {len(result):,} events with {headlines_found:,} headlines")
+        return result
+    
+    return pd.DataFrame()
 
 
 @asset
 def gdelt_raw_data() -> pd.DataFrame:
-    """Extract raw GDELT data with headlines extracted at source."""
+    """Extract raw GDELT data with best headline selection per event."""
     logger.info("Starting GDELT extraction")
     url = get_gdelt_url()
     
@@ -220,12 +287,11 @@ def gdelt_raw_data() -> pd.DataFrame:
         for col in ['IMPACT_SCORE', 'ARTICLE_COUNT', 'SENTIMENT_SCORE']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        logger.info("Extracting headlines...")
-        df['HEADLINE'] = df['NEWS_LINK'].apply(extract_headline_from_url)
-        logger.info(f"Extracted {df['HEADLINE'].notna().sum():,} headlines from {len(df):,} URLs")
-        
         if not validate_dataframe(df):
             return pd.DataFrame()
+        
+        # Select best headline from all URLs per event
+        df = select_best_headline_per_event(df)
         
         return df
     except Exception as e:

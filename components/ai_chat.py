@@ -8,7 +8,7 @@ import streamlit as st
 
 from src.database import safe_query
 from src.ai_engine import get_query_engine, get_cerebras_llm
-from src.data_processing import clean_headline, enhance_headline, extract_headline
+from src.data_processing import extract_headline
 from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
 
 
@@ -51,6 +51,9 @@ def render_ai_chat(c, sql_db):
                 
                 if qi['is_specific_date'] and qi['specific_date']:
                     date_filter = f"DATE = '{qi['specific_date']}'"
+                elif qi.get('is_month_range') and qi.get('month_start') and qi.get('month_end'):
+                    # Handle month-only queries like "events in october"
+                    date_filter = f"DATE >= '{qi['month_start']}' AND DATE <= '{qi['month_end']}'"
                 elif qi['time_period'] == 'all' or qi['is_aggregate']:
                     date_filter = f"DATE >= '{dates['three_months_ago']}'"
                 elif qi['time_period'] == 'month':
@@ -75,8 +78,12 @@ def render_ai_chat(c, sql_db):
                     if m2:
                         limit = min(int(m2.group(1)), 10)
                     
-                    # Fetch more rows to account for filtering and deduplication
-                    fetch_limit = limit * 20  # Fetch 20x more since many headlines will be filtered or duplicated
+                    # For month-range queries, cap at 5 to keep responses focused
+                    if qi.get('is_month_range'):
+                        limit = min(limit, 5)
+                    
+                    # Fetch more rows to account for filtering/deduplication (more = better quality)
+                    fetch_limit = min(limit * 50, 500)  # 50x multiplier, capped at 500
                     
                     # Helper: detect country codes in prompt
                     def get_country_codes_from_prompt(text):
@@ -115,9 +122,15 @@ def render_ai_chat(c, sql_db):
                         is_country_aggregate = True
                         sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
                     
-                    # 2. Plain crisis events
+                    # 2. Plain crisis events (require 10+ articles for quality headlines)
                     elif has_crisis:
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY IMPACT_SCORE ASC LIMIT {fetch_limit}"
+                        # Check if user specified a country for crisis events
+                        crisis_codes = get_country_codes_from_prompt(prompt)
+                        if crisis_codes:
+                            crisis_country_filter = f"ACTOR_COUNTRY_CODE = '{crisis_codes[0]}'"
+                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {crisis_country_filter} AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
+                        else:
+                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
                     
                     # 3. MAJOR/IMPORTANT events - high article count (trending stories)
                     elif has_major:
@@ -139,7 +152,7 @@ def render_ai_chat(c, sql_db):
                         else:
                             sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
                     
-                    # 6. Default: specific events query - prioritize high article count
+                    # 6. Default: specific events query
                     else:
                         if qe:
                             try:
@@ -148,16 +161,19 @@ def render_ai_chat(c, sql_db):
                             except Exception: pass
                         if not sql:
                             codes = get_country_codes_from_prompt(prompt)
+                            
+                            # Require at least 10 articles for quality headlines
+                            article_threshold = 10
+                            
                             if codes:
                                 if len(codes) == 1:
                                     cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
                                 else:
                                     codes_str = "', '".join(codes)
                                     cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
                             else:
-                                # Default: get high article count events (most covered stories)
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                     
                     # Enforce LIMIT on aggregate queries only (event queries need more rows for filtering)
                     if sql and (is_count_aggregate or is_country_aggregate):
@@ -236,36 +252,57 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
                                 
                                 if 'NEWS_LINK' in dd.columns:
+                                    import re as re_mod
+                                    
+                                    def clean_display_headline(text):
+                                        """Clean headline for display - remove dots, numbers, garbage."""
+                                        if not text:
+                                            return None
+                                        # Remove leading dots and punctuation
+                                        text = re_mod.sub(r'^[.,;:\'"!?\-_\s\.]+', '', text)
+                                        # Remove trailing alphanumeric garbage (like Four202512230l)
+                                        text = re_mod.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
+                                        text = re_mod.sub(r'\d+[A-Za-z]?$', '', text)
+                                        text = re_mod.sub(r'\s+\d+$', '', text)
+                                        # Remove "Hunt on for Two Mo" type truncations
+                                        text = re_mod.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
+                                        # Remove trailing partial words (2 chars or less)
+                                        words = text.strip().split()
+                                        while words and len(words[-1]) <= 2:
+                                            words.pop()
+                                        text = ' '.join(words)
+                                        # Cap at 80 chars, don't cut mid-word
+                                        if len(text) > 80:
+                                            text = text[:80].rsplit(' ', 1)[0]
+                                        text = text.strip()
+                                        # Require 4+ words for quality
+                                        if len(text) < 15 or len(text.split()) < 4:
+                                            return None
+                                        return text
+                                    
                                     headlines = []
-                                    for _, row in dd.iterrows():
-                                        headline = None
-                                        
-                                        # First try database HEADLINE
+                                    valid_indices = []
+                                    for idx, row in dd.iterrows():
+                                        # Try DB headline first
                                         db_headline = row.get('HEADLINE')
-                                        if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 25:
-                                            if not (db_headline.isupper() and len(db_headline.split()) <= 3):
-                                                cleaned = clean_headline(db_headline)
-                                                if cleaned and len(cleaned.split()) >= 4:
-                                                    headline = enhance_headline(cleaned)
+                                        if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 15:
+                                            headline = clean_display_headline(db_headline)
+                                        else:
+                                            # Extract from URL
+                                            headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
                                         
-                                        # Fall back to URL extraction
-                                        if not headline:
-                                            headline = extract_headline(
-                                                row.get('NEWS_LINK', ''),
-                                                None,
-                                                row.get('IMPACT_SCORE', None)
-                                            )
-                                            if headline and len(headline.split()) < 4:
-                                                headline = None
-                                        
-                                        headlines.append(headline)
-                                    dd['HEADLINE'] = headlines
+                                        # ONLY keep events with proper headlines - no fallbacks
+                                        if headline and len(headline) > 15 and len(headline.split()) >= 3:
+                                            headlines.append(headline)
+                                            valid_indices.append(idx)
                                     
-                                    # Filter out rows with no valid headline
-                                    dd = dd[dd['HEADLINE'].notna()]
-                                    
-                                    # Deduplicate by headline to avoid showing same story multiple times
-                                    dd = dd.drop_duplicates(subset=['HEADLINE'])
+                                    # Filter to only rows with valid headlines
+                                    if valid_indices:
+                                        dd = dd.loc[valid_indices].copy()
+                                        dd['HEADLINE'] = headlines
+                                        dd = dd.drop_duplicates(subset=['HEADLINE'])
+                                    else:
+                                        dd = dd.head(0)  # Empty dataframe
                                 
                                 # Add severity label
                                 if 'IMPACT_SCORE' in dd.columns:
@@ -279,8 +316,8 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                 
                                 # Check if we have any valid data after filtering
                                 if dd.empty:
-                                    st.warning("📭 No events with proper headlines found for this query")
-                                    answer = "No events with valid headlines were found."
+                                    st.warning("📭 No events found for this query")
+                                    answer = "No events found."
                                 else:
                                     # Prepare data for AI summary (include headlines)
                                     summary_data = []
@@ -329,6 +366,8 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
                         else:
                             st.warning("📭 No results found for this query")
                             answer = "No results found."
+                            with st.expander("🔍 SQL"):
+                                st.code(sql, language='sql')
                     else:
                         st.warning("⚠️ Could not generate query")
                         answer = "Could not process query."

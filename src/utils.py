@@ -4,7 +4,71 @@ Utility functions for GDELT platform.
 import datetime
 import re
 import pycountry
-from src.config import COUNTRY_ALIASES
+try:
+    from src.config import COUNTRY_ALIASES
+except ImportError:
+    from config import COUNTRY_ALIASES
+
+
+# STOPWORDS - common words that should NOT be matched to countries
+STOPWORDS = {
+    # Common English words
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+    'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
+    'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
+    'shall', 'can', 'need', 'dare', 'ought', 'used', 'up', 'down', 'out', 'off',
+    
+    # Question words
+    'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how',
+    
+    # Common verbs and nouns
+    'show', 'get', 'give', 'go', 'come', 'make', 'take', 'see', 'know', 'think',
+    'want', 'tell', 'find', 'ask', 'work', 'seem', 'feel', 'try', 'leave', 'call',
+    'events', 'event', 'news', 'data', 'results', 'result', 'query', 'search',
+    'list', 'all', 'any', 'some', 'many', 'much', 'more', 'most', 'other',
+    
+    # Time-related words
+    'today', 'yesterday', 'tomorrow', 'week', 'month', 'year', 'day', 'time',
+    'now', 'then', 'before', 'after', 'during', 'while', 'since', 'until',
+    'recent', 'latest', 'last', 'next', 'first', 'second', 'past', 'current',
+    
+    # Month names (should not match countries)
+    'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+    'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september',
+    'october', 'november', 'december',
+    
+    # Numbers and ordinals
+    'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+    
+    # Direction words (not countries)
+    'east', 'west', 'north', 'south', 'eastern', 'western', 'northern', 'southern',
+    'middle', 'central',
+    
+    # Query-specific words
+    'top', 'bottom', 'best', 'worst', 'major', 'minor', 'big', 'small', 'large',
+    'high', 'low', 'important', 'significant', 'trending', 'popular', 'crisis',
+    'severe', 'critical', 'level', 'count', 'total', 'number', 'amount',
+    'countries', 'country', 'region', 'regions', 'global', 'world', 'worldwide',
+    'international', 'local', 'national', 'foreign', 'domestic',
+    
+    # Common adjectives
+    'new', 'old', 'good', 'bad', 'great', 'little', 'own', 'same', 'different',
+    'right', 'wrong', 'long', 'short', 'early', 'late',
+    
+    # Articles and pronouns
+    'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
+    'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their',
+    
+    # Conjunctions and prepositions
+    'about', 'above', 'across', 'against', 'along', 'among', 'around', 'because',
+    'between', 'beyond', 'during', 'except', 'inside', 'into', 'like', 'near',
+    'over', 'through', 'toward', 'under', 'upon', 'within', 'without',
+    
+    # Misc words that shouldn't match
+    'only', 'just', 'also', 'very', 'even', 'still', 'already', 'always', 'never',
+    'often', 'sometimes', 'usually', 'really', 'actually', 'probably', 'maybe',
+    'please', 'thanks', 'thank', 'help', 'hello', 'hi', 'hey',
+}
 
 
 def get_country_code(name):
@@ -14,50 +78,35 @@ def get_country_code(name):
     
     name_lower = name.lower().strip()
     
-    # Skip common English words that might match countries
-    STOPWORDS = {
-        'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-        'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 
-        'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that',
-        'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
-        'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each',
-        'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
-        'not', 'only', 'same', 'so', 'than', 'too', 'very', 'just', 'also',
-        'now', 'here', 'there', 'then', 'once', 'many', 'any', 'show', 'get',
-        'events', 'event', 'total', 'count', 'many', 'much', 'last', 'next',
-        'week', 'month', 'year', 'today', 'yesterday', 'happened', 'involving',
-        'about', 'between', 'during', 'before', 'after', 'crisis', 'severe',
-        'top', 'countries', 'country',
-        # Geographic directions (prevent "Middle East", "North Africa", etc. issues)
-        'east', 'west', 'north', 'south', 'middle', 'central', 'eastern', 
-        'western', 'northern', 'southern', 'asia', 'africa', 'europe',
-        'happening', 'going', 'news', 'latest', 'recent', 'new', 'old'
-    }
+    # Skip if too short
+    if len(name_lower) < 2:
+        return None
     
+    # Skip stopwords
     if name_lower in STOPWORDS:
         return None
     
-    # Check aliases first (includes common names like 'usa', 'uk', etc.)
+    # Check aliases first
     if name_lower in COUNTRY_ALIASES:
         return COUNTRY_ALIASES[name_lower]
     
-    # Explicit check for USA variants (backup in case alias fails)
-    if name_lower in ('usa', 'us', 'america', 'united states', 'u.s.', 'u.s.a.'):
-        return 'USA'
-    
-    # Skip very short words (likely not country names)
-    if len(name_lower) < 3:
+    # Skip if it's a number
+    if name_lower.isdigit():
         return None
     
+    # Try pycountry fuzzy search
     try:
-        result = pycountry.countries.search_fuzzy(name_lower)
+        result = pycountry.countries.search_fuzzy(name)
         if result:
-            code = result[0].alpha_3
-            # Prevent UMI (US Minor Outlying Islands) from matching "usa" queries
-            if code == 'UMI' and 'minor' not in name_lower and 'outlying' not in name_lower:
-                return 'USA'
-            return code
+            # Extra validation: fuzzy match should be reasonably close
+            matched_name = result[0].name.lower()
+            # Only accept if the input is at least 3 chars and somewhat matches
+            if len(name_lower) >= 3 and (
+                name_lower in matched_name or 
+                matched_name.startswith(name_lower[:3]) or
+                name_lower.startswith(matched_name[:3])
+            ):
+                return result[0].alpha_3
     except LookupError:
         pass
     
@@ -104,28 +153,92 @@ def detect_query_type(prompt):
         result['time_period'] = 'day'
         result['period_label'] = 'today'
     
+    # Check for specific date patterns
     now = datetime.datetime.now()
-    month_names = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-                   'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-                   'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
-                   'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12}
     
-    for month_name, month_num in month_names.items():
-        pattern = rf'{month_name}\s+(\d{{1,2}})'
+    # Month name mapping (must be checked in order to avoid partial matches)
+    month_patterns = [
+        ('january', 1), ('february', 2), ('march', 3), ('april', 4),
+        ('may', 5), ('june', 6), ('july', 7), ('august', 8),
+        ('september', 9), ('october', 10), ('november', 11), ('december', 12),
+        ('jan', 1), ('feb', 2), ('mar', 3), ('apr', 4),
+        ('jun', 6), ('jul', 7), ('aug', 8), ('sep', 9),
+        ('oct', 10), ('nov', 11), ('dec', 12)
+    ]
+    
+    # Try to find a date pattern
+    for month_name, month_num in month_patterns:
+        # Pattern: month day (e.g., "oct 30", "october 15")
+        pattern = rf'\b{month_name}\s+(\d{{1,2}})\b'
         match = re.search(pattern, prompt_lower)
         if match:
             day = int(match.group(1))
-            try:
-                date_obj = datetime.datetime(now.year, month_num, day)
-                result['is_specific_date'] = True
-                result['specific_date'] = date_obj.strftime('%Y%m%d')
-                result['time_period'] = 'specific'
-                result['period_label'] = date_obj.strftime('%B %d, %Y')
-                return result
-            except ValueError:
-                pass
+            if 1 <= day <= 31:
+                try:
+                    date_obj = datetime.datetime(now.year, month_num, day)
+                    result['is_specific_date'] = True
+                    result['specific_date'] = date_obj.strftime('%Y%m%d')
+                    result['time_period'] = 'specific'
+                    result['period_label'] = date_obj.strftime('%B %d, %Y')
+                    return result
+                except ValueError:
+                    pass
+        
+        # Pattern: day month (e.g., "30 oct", "15 october")
+        pattern2 = rf'\b(\d{{1,2}})\s+{month_name}\b'
+        match2 = re.search(pattern2, prompt_lower)
+        if match2:
+            day = int(match2.group(1))
+            if 1 <= day <= 31:
+                try:
+                    date_obj = datetime.datetime(now.year, month_num, day)
+                    result['is_specific_date'] = True
+                    result['specific_date'] = date_obj.strftime('%Y%m%d')
+                    result['time_period'] = 'specific'
+                    result['period_label'] = date_obj.strftime('%B %d, %Y')
+                    return result
+                except ValueError:
+                    pass
+    
+    # Check for month-only queries (e.g., "events in october", "october events")
+    for month_name, month_num in month_patterns:
+        # Pattern: just the month name (e.g., "in october", "october")
+        if month_name in prompt_lower:
+            # Make sure it's not already matched as a specific date
+            if not result['is_specific_date']:
+                try:
+                    # Create date range for the entire month
+                    import calendar
+                    year = now.year
+                    # If the month is in the future, assume last year
+                    if month_num > now.month:
+                        year = now.year - 1
+                    first_day = datetime.datetime(year, month_num, 1)
+                    last_day_num = calendar.monthrange(year, month_num)[1]
+                    last_day = datetime.datetime(year, month_num, last_day_num)
+                    
+                    result['is_month_range'] = True
+                    result['month_start'] = first_day.strftime('%Y%m%d')
+                    result['month_end'] = last_day.strftime('%Y%m%d')
+                    result['time_period'] = 'month_range'
+                    result['period_label'] = first_day.strftime('%B %Y')
+                    return result
+                except ValueError:
+                    pass
     
     return result
+
+
+# Regional codes mapping
+REGIONAL_CODES = {
+    'AFR': 'Africa', 'EUR': 'Europe', 'SAS': 'South Asia',
+    'EAS': 'East Asia', 'MDE': 'Middle East', 'OCE': 'Oceania',
+    'NAF': 'North Africa', 'WAF': 'West Africa', 'SAF': 'Southern Africa',
+    'EAF': 'East Africa', 'CAF': 'Central Africa', 'NAM': 'North America',
+    'SAM': 'South America', 'CAM': 'Central America', 'CAR': 'Caribbean',
+    'SEA': 'Southeast Asia', 'CAS': 'Central Asia', 'WEU': 'Western Europe',
+    'EEU': 'Eastern Europe', 'NEU': 'Northern Europe', 'SEU': 'Southern Europe'
+}
 
 
 def get_country(code):
@@ -137,30 +250,7 @@ def get_country(code):
     if len(code) < 2: 
         return None
     
-    # Handle regional/continental codes that aren't real countries
-    REGIONAL_CODES = {
-        'AFR': 'Africa',
-        'EUR': 'Europe',
-        'ASA': 'Asia',
-        'SAS': 'South Asia',
-        'EAS': 'East Asia',
-        'NAM': 'North America',
-        'SAM': 'South America',
-        'LAM': 'Latin America',
-        'MDE': 'Middle East',
-        'OCE': 'Oceania',
-        'CAR': 'Caribbean',
-        'CAS': 'Central Asia',
-        'SEA': 'Southeast Asia',
-        'NAF': 'North Africa',
-        'WAF': 'West Africa',
-        'EAF': 'East Africa',
-        'SAF': 'Southern Africa',
-        'WEU': 'Western Europe',
-        'EEU': 'Eastern Europe',
-        'SCN': 'Scandinavia',
-    }
-    
+    # Check regional codes first
     if code in REGIONAL_CODES:
         return REGIONAL_CODES[code]
     
@@ -176,7 +266,7 @@ def get_country(code):
                 return country.name
         
         return None
-    except Exception:
+    except:
         return None
 
 
