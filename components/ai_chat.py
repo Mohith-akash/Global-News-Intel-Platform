@@ -267,12 +267,26 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     # Filter out rows with no valid headline
                                     dd_filtered = dd[dd['HEADLINE'].notna()]
                                     
-                                    # Fallback: if all headlines were filtered out, use raw database HEADLINE
-                                    if dd_filtered.empty and 'headline' in [c.lower() for c in data.columns]:
+                                    # Fallback: if all headlines were filtered out, create from MAIN_ACTOR
+                                    if dd_filtered.empty:
                                         dd = data.copy()
                                         dd.columns = [col.upper() for col in dd.columns]
-                                        # Use raw HEADLINE, filter out only completely empty ones
-                                        dd = dd[dd['HEADLINE'].notna() & (dd['HEADLINE'].astype(str).str.strip() != '')]
+                                        # Create headline from MAIN_ACTOR if available
+                                        def create_fallback_headline(row):
+                                            actor = row.get('MAIN_ACTOR', '')
+                                            country = row.get('ACTOR_COUNTRY_CODE', '')
+                                            score = row.get('IMPACT_SCORE', 0)
+                                            if actor and len(str(actor)) > 3:
+                                                country_name = get_country(country) if country else ''
+                                                if score and score < -3:
+                                                    return f"Crisis event involving {actor}" + (f" in {country_name}" if country_name else "")
+                                                elif score and score > 3:
+                                                    return f"Positive development: {actor}" + (f" in {country_name}" if country_name else "")
+                                                else:
+                                                    return f"Event: {actor}" + (f" ({country_name})" if country_name else "")
+                                            return None
+                                        dd['HEADLINE'] = dd.apply(create_fallback_headline, axis=1)
+                                        dd = dd[dd['HEADLINE'].notna()]
                                         if 'ACTOR_COUNTRY_CODE' in dd.columns:
                                             dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
                                     else:
