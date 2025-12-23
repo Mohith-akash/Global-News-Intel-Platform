@@ -248,7 +248,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 25:
                                             if not (db_headline.isupper() and len(db_headline.split()) <= 3):
                                                 cleaned = clean_headline(db_headline)
-                                                if cleaned and len(cleaned.split()) >= 4:
+                                                if cleaned and len(cleaned.split()) >= 3:
                                                     headline = enhance_headline(cleaned)
                                         
                                         # Fall back to URL extraction
@@ -258,17 +258,11 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                                 None,
                                                 row.get('IMPACT_SCORE', None)
                                             )
-                                            if headline and len(headline.split()) < 4:
+                                            if headline and len(headline.split()) < 3:
                                                 headline = None
                                         
                                         headlines.append(headline)
                                     dd['HEADLINE'] = headlines
-                                    
-                                    # Fallback: if no headline, use MAIN_ACTOR as display text
-                                    dd['HEADLINE'] = dd.apply(
-                                        lambda row: row['HEADLINE'] if row['HEADLINE'] else (row.get('MAIN_ACTOR', 'Event')[:60] if row.get('MAIN_ACTOR') else None),
-                                        axis=1
-                                    )
                                     
                                     # Filter out rows with no valid headline
                                     dd = dd[dd['HEADLINE'].notna()]
