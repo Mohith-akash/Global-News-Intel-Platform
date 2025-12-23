@@ -9,8 +9,8 @@ from llama_index.llms.cerebras import Cerebras
 from llama_index.core import SQLDatabase, Settings
 from llama_index.core.query_engine import NLSQLTableQueryEngine
 
-from config import CEREBRAS_MODEL
-from database import get_db, detect_table
+from src.config import CEREBRAS_MODEL
+from src.database import get_db, detect_table
 
 logger = logging.getLogger("gdelt")
 

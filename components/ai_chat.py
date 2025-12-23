@@ -6,10 +6,10 @@ import re
 import pandas as pd
 import streamlit as st
 
-from database import safe_query
-from ai_engine import get_query_engine, get_cerebras_llm
-from data_processing import clean_headline, enhance_headline, extract_headline
-from utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
+from src.database import safe_query
+from src.ai_engine import get_query_engine, get_cerebras_llm
+from src.data_processing import clean_headline, enhance_headline, extract_headline
+from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
 
 
 def render_ai_chat(c, sql_db):

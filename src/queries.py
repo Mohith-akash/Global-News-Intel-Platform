@@ -5,8 +5,8 @@ Database query functions for GDELT platform.
 import datetime
 import streamlit as st
 
-from database import safe_query
-from utils import get_dates
+from src.database import safe_query
+from src.utils import get_dates
 
 
 @st.cache_data(ttl=300)

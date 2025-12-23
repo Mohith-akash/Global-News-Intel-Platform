@@ -4,7 +4,7 @@ Utility functions for GDELT platform.
 import datetime
 import re
 import pycountry
-from config import COUNTRY_ALIASES
+from src.config import COUNTRY_ALIASES
 
 
 def get_country_code(name):

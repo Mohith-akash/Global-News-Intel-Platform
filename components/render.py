@@ -8,12 +8,12 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from queries import (
+from src.queries import (
     get_metrics, get_alerts, get_trending, get_feed, get_countries,
     get_timeseries, get_sentiment, get_actors, get_distribution
 )
-from data_processing import process_df
-from utils import get_country
+from src.data_processing import process_df
+from src.utils import get_country
 
 
 def render_header():
