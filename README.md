@@ -114,18 +114,19 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **MotherDuck** | Serverless cloud DuckDB warehouse | Snowflake/Redshift |
 | **GitHub Actions** | CI/CD and scheduled pipeline execution | AWS Lambda |
 | **SQL** | Data transformations in pipeline.py | dbt Cloud |
+| **Pandas** | Data manipulation and processing | PySpark |
 
 ### AI/ML
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
-| **LlamaIndex** | RAG + Text-to-SQL query engine | Custom NLP |
+| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4o / Claude |
+| **LlamaIndex** | RAG + Text-to-SQL query engine | LangChain / Custom NLP |
 
 ### Frontend
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Streamlit** | Interactive dashboard framework | Tableau/Power BI |
-| **Plotly** | Dynamic charts and visualizations | D3.js |
+| **Streamlit** | Interactive dashboard framework | Tableau / Power BI |
+| **Plotly** | Dynamic charts and visualizations | D3.js / Chart.js |
 
 ### Other Skills Demonstrated
 - **Python** (Pandas, Requests, RegEx)
