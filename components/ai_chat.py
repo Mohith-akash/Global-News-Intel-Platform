@@ -31,12 +31,8 @@ def render_ai_chat(c, sql_db):
                     st.code(sel["sql"], language="sql")
 
     st.markdown('''<div class="ai-info-card">
-        <div class="ai-example-label">💡 WHAT I CAN ANSWER:</div>
+        <div class="ai-example-label">💡 EXAMPLE QUESTIONS:</div>
         <div class="ai-examples">• "What happened in India this week?"<br>• "Top 5 countries by crisis events"<br>• "Show major events in October"<br>• "How many events in Germany?"</div>
-        <div style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #1e3a5f;">
-            <span style="color:#f59e0b;font-size:0.75rem;">⚠️ LIMITATIONS:</span>
-            <span style="color:#94a3b8;font-size:0.75rem;"> Topic searches (e.g., "Electric Vehicles") not supported. Data: Sep 2024 – Present.</span>
-        </div>
     </div>''', unsafe_allow_html=True)
 
     prompt = st.chat_input("Ask about global events...", key="chat")
@@ -369,14 +365,8 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
                                     st.code(sql, language='sql')
                         else:
                             st.warning("📭 No results found for this query")
-                            # Provide helpful explanation
                             st.markdown('''<div style="background:#1e293b;border-radius:8px;padding:1rem;margin-top:0.5rem;">
-                                <div style="color:#f59e0b;font-weight:600;margin-bottom:0.5rem;">💡 Why no results?</div>
-                                <ul style="color:#94a3b8;font-size:0.85rem;margin:0;padding-left:1.25rem;">
-                                    <li><b>Topic-based searches</b> (e.g., "Electric Vehicles", "Climate Change") are not supported — I can only filter by country, date, and severity.</li>
-                                    <li><b>Date range</b> may be outside available data (Sep 2024 – Present).</li>
-                                    <li><b>Try rephrasing</b> with a country name or time period (e.g., "events in Germany this week").</li>
-                                </ul>
+                                <div style="color:#94a3b8;font-size:0.85rem;">💡 Try rephrasing with a country name or time period (e.g., "events in Germany this week"). Data available: Oct 2025 – Present.</div>
                             </div>''', unsafe_allow_html=True)
                             answer = "No results found."
                             with st.expander("🔍 SQL"):
