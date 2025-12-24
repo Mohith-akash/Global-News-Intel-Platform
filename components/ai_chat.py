@@ -32,7 +32,7 @@ def render_ai_chat(c, sql_db):
 
     st.markdown('''<div class="ai-info-card">
         <div class="ai-example-label">💡 EXAMPLE QUESTIONS:</div>
-        <div class="ai-examples">• "What major events happened this week?"<br>• "Top 5 countries by event count"<br>• "Show crisis-level events"</div>
+        <div class="ai-examples">• "What happened in India this week?"<br>• "Top 5 countries by crisis events"<br>• "Show major events in October"<br>• "How many events in Germany?"</div>
     </div>''', unsafe_allow_html=True)
 
     prompt = st.chat_input("Ask about global events...", key="chat")
@@ -365,6 +365,9 @@ Give 2-3 sentences about each event - what happened, who's involved, why it matt
                                     st.code(sql, language='sql')
                         else:
                             st.warning("📭 No results found for this query")
+                            st.markdown('''<div style="background:#1e293b;border-radius:8px;padding:1rem;margin-top:0.5rem;">
+                                <div style="color:#94a3b8;font-size:0.85rem;">💡 Try rephrasing with a country name or time period (e.g., "events in Germany this week"). Data available: Oct 2025 – Present.</div>
+                            </div>''', unsafe_allow_html=True)
                             answer = "No results found."
                             with st.expander("🔍 SQL"):
                                 st.code(sql, language='sql')
