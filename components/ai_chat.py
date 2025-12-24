@@ -337,7 +337,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
 
 Question: {prompt}
 
-Give a brief 3-5 line summary highlighting key patterns or notable insights across these events. Don't repeat the headlines - add context or analysis."""
+For each event, provide ONE brief sentence of context or insight that adds value beyond the headline. Keep it concise - no repetition."""
 
                                     answer = str(llm.complete(ai_prompt))
                                     st.markdown(answer)
