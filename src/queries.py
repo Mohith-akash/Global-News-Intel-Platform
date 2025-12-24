@@ -41,15 +41,6 @@ def get_alerts(_c, t):
     """)
 
 
-@st.cache_data(ttl=300)
-def get_headlines(_c, t):
-    dates = get_dates()
-    return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
-        FROM {t} WHERE NEWS_LINK IS NOT NULL AND ARTICLE_COUNT > 5 AND DATE >= '{dates['week_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL
-        ORDER BY DATE DESC, ARTICLE_COUNT DESC LIMIT 500
-    """)
-
 
 @st.cache_data(ttl=300)
 def get_trending(_c, t):

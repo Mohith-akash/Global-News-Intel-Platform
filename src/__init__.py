@@ -11,10 +11,8 @@ from src.utils import (
     get_country, get_impact_label, get_intensity_label
 )
 from src.queries import (
-    get_metrics, get_alerts, get_headlines, get_trending,
+    get_metrics, get_alerts, get_trending,
     get_feed, get_countries, get_timeseries, get_sentiment,
     get_actors, get_distribution
 )
-from src.data_processing import (
-    clean_headline, enhance_headline, extract_headline, process_df
-)
+from src.data_processing import extract_headline, process_df
