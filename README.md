@@ -4,7 +4,9 @@
   <img src="https://img.shields.io/badge/DuckDB-Motherduck-FDD023?style=for-the-badge&logo=duckdb&logoColor=black" alt="DuckDB">
   <img src="https://img.shields.io/badge/Dagster-Orchestration-4F43DD?style=for-the-badge&logo=dagster&logoColor=white" alt="Dagster">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
+  <a href="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions"><img src="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions/workflows/hourly_update.yml/badge.svg" alt="Pipeline"></a>
 </p>
+
 
 <h1 align="center">🌐 Global News Intelligence Platform</h1>
 
@@ -46,6 +48,22 @@ A full-stack data engineering project that ingests, processes, and visualizes **
 
 ### What is GDELT?
 The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news media from nearly every country in 100+ languages, identifying people, locations, themes, and emotions driving global society.
+
+---
+
+## 📸 Dashboard Preview
+
+### Home - KPIs & Trending News
+![Dashboard Home](docs/images/dashboard_home.png)
+
+### Analytics - Actors & Countries
+![Dashboard Charts](docs/images/dashboard_charts.png)
+
+### AI Chat - Natural Language Queries
+![AI Chat](docs/images/ai_chat.png)
+
+### Trends - Event Feed
+![Trends Tab](docs/images/trends_tab.png)
 
 ---
 
@@ -96,18 +114,19 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **MotherDuck** | Serverless cloud DuckDB warehouse | Snowflake/Redshift |
 | **GitHub Actions** | CI/CD and scheduled pipeline execution | AWS Lambda |
 | **SQL** | Data transformations in pipeline.py | dbt Cloud |
+| **Pandas** | Data manipulation and processing | PySpark |
 
 ### AI/ML
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
-| **LlamaIndex** | RAG + Text-to-SQL query engine | Custom NLP |
+| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4o / Claude |
+| **LlamaIndex** | RAG + Text-to-SQL query engine | LangChain / Custom NLP |
 
 ### Frontend
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Streamlit** | Interactive dashboard framework | Tableau/Power BI |
-| **Plotly** | Dynamic charts and visualizations | D3.js |
+| **Streamlit** | Interactive dashboard framework | Tableau / Power BI |
+| **Plotly** | Dynamic charts and visualizations | D3.js / Chart.js |
 
 ### Other Skills Demonstrated
 - **Python** (Pandas, Requests, RegEx)

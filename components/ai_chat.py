@@ -32,7 +32,7 @@ def render_ai_chat(c, sql_db):
 
     st.markdown('''<div class="ai-info-card">
         <div class="ai-example-label">💡 EXAMPLE QUESTIONS:</div>
-        <div class="ai-examples">• "What happened in India this week?"<br>• "Top 5 countries by crisis events"<br>• "Show major events in October"<br>• "How many events in Germany?"</div>
+        <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East" (14 countries)<br>• "Events in Gulf region" (6 countries)<br>• "Major events in Europe" (16 countries)</div>
     </div>''', unsafe_allow_html=True)
 
     prompt = st.chat_input("Ask about global events...", key="chat")
@@ -51,6 +51,9 @@ def render_ai_chat(c, sql_db):
                 
                 if qi['is_specific_date'] and qi['specific_date']:
                     date_filter = f"DATE = '{qi['specific_date']}'"
+                elif qi.get('is_week_range') and qi.get('week_start') and qi.get('week_end'):
+                    # Handle "last week" or "this week" queries
+                    date_filter = f"DATE >= '{qi['week_start']}' AND DATE <= '{qi['week_end']}'"
                 elif qi.get('is_month_range') and qi.get('month_start') and qi.get('month_end'):
                     # Handle month-only queries like "events in october"
                     date_filter = f"DATE >= '{qi['month_start']}' AND DATE <= '{qi['month_end']}'"
@@ -90,6 +93,16 @@ def render_ai_chat(c, sql_db):
                         codes = []
                         clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
                         
+                        # Check for region aliases first (e.g., "middle east" -> multiple country codes)
+                        try:
+                            from src.config import REGION_ALIASES
+                            for region, region_codes in REGION_ALIASES.items():
+                                if region in clean_text:
+                                    codes.extend(region_codes)
+                                    return codes  # Return region codes immediately
+                        except ImportError:
+                            pass
+                        
                         # Check for multi-word phrases first
                         multi_word_regions = [
                             'middle east', 'united states', 'united kingdom', 'great britain',
@@ -127,7 +140,11 @@ def render_ai_chat(c, sql_db):
                         # Check if user specified a country for crisis events
                         crisis_codes = get_country_codes_from_prompt(prompt)
                         if crisis_codes:
-                            crisis_country_filter = f"ACTOR_COUNTRY_CODE = '{crisis_codes[0]}'"
+                            if len(crisis_codes) == 1:
+                                crisis_country_filter = f"ACTOR_COUNTRY_CODE = '{crisis_codes[0]}'"
+                            else:
+                                codes_str = "', '".join(crisis_codes)
+                                crisis_country_filter = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
                             sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {crisis_country_filter} AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
                         else:
                             sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
@@ -260,6 +277,8 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                             return None
                                         # Remove leading dots and punctuation
                                         text = re_mod.sub(r'^[.,;:\'"!?\-_\s\.]+', '', text)
+                                        # Remove embedded or trailing date-time stamps (like 20251216151211)
+                                        text = re_mod.sub(r'\d{8,}', '', text)
                                         # Remove trailing alphanumeric garbage (like Four202512230l)
                                         text = re_mod.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
                                         text = re_mod.sub(r'\d+[A-Za-z]?$', '', text)
@@ -337,7 +356,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
 
 Question: {prompt}
 
-Give 2-3 sentences about each event - what happened, who's involved, why it matters."""
+There are exactly {len(summary_data)} events. Describe EACH one with 2-3 sentences. Number 1 through {len(summary_data)}. Do NOT skip any."""
 
                                     answer = str(llm.complete(ai_prompt))
                                     st.markdown(answer)

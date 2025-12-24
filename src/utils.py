@@ -146,6 +146,28 @@ def detect_query_type(prompt):
     if 'year' in prompt_lower or 'all data' in prompt_lower:
         result['time_period'] = 'all'
         result['period_label'] = 'all available data'
+    elif 'last week' in prompt_lower:
+        # Calculate actual previous calendar week (Monday-Sunday)
+        now = datetime.datetime.now()
+        days_since_monday = now.weekday()
+        last_monday = now - datetime.timedelta(days=days_since_monday + 7)
+        last_sunday = last_monday + datetime.timedelta(days=6)
+        result['is_week_range'] = True
+        result['week_start'] = last_monday.strftime('%Y%m%d')
+        result['week_end'] = last_sunday.strftime('%Y%m%d')
+        result['time_period'] = 'last_week'
+        result['period_label'] = f"last week ({last_monday.strftime('%b %d')} - {last_sunday.strftime('%b %d')})"
+    elif 'this week' in prompt_lower:
+        # Calculate current calendar week (Monday-Sunday)
+        now = datetime.datetime.now()
+        days_since_monday = now.weekday()
+        this_monday = now - datetime.timedelta(days=days_since_monday)
+        this_sunday = this_monday + datetime.timedelta(days=6)
+        result['is_week_range'] = True
+        result['week_start'] = this_monday.strftime('%Y%m%d')
+        result['week_end'] = this_sunday.strftime('%Y%m%d')
+        result['time_period'] = 'this_week'
+        result['period_label'] = f"this week ({this_monday.strftime('%b %d')} - {this_sunday.strftime('%b %d')})"
     elif 'month' in prompt_lower or '30 day' in prompt_lower:
         result['time_period'] = 'month'
         result['period_label'] = 'the past month'
