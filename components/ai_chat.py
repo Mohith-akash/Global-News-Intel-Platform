@@ -337,7 +337,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
 
 Question: {prompt}
 
-For each event, provide ONE brief sentence of context or insight that adds value beyond the headline. Keep it concise - no repetition."""
+For each event, give 2-4 sentences of context or insight. Add value beyond the headline - don't just restate it. Be informative but concise."""
 
                                     answer = str(llm.complete(ai_prompt))
                                     st.markdown(answer)
