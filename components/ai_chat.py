@@ -337,7 +337,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
 
 Question: {prompt}
 
-Briefly describe ALL the events above. For each: what happened, who's involved, why it matters (1-2 sentences each)."""
+Give a brief 3-5 line summary highlighting key patterns or notable insights across these events. Don't repeat the headlines - add context or analysis."""
 
                                     answer = str(llm.complete(ai_prompt))
                                     st.markdown(answer)
