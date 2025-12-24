@@ -51,6 +51,9 @@ def render_ai_chat(c, sql_db):
                 
                 if qi['is_specific_date'] and qi['specific_date']:
                     date_filter = f"DATE = '{qi['specific_date']}'"
+                elif qi.get('is_week_range') and qi.get('week_start') and qi.get('week_end'):
+                    # Handle "last week" or "this week" queries
+                    date_filter = f"DATE >= '{qi['week_start']}' AND DATE <= '{qi['week_end']}'"
                 elif qi.get('is_month_range') and qi.get('month_start') and qi.get('month_end'):
                     # Handle month-only queries like "events in october"
                     date_filter = f"DATE >= '{qi['month_start']}' AND DATE <= '{qi['month_end']}'"
@@ -89,6 +92,16 @@ def render_ai_chat(c, sql_db):
                     def get_country_codes_from_prompt(text):
                         codes = []
                         clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
+                        
+                        # Check for region aliases first (e.g., "middle east" -> multiple country codes)
+                        try:
+                            from src.config import REGION_ALIASES
+                            for region, region_codes in REGION_ALIASES.items():
+                                if region in clean_text:
+                                    codes.extend(region_codes)
+                                    return codes  # Return region codes immediately
+                        except ImportError:
+                            pass
                         
                         # Check for multi-word phrases first
                         multi_word_regions = [

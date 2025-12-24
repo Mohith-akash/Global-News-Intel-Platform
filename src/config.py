@@ -36,8 +36,6 @@ COUNTRY_ALIASES = {
     'palestine': 'PSE', 'palestinian': 'PSE',
     'ukraine': 'UKR', 'ukrainian': 'UKR',
     'taiwan': 'TWN', 'taiwanese': 'TWN',
-    # Middle East (maps to Israel as a central ME country for queries)
-    'middle east': 'ISR', 'mideast': 'ISR',
     # Other regions mapped to prominent countries
     'syria': 'SYR', 'syrian': 'SYR',
     'iraq': 'IRQ', 'iraqi': 'IRQ',
@@ -82,3 +80,12 @@ COUNTRY_ALIASES = {
 }
 
 REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "CEREBRAS_API_KEY"]
+# Region to country codes mapping (for queries like "Middle East")
+REGION_ALIASES = {
+    'middle east': ['ISR', 'SAU', 'IRN', 'IRQ', 'SYR', 'JOR', 'LBN', 'ARE', 'KWT', 'QAT', 'BHR', 'OMN', 'YEM', 'PSE'],
+    'mideast': ['ISR', 'SAU', 'IRN', 'IRQ', 'SYR', 'JOR', 'LBN', 'ARE', 'KWT', 'QAT', 'BHR', 'OMN', 'YEM', 'PSE'],
+    'gulf': ['SAU', 'ARE', 'KWT', 'QAT', 'BHR', 'OMN'],
+    'europe': ['DEU', 'FRA', 'GBR', 'ITA', 'ESP', 'NLD', 'BEL', 'POL', 'SWE', 'NOR', 'DNK', 'FIN', 'AUT', 'CHE', 'GRC', 'PRT'],
+    'asia': ['CHN', 'JPN', 'KOR', 'IND', 'IDN', 'THA', 'VNM', 'MYS', 'SGP', 'PHL', 'PAK', 'BGD'],
+    'africa': ['NGA', 'ZAF', 'EGY', 'KEN', 'ETH', 'GHA', 'MAR', 'DZA'],
+}
