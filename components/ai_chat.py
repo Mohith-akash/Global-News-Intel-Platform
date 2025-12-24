@@ -32,7 +32,7 @@ def render_ai_chat(c, sql_db):
 
     st.markdown('''<div class="ai-info-card">
         <div class="ai-example-label">💡 EXAMPLE QUESTIONS:</div>
-        <div class="ai-examples">• "What happened in India this week?"<br>• "Top 5 countries by crisis events"<br>• "Show major events in October"<br>• "How many events in Germany?"</div>
+        <div class="ai-examples">• "What happened in India this week?"<br>• "Top 5 countries by crisis events"<br>• "Show major events in October"<br>• "Crisis events in the Middle East"</div>
     </div>''', unsafe_allow_html=True)
 
     prompt = st.chat_input("Ask about global events...", key="chat")
@@ -337,7 +337,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
 
 Question: {prompt}
 
-For each event, give 2-4 sentences of context or insight. Add value beyond the headline - don't just restate it. Be informative but concise."""
+You MUST describe ALL events listed. For each event: 2-3 sentences adding context beyond the headline. Number them clearly."""
 
                                     answer = str(llm.complete(ai_prompt))
                                     st.markdown(answer)
