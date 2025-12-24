@@ -166,10 +166,10 @@ def detect_query_type(prompt):
         ('oct', 10), ('nov', 11), ('dec', 12)
     ]
     
-    # Try to find a date pattern
+    # Try to find a date pattern (use word boundaries to avoid matching 'mar' in 'summarize')
     for month_name, month_num in month_patterns:
-        # Pattern: month day (e.g., "oct 30", "october 15")
-        pattern = rf'\b{month_name}\s+(\d{{1,2}})\b'
+        # Pattern: month day (e.g., "oct 30", "october 15") - require word boundary
+        pattern = rf'(?:^|\s){month_name}\s+(\d{{1,2}})(?:\s|$|[^a-z])'
         match = re.search(pattern, prompt_lower)
         if match:
             day = int(match.group(1))
@@ -201,9 +201,11 @@ def detect_query_type(prompt):
                     pass
     
     # Check for month-only queries (e.g., "events in october", "october events")
+    # Use word boundary regex to avoid false matches like 'summarize' → 'mar'
     for month_name, month_num in month_patterns:
-        # Pattern: just the month name (e.g., "in october", "october")
-        if month_name in prompt_lower:
+        # Pattern: month name as a standalone word (not part of another word)
+        month_pattern = rf'(?:^|\s){month_name}(?:\s|$|[^a-z])'
+        if re.search(month_pattern, prompt_lower):
             # Make sure it's not already matched as a specific date
             if not result['is_specific_date']:
                 try:
