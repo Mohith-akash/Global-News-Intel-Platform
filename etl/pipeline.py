@@ -17,6 +17,12 @@ TARGET_TABLE = "events_dagster"
 MAX_RETRIES = 3
 RETRY_DELAY = 5
 
+# Voyage AI Configuration for RAG
+VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
+VOYAGE_MODEL = "voyage-3.5-lite"
+EMBEDDING_DIMENSIONS = 1024
+MIN_ARTICLE_COUNT_FOR_EMBEDDING = 3  # Only embed events with 3+ articles (6+ months free tier)
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -165,7 +171,127 @@ def clean_url_segment(text):
     return ' '.join(result)
 
 
+def get_embedding(text: str) -> list:
+    """Get embedding from Voyage AI. Returns None if failed."""
+    api_key = os.getenv("VOYAGE_API_KEY")
+    if not api_key or not text or len(text.strip()) < 15:
+        return None
+    
+    try:
+        response = requests.post(
+            VOYAGE_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "input": [text.strip()[:512]],
+                "model": VOYAGE_MODEL
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()["data"][0]["embedding"]
+        else:
+            logger.warning(f"Voyage API error: {response.status_code}")
+            return None
+    except Exception as e:
+        logger.warning(f"Embedding error: {e}")
+        return None
+
+
+def get_embeddings_batch(headlines: list, batch_size: int = 50) -> list:
+    """Get embeddings for multiple headlines. Returns list of embeddings (None for failed)."""
+    api_key = os.getenv("VOYAGE_API_KEY")
+    if not api_key:
+        logger.info("VOYAGE_API_KEY not set, skipping embeddings")
+        return [None] * len(headlines)
+    
+    results = []
+    
+    for i in range(0, len(headlines), batch_size):
+        batch = headlines[i:i + batch_size]
+        # Clean batch
+        clean_batch = []
+        valid_indices = []
+        for j, h in enumerate(batch):
+            if h and isinstance(h, str) and len(h.strip()) >= 15:
+                clean_batch.append(h.strip()[:512])
+                valid_indices.append(j)
+        
+        if not clean_batch:
+            results.extend([None] * len(batch))
+            continue
+        
+        try:
+            response = requests.post(
+                VOYAGE_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "input": clean_batch,
+                    "model": VOYAGE_MODEL
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                embeddings = [d["embedding"] for d in response.json()["data"]]
+                # Map back
+                batch_results = [None] * len(batch)
+                for j, emb in zip(valid_indices, embeddings):
+                    batch_results[j] = emb
+                results.extend(batch_results)
+            else:
+                logger.warning(f"Voyage batch error: {response.status_code}")
+                results.extend([None] * len(batch))
+        except Exception as e:
+            logger.warning(f"Batch embedding error: {e}")
+            results.extend([None] * len(batch))
+        
+        # Rate limiting: 100 req/min for Voyage
+        time.sleep(0.6)
+    
+    return results
+
+
+def create_embedding_text(row):
+    """Create rich embedding text from multiple fields for better semantic search."""
+    parts = []
+    
+    # Add actor name
+    actor = row.get('MAIN_ACTOR', '')
+    if actor and isinstance(actor, str) and len(actor.strip()) > 2:
+        parts.append(actor.strip())
+    
+    # Add country code (will be useful for semantic matching)
+    country = row.get('ACTOR_COUNTRY_CODE', '')
+    if country and isinstance(country, str) and len(country) == 3:
+        parts.append(country)
+    
+    # Add headline if available (highest quality text)
+    headline = row.get('HEADLINE', '')
+    if headline and isinstance(headline, str) and len(headline.strip()) > 10:
+        parts.append(headline.strip())
+    else:
+        # No headline - add a generic event description
+        parts.append("news event")
+    
+    # Combine all parts
+    text = ' '.join(parts)
+    
+    # Ensure minimum length for meaningful embedding
+    if len(text) < 15:
+        return None
+    
+    return text[:512]  # Limit to 512 chars for API
+
+
 def get_gdelt_url():
+    """Get the URL for the latest GDELT export file."""
     now = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=20)
     rounded_minute = (now.minute // 15) * 15
     rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
@@ -263,7 +389,7 @@ def select_best_headline_per_event(df):
 
 @asset
 def gdelt_raw_data() -> pd.DataFrame:
-    """Extract raw GDELT data with best headline selection per event."""
+    """Extract raw GDELT data with best headline selection per event and compute embeddings."""
     logger.info("Starting GDELT extraction")
     url = get_gdelt_url()
     
@@ -293,6 +419,31 @@ def gdelt_raw_data() -> pd.DataFrame:
         # Select best headline from all URLs per event
         df = select_best_headline_per_event(df)
         
+        # Compute embeddings for events with ARTICLE_COUNT >= 3 (RAG support)
+        # Uses combined fields: MAIN_ACTOR + COUNTRY + HEADLINE for better coverage
+        if not df.empty:
+            # Filter to events worth embedding (quality filter + token efficiency)
+            embed_mask = df['ARTICLE_COUNT'] >= MIN_ARTICLE_COUNT_FOR_EMBEDDING
+            events_to_embed = df[embed_mask]
+            
+            if not events_to_embed.empty:
+                # Create embedding text from combined fields
+                embedding_texts = events_to_embed.apply(create_embedding_text, axis=1).tolist()
+                
+                logger.info(f"Computing embeddings for {len(embedding_texts):,} events (ARTICLE_COUNT >= {MIN_ARTICLE_COUNT_FOR_EMBEDDING})...")
+                embeddings = get_embeddings_batch(embedding_texts)
+                
+                # Assign embeddings back to dataframe
+                df['EMBEDDING'] = None
+                df.loc[embed_mask, 'EMBEDDING'] = embeddings
+                embedded_count = sum(1 for e in embeddings if e is not None)
+                logger.info(f"Computed {embedded_count:,} embeddings")
+            else:
+                df['EMBEDDING'] = None
+                logger.info("No events met embedding criteria (ARTICLE_COUNT >= 3)")
+        else:
+            df['EMBEDDING'] = None
+        
         return df
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -301,7 +452,7 @@ def gdelt_raw_data() -> pd.DataFrame:
 
 @asset
 def gdelt_motherduck_table(gdelt_raw_data: pd.DataFrame) -> Output:
-    """Load data into MotherDuck with deduplication."""
+    """Load data into MotherDuck with deduplication and embeddings."""
     if gdelt_raw_data.empty:
         return Output(None, metadata={"status": "Skipped", "rows": 0})
 
@@ -312,6 +463,13 @@ def gdelt_motherduck_table(gdelt_raw_data: pd.DataFrame) -> Output:
     try:
         with duckdb.connect(f'md:gdelt_db?motherduck_token={token}') as con:
             try:
+                # Check if EMBEDDING column exists, add if not
+                try:
+                    con.execute(f"SELECT EMBEDDING FROM {TARGET_TABLE} LIMIT 1")
+                except:
+                    logger.info("Adding EMBEDDING column to table...")
+                    con.execute(f"ALTER TABLE {TARGET_TABLE} ADD COLUMN EMBEDDING DOUBLE[]")
+                
                 existing = con.execute(f"SELECT EVENT_ID FROM {TARGET_TABLE} WHERE DATE >= '{gdelt_raw_data['DATE'].min()}'").df()
                 if not existing.empty:
                     gdelt_raw_data = gdelt_raw_data[~gdelt_raw_data['EVENT_ID'].isin(existing['EVENT_ID'])]
@@ -319,12 +477,13 @@ def gdelt_motherduck_table(gdelt_raw_data: pd.DataFrame) -> Output:
                 if gdelt_raw_data.empty:
                     return Output("No new data", metadata={"status": "Skipped", "rows": 0})
                 
+                # Insert with EMBEDDING column
                 con.execute(f"""
                     INSERT INTO {TARGET_TABLE} 
                     (EVENT_ID, DATE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, EVENT_CATEGORY_CODE, 
-                     IMPACT_SCORE, ARTICLE_COUNT, SENTIMENT_SCORE, NEWS_LINK, HEADLINE)
+                     IMPACT_SCORE, ARTICLE_COUNT, SENTIMENT_SCORE, NEWS_LINK, HEADLINE, EMBEDDING)
                     SELECT EVENT_ID, DATE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, EVENT_CATEGORY_CODE, 
-                           IMPACT_SCORE, ARTICLE_COUNT, SENTIMENT_SCORE, NEWS_LINK, HEADLINE
+                           IMPACT_SCORE, ARTICLE_COUNT, SENTIMENT_SCORE, NEWS_LINK, HEADLINE, EMBEDDING
                     FROM gdelt_raw_data
                 """)
             except Exception as e:
@@ -334,7 +493,8 @@ def gdelt_motherduck_table(gdelt_raw_data: pd.DataFrame) -> Output:
                     raise e
             
             total = con.execute(f"SELECT COUNT(*) FROM {TARGET_TABLE}").fetchone()[0]
-            return Output(f"Inserted {len(gdelt_raw_data):,}", metadata={"rows": len(gdelt_raw_data), "total": total})
+            embedded = con.execute(f"SELECT COUNT(*) FROM {TARGET_TABLE} WHERE EMBEDDING IS NOT NULL").fetchone()[0]
+            return Output(f"Inserted {len(gdelt_raw_data):,}", metadata={"rows": len(gdelt_raw_data), "total": total, "embedded": embedded})
     except Exception as e:
         return Output(None, metadata={"status": "Error", "message": str(e)})
 

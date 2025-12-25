@@ -4,6 +4,12 @@ Configuration for GDELT platform.
 
 CEREBRAS_MODEL = "llama3.1-8b"
 
+# RAG Configuration (Voyage AI)
+VOYAGE_MODEL = "voyage-3.5-lite"  # 200M free tokens
+EMBEDDING_DIMENSIONS = 1024  # voyage-3.5-lite output dimensions
+RAG_TOP_K = 10  # Number of similar headlines to retrieve
+RAG_BACKFILL_DAYS = 14  # Number of days to backfill embeddings
+
 COUNTRY_ALIASES = {
     # United States
     'usa': 'USA', 'us': 'USA', 'america': 'USA', 'united states': 'USA', 

@@ -43,3 +43,10 @@ jobs:
         python -m dagster job execute -f etl/pipeline.py -j gdelt_ingestion_job
         
         echo "✅ Data Refresh Complete."
+
+    # 5. Keep Streamlit app awake (prevents sleep due to inactivity)
+    - name: Keep Streamlit Alive
+      run: |
+        echo "🔄 Pinging Streamlit app to prevent sleep..."
+        curl -s -o /dev/null -w "%{http_code}" https://global-news-intel-platform.streamlit.app/ || true
+        echo "✅ Keep-alive ping sent."
