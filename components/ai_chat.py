@@ -1,5 +1,6 @@
 """
 AI Chat component for GDELT dashboard.
+Supports two modes: SQL (precise queries) and RAG (semantic search).
 """
 
 import re
@@ -10,32 +11,132 @@ from src.database import safe_query
 from src.ai_engine import get_query_engine, get_cerebras_llm
 from src.data_processing import extract_headline
 from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
+from src.rag_engine import rag_query, get_voyage_api_key
 
 
 def render_ai_chat(c, sql_db):
+    """Main AI Chat component with SQL and RAG sub-tabs."""
     if "qa_history" not in st.session_state:
         st.session_state.qa_history = []
+    if "ai_mode" not in st.session_state:
+        st.session_state.ai_mode = "sql"
 
+    # Check if RAG is available
+    rag_available = get_voyage_api_key() is not None
+    
+    # Previous conversations (shared between modes)
     if st.session_state.qa_history:
         past = st.session_state.qa_history[-5:]
         with st.expander("🕒 Previous Conversations", expanded=False):
             idx = st.selectbox("Select", range(len(past)), format_func=lambda i: (past[i]["question"][:70] + "…") if len(past[i]["question"]) > 70 else past[i]["question"], key="prev_select")
             sel = past[idx]
+            mode_badge = "🔍 SQL" if sel.get("mode") == "sql" else "🧠 RAG"
             st.markdown(f'''<div class="prev-convo-card">
-                <div class="prev-convo-label">💬 Previous Conversation</div>
+                <div class="prev-convo-label">💬 Previous Conversation ({mode_badge})</div>
                 <div class="prev-convo-q"><b>Q:</b></div><div class="prev-convo-text">{sel['question']}</div>
                 <div class="prev-convo-q" style="margin-top:0.5rem;"><b>A:</b></div><div class="prev-convo-text">{sel['answer']}</div>
             </div>''', unsafe_allow_html=True)
             if sel.get("sql"):
-                with st.expander("🔍 SQL Query"):
+                with st.expander("🔍 Query Details"):
                     st.code(sel["sql"], language="sql")
 
-    st.markdown('''<div class="ai-info-card">
-        <div class="ai-example-label">💡 EXAMPLE QUESTIONS:</div>
-        <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East" (14 countries)<br>• "Events in Gulf region" (6 countries)<br>• "Major events in Europe" (16 countries)</div>
-    </div>''', unsafe_allow_html=True)
+    # Sub-tabs for SQL and RAG modes
+    sql_tab, rag_tab = st.tabs(["🔍 SQL Mode", "🧠 RAG Mode"])
+    
+    with sql_tab:
+        st.markdown('''<div class="ai-info-card">
+            <div class="ai-example-label">💡 SQL MODE - Precise Queries:</div>
+            <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East"<br>• "Top 5 countries by events"<br>• "How many events in October?"</div>
+        </div>''', unsafe_allow_html=True)
+        render_sql_chat(c, sql_db)
+    
+    with rag_tab:
+        if not rag_available:
+            st.warning("⚠️ RAG Mode requires VOYAGE_API_KEY. Add it to your environment or Streamlit secrets.")
+            st.markdown('''<div class="ai-info-card">
+                <div class="ai-example-label">🔑 To enable RAG Mode:</div>
+                <div class="ai-examples">1. Get free API key at <a href="https://www.voyageai.com/" target="_blank">voyageai.com</a><br>2. Add VOYAGE_API_KEY to your .env file or Streamlit secrets</div>
+            </div>''', unsafe_allow_html=True)
+        else:
+            st.markdown('''<div class="ai-info-card">
+                <div class="ai-example-label">💡 RAG MODE - Semantic Search:</div>
+                <div class="ai-examples">• "What are the tensions in Asia about?"<br>• "Tell me about climate-related events"<br>• "What's happening with trade disputes?"<br>• "Summarize recent diplomatic activities"</div>
+            </div>''', unsafe_allow_html=True)
+            render_rag_chat(c)
 
-    prompt = st.chat_input("Ask about global events...", key="chat")
+
+def render_rag_chat(c):
+    """RAG-based semantic search chat."""
+    from src.ai_engine import get_cerebras_llm
+    from src.rag_engine import rag_query
+    from src.utils import get_country, get_impact_label
+    
+    prompt = st.chat_input("Ask about events semantically...", key="rag_chat")
+    if prompt:
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        with st.chat_message("assistant"):
+            llm = get_cerebras_llm()
+            if not llm:
+                st.error("❌ Cerebras AI not available")
+                return
+            
+            with st.spinner("🧠 Searching semantically..."):
+                try:
+                    result = rag_query(prompt, c, llm, top_k=10)
+                    
+                    # Display answer
+                    st.markdown(result["answer"])
+                    
+                    # Display retrieved headlines
+                    if not result["headlines"].empty:
+                        df = result["headlines"].copy()
+                        
+                        # Format for display
+                        if 'ACTOR_COUNTRY_CODE' in df.columns:
+                            df['COUNTRY'] = df['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
+                        if 'IMPACT_SCORE' in df.columns:
+                            df['SEVERITY'] = df['IMPACT_SCORE'].apply(get_impact_label)
+                        if 'DATE' in df.columns:
+                            try:
+                                df['DATE'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%b %d')
+                            except:
+                                pass
+                        if 'similarity' in df.columns:
+                            df['RELEVANCE'] = (df['similarity'] * 100).round(1).astype(str) + '%'
+                        
+                        with st.expander("📋 Retrieved Headlines", expanded=True):
+                            display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY', 'RELEVANCE']
+                            display_cols = [col for col in display_cols if col in df.columns]
+                            st.dataframe(
+                                df[display_cols],
+                                hide_index=True,
+                                column_config={
+                                    "DATE": st.column_config.TextColumn("Date", width=70),
+                                    "HEADLINE": st.column_config.TextColumn("Event", width=None),
+                                    "COUNTRY": st.column_config.TextColumn("Country", width=90),
+                                    "SEVERITY": st.column_config.TextColumn("Severity", width=110),
+                                    "RELEVANCE": st.column_config.TextColumn("Match", width=60),
+                                }
+                            )
+                    
+                    # Save to history
+                    st.session_state.qa_history.append({
+                        "question": prompt,
+                        "answer": result["answer"],
+                        "sql": result.get("sql"),
+                        "mode": "rag"
+                    })
+                    if len(st.session_state.qa_history) > 50:
+                        st.session_state.qa_history = st.session_state.qa_history[-50:]
+                        
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)[:100]}")
+
+
+def render_sql_chat(c, sql_db):
+    """SQL-based precise query chat (original implementation)."""
+    prompt = st.chat_input("Ask about global events (SQL)...", key="sql_chat")
     if prompt:
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -394,7 +495,7 @@ There are exactly {len(summary_data)} events. Describe EACH one with 2-3 sentenc
                         st.warning("⚠️ Could not generate query")
                         answer = "Could not process query."
                 
-                st.session_state.qa_history.append({"question": prompt, "answer": answer, "sql": sql})
+                st.session_state.qa_history.append({"question": prompt, "answer": answer, "sql": sql, "mode": "sql"})
                 # Limit history to 50 messages to prevent unbounded memory growth
                 if len(st.session_state.qa_history) > 50:
                     st.session_state.qa_history = st.session_state.qa_history[-50:]
