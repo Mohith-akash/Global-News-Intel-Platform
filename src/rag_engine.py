@@ -166,25 +166,26 @@ def search_similar_headlines(query: str, conn, top_k: int = 10, min_date: str = 
     # Convert embedding to SQL array format
     embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
     
-    # DuckDB vector similarity search using array_cosine_similarity
+    # DuckDB vector similarity search with deduplication
     sql = f"""
         SELECT 
-            DATE,
+            MAX(DATE) as DATE,
             HEADLINE,
-            ACTOR_COUNTRY_CODE,
-            MAIN_ACTOR,
-            IMPACT_SCORE,
-            ARTICLE_COUNT,
-            NEWS_LINK,
-            array_cosine_similarity(
+            MAX(ACTOR_COUNTRY_CODE) as ACTOR_COUNTRY_CODE,
+            MAX(MAIN_ACTOR) as MAIN_ACTOR,
+            MAX(IMPACT_SCORE) as IMPACT_SCORE,
+            SUM(ARTICLE_COUNT) as ARTICLE_COUNT,
+            MAX(NEWS_LINK) as NEWS_LINK,
+            MAX(array_cosine_similarity(
                 EMBEDDING::DOUBLE[{EMBEDDING_DIMENSIONS}], 
                 {embedding_str}::DOUBLE[{EMBEDDING_DIMENSIONS}]
-            ) as similarity
+            )) as similarity
         FROM events_dagster
         WHERE EMBEDDING IS NOT NULL 
           AND HEADLINE IS NOT NULL
           AND LENGTH(HEADLINE) > 15
           {date_filter}
+        GROUP BY HEADLINE
         ORDER BY similarity DESC
         LIMIT {top_k}
     """
@@ -220,33 +221,49 @@ def rag_query(question: str, conn, llm, top_k: int = 10) -> dict:
             "sql": None
         }
     
-    # Build context from retrieved headlines
+    # Build context from retrieved headlines (human-friendly, no technical junk)
     context_parts = []
     for _, row in headlines_df.iterrows():
         headline = row.get('HEADLINE', 'Unknown event')
-        country = row.get('ACTOR_COUNTRY_CODE', 'Unknown')
-        date = str(row.get('DATE', ''))
-        impact = row.get('IMPACT_SCORE', 0)
-        similarity = row.get('similarity', 0)
+        # Convert country code to readable name
+        country_code = row.get('ACTOR_COUNTRY_CODE', '')
+        date_str = str(row.get('DATE', ''))
         
-        context_parts.append(f"- [{date}] {headline} (Country: {country}, Impact: {impact:.1f}, Relevance: {similarity:.2f})")
+        # Format date nicely
+        if len(date_str) == 8:
+            try:
+                formatted_date = f"{date_str[4:6]}/{date_str[6:8]}"
+            except:
+                formatted_date = date_str
+        else:
+            formatted_date = date_str
+        
+        context_parts.append(f"• {headline}")
     
     context = "\n".join(context_parts)
     
-    # Build prompt for LLM
-    prompt = f"""Based on these relevant news events from the GDELT database:
+    # Build prompt for LLM - individual event summaries
+    prompt = f"""Here are the top 5 news events related to the question:
 
 {context}
 
-User Question: {question}
+Question: {question}
 
-Provide a comprehensive answer that:
-1. Directly addresses the question
-2. References specific events from the context
-3. Explains the significance or patterns you notice
-4. Keeps the response concise but informative
+For each event, write a 2-3 sentence summary that:
+- Explains WHY this event matters (not just repeating the headline)
+- Provides context or background that isn't obvious
+- Uses full country names
 
-Answer:"""
+Format your response like this:
+**1. [First Event Title]**
+[2-3 sentences of insight]
+
+**2. [Second Event Title]**
+[2-3 sentences of insight]
+
+(Continue for all events)
+
+Start directly with the numbered list, no introduction needed:"""
 
     try:
         answer = str(llm.complete(prompt))

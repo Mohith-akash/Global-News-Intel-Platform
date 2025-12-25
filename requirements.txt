@@ -11,3 +11,4 @@ pycountry==24.6.1
 dagster==1.12.3
 dagster-duckdb==0.28.3
 requests==2.32.5
+voyageai==0.3.2

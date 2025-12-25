@@ -100,7 +100,9 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 2. **Transform**: Headlines extracted, country codes mapped, scores normalized
 3. **Load**: Deduplicated data inserted into MotherDuck (serverless DuckDB)
 4. **Serve**: Streamlit dashboard with Plotly visualizations
-5. **AI Query**: LlamaIndex RAG → Cerebras LLM → SQL generation
+5. **AI Query**: Dual mode AI chat:
+   - **SQL Mode**: LlamaIndex Text-to-SQL → Cerebras LLM → SQL execution
+   - **RAG Mode**: Voyage AI embeddings → MotherDuck vector search → Cerebras LLM
 
 ---
 
@@ -119,8 +121,10 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### AI/ML
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4o / Claude |
-| **LlamaIndex** | RAG + Text-to-SQL query engine | LangChain / Custom NLP |
+| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
+| **LlamaIndex** | Text-to-SQL query engine | Custom NLP |
+| **Voyage AI** | Vector embeddings for RAG | OpenAI Embeddings |
+| **MotherDuck Vectors** | Native vector similarity search | Pinecone / Weaviate |
 
 ### Frontend
 | Tool | Purpose | Replaces |
@@ -130,11 +134,11 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 
 ### Other Skills Demonstrated
 - **Python** (Pandas, Requests, RegEx)
-- **SQL** (Complex queries, aggregations, CTEs)
+- **SQL** (Complex queries, aggregations, window functions)
 - **ETL/ELT** (Extract, Transform, Load patterns)
 - **API Integration** (REST, JSON parsing)
 - **CI/CD** (GitHub Actions, cron scheduling)
-- **Cloud** (Serverless architecture)
+- **Vector Search** (Embeddings, cosine similarity)
 
 ---
 
@@ -169,6 +173,7 @@ Create a `.env` file in the project root:
 ```env
 MOTHERDUCK_TOKEN=your_motherduck_token
 CEREBRAS_API_KEY=your_cerebras_api_key
+VOYAGE_API_KEY=your_voyage_api_key  # Optional: enables RAG mode
 ```
 
 ### Run the Dashboard
@@ -191,16 +196,17 @@ This project demonstrates how to achieve enterprise-grade capabilities at **zero
 
 | Enterprise Tool | Monthly Cost | My Alternative | My Cost |
 |-----------------|--------------|----------------|---------|
-| **Apache Spark/PySpark** | ~$500 | DuckDB | $0 |
-| **Snowflake/Hadoop** | ~$300 | MotherDuck | $0 |
-| **Managed Airflow** | ~$300 | Dagster | $0 |
+| **Databricks/Spark** | ~$500 | DuckDB | $0 |
+| **Snowflake/BigQuery** | ~$300 | MotherDuck | $0 |
+| **Managed Airflow** | ~$300 | Dagster + GitHub Actions | $0 |
 | **dbt Cloud** | ~$100 | SQL in Python | $0 |
-| **AWS Lambda/CI** | ~$100 | GitHub Actions | $0 |
-| **OpenAI GPT-4** | ~$50 | Cerebras (Llama 3.1 8B) | $0 |
+| **Pinecone/Weaviate** | ~$70 | MotherDuck Vectors | $0 |
+| **OpenAI Embeddings** | ~$50 | Voyage AI | $0 |
+| **OpenAI GPT-4** | ~$100 | Cerebras | $0 |
 | **Tableau/Power BI** | ~$70 | Streamlit | $0 |
-| **TOTAL** | **$1,420+** | | **$0** |
+| **TOTAL** | **$1,490+** | | **$0** |
 
-> **Key Insight**: For datasets under 100GB, modern tools like DuckDB outperform Spark clusters at a fraction of the complexity and cost.
+> **Key Insight**: MotherDuck's native vector search eliminates the need for a separate vector database like Pinecone.
 
 ---
 
@@ -223,6 +229,14 @@ This project evolved through multiple iterations to optimize for cost and perfor
 - Tried Groq's fast inference with larger Llama models
 - Settled on Cerebras for reliable free tier and good performance
 
+### RAG Embeddings
+```
+🚀 Voyage AI (embeddings) + 🦆 MotherDuck (vector search)
+```
+- Voyage AI creates 1024-dim embeddings for semantic search
+- MotherDuck's native `array_cosine_similarity()` replaces Pinecone
+- Dual-mode AI: SQL for precise queries, RAG for semantic exploration
+
 **Key Learning**: The best tool isn't always the most expensive—it's the one that solves your problem within constraints.
 
 ---
@@ -236,7 +250,8 @@ gdelt_project/
 │   ├── config.py         # Configuration constants
 │   ├── database.py       # Database connection
 │   ├── queries.py        # SQL query functions
-│   ├── ai_engine.py      # LLM/AI setup
+│   ├── ai_engine.py      # LLM/AI setup (Cerebras + LlamaIndex)
+│   ├── rag_engine.py     # RAG engine (Voyage AI + vector search)
 │   ├── data_processing.py# Headline extraction
 │   ├── utils.py          # Utility functions
 │   └── styles.py         # CSS styling

@@ -21,6 +21,7 @@ RETRY_DELAY = 5
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
 VOYAGE_MODEL = "voyage-3.5-lite"
 EMBEDDING_DIMENSIONS = 1024
+MIN_ARTICLE_COUNT_FOR_EMBEDDING = 3  # Only embed events with 3+ articles (6+ months free tier)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -257,7 +258,40 @@ def get_embeddings_batch(headlines: list, batch_size: int = 50) -> list:
     return results
 
 
+def create_embedding_text(row):
+    """Create rich embedding text from multiple fields for better semantic search."""
+    parts = []
+    
+    # Add actor name
+    actor = row.get('MAIN_ACTOR', '')
+    if actor and isinstance(actor, str) and len(actor.strip()) > 2:
+        parts.append(actor.strip())
+    
+    # Add country code (will be useful for semantic matching)
+    country = row.get('ACTOR_COUNTRY_CODE', '')
+    if country and isinstance(country, str) and len(country) == 3:
+        parts.append(country)
+    
+    # Add headline if available (highest quality text)
+    headline = row.get('HEADLINE', '')
+    if headline and isinstance(headline, str) and len(headline.strip()) > 10:
+        parts.append(headline.strip())
+    else:
+        # No headline - add a generic event description
+        parts.append("news event")
+    
+    # Combine all parts
+    text = ' '.join(parts)
+    
+    # Ensure minimum length for meaningful embedding
+    if len(text) < 15:
+        return None
+    
+    return text[:512]  # Limit to 512 chars for API
+
+
 def get_gdelt_url():
+    """Get the URL for the latest GDELT export file."""
     now = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=20)
     rounded_minute = (now.minute // 15) * 15
     rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
@@ -385,14 +419,28 @@ def gdelt_raw_data() -> pd.DataFrame:
         # Select best headline from all URLs per event
         df = select_best_headline_per_event(df)
         
-        # Compute embeddings for headlines (RAG support)
-        if not df.empty and 'HEADLINE' in df.columns:
-            headlines = df['HEADLINE'].tolist()
-            logger.info(f"Computing embeddings for {len(headlines):,} headlines...")
-            embeddings = get_embeddings_batch(headlines)
-            df['EMBEDDING'] = embeddings
-            embedded_count = sum(1 for e in embeddings if e is not None)
-            logger.info(f"Computed {embedded_count:,} embeddings")
+        # Compute embeddings for events with ARTICLE_COUNT >= 3 (RAG support)
+        # Uses combined fields: MAIN_ACTOR + COUNTRY + HEADLINE for better coverage
+        if not df.empty:
+            # Filter to events worth embedding (quality filter + token efficiency)
+            embed_mask = df['ARTICLE_COUNT'] >= MIN_ARTICLE_COUNT_FOR_EMBEDDING
+            events_to_embed = df[embed_mask]
+            
+            if not events_to_embed.empty:
+                # Create embedding text from combined fields
+                embedding_texts = events_to_embed.apply(create_embedding_text, axis=1).tolist()
+                
+                logger.info(f"Computing embeddings for {len(embedding_texts):,} events (ARTICLE_COUNT >= {MIN_ARTICLE_COUNT_FOR_EMBEDDING})...")
+                embeddings = get_embeddings_batch(embedding_texts)
+                
+                # Assign embeddings back to dataframe
+                df['EMBEDDING'] = None
+                df.loc[embed_mask, 'EMBEDDING'] = embeddings
+                embedded_count = sum(1 for e in embeddings if e is not None)
+                logger.info(f"Computed {embedded_count:,} embeddings")
+            else:
+                df['EMBEDDING'] = None
+                logger.info("No events met embedding criteria (ARTICLE_COUNT >= 3)")
         else:
             df['EMBEDDING'] = None
         

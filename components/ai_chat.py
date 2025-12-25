@@ -15,7 +15,7 @@ from src.rag_engine import rag_query, get_voyage_api_key
 
 
 def render_ai_chat(c, sql_db):
-    """Main AI Chat component with SQL and RAG sub-tabs."""
+    """Main AI Chat component with SQL and RAG modes."""
     if "qa_history" not in st.session_state:
         st.session_state.qa_history = []
     if "ai_mode" not in st.session_state:
@@ -40,17 +40,29 @@ def render_ai_chat(c, sql_db):
                 with st.expander("🔍 Query Details"):
                     st.code(sel["sql"], language="sql")
 
-    # Sub-tabs for SQL and RAG modes
-    sql_tab, rag_tab = st.tabs(["🔍 SQL Mode", "🧠 RAG Mode"])
+    # Mode selector (radio buttons work better with chat_input than tabs)
+    mode_options = ["🔍 SQL Mode", "🧠 RAG Mode"]
+    if not rag_available:
+        mode_options = ["🔍 SQL Mode", "🧠 RAG Mode (requires API key)"]
     
-    with sql_tab:
+    selected_mode = st.radio(
+        "Select Mode",
+        mode_options,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="mode_selector"
+    )
+    
+    is_sql_mode = "SQL" in selected_mode
+    
+    # Show mode-specific info
+    if is_sql_mode:
         st.markdown('''<div class="ai-info-card">
             <div class="ai-example-label">💡 SQL MODE - Precise Queries:</div>
             <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East"<br>• "Top 5 countries by events"<br>• "How many events in October?"</div>
         </div>''', unsafe_allow_html=True)
         render_sql_chat(c, sql_db)
-    
-    with rag_tab:
+    else:
         if not rag_available:
             st.warning("⚠️ RAG Mode requires VOYAGE_API_KEY. Add it to your environment or Streamlit secrets.")
             st.markdown('''<div class="ai-info-card">
@@ -60,7 +72,7 @@ def render_ai_chat(c, sql_db):
         else:
             st.markdown('''<div class="ai-info-card">
                 <div class="ai-example-label">💡 RAG MODE - Semantic Search:</div>
-                <div class="ai-examples">• "What are the tensions in Asia about?"<br>• "Tell me about climate-related events"<br>• "What's happening with trade disputes?"<br>• "Summarize recent diplomatic activities"</div>
+                <div class="ai-examples">• "What are the tensions in Asia about?"<br>• "Tell me about military conflicts"<br>• "What is happening between US and China?"<br>• "Summarize news about Russia and Ukraine"</div>
             </div>''', unsafe_allow_html=True)
             render_rag_chat(c)
 
@@ -83,7 +95,7 @@ def render_rag_chat(c):
             
             with st.spinner("🧠 Searching semantically..."):
                 try:
-                    result = rag_query(prompt, c, llm, top_k=10)
+                    result = rag_query(prompt, c, llm, top_k=5)
                     
                     # Display answer
                     st.markdown(result["answer"])
@@ -106,7 +118,7 @@ def render_rag_chat(c):
                             df['RELEVANCE'] = (df['similarity'] * 100).round(1).astype(str) + '%'
                         
                         with st.expander("📋 Retrieved Headlines", expanded=True):
-                            display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY', 'RELEVANCE']
+                            display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY', 'RELEVANCE', 'NEWS_LINK']
                             display_cols = [col for col in display_cols if col in df.columns]
                             st.dataframe(
                                 df[display_cols],
@@ -115,8 +127,9 @@ def render_rag_chat(c):
                                     "DATE": st.column_config.TextColumn("Date", width=70),
                                     "HEADLINE": st.column_config.TextColumn("Event", width=None),
                                     "COUNTRY": st.column_config.TextColumn("Country", width=90),
-                                    "SEVERITY": st.column_config.TextColumn("Severity", width=110),
-                                    "RELEVANCE": st.column_config.TextColumn("Match", width=60),
+                                    "SEVERITY": st.column_config.TextColumn("Severity", width=100),
+                                    "RELEVANCE": st.column_config.TextColumn("Match", width=55),
+                                    "NEWS_LINK": st.column_config.LinkColumn("Link", width=50, display_text="🔗"),
                                 }
                             )
                     
