@@ -98,8 +98,8 @@ def render_about():
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>dbt Cloud</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
-                <td style="padding:0.4rem;color:#e2e8f0;"><b>SQL in Python</b></td>
-                <td style="padding:0.4rem;color:#64748b;">Transformations in pipeline.py — same result</td>
+                <td style="padding:0.4rem;color:#e2e8f0;"><b>dbt Core</b></td>
+                <td style="padding:0.4rem;color:#64748b;">Self-hosted with staging/marts pattern</td>
             </tr>
             <tr>
                 <td style="padding:0.4rem;color:#94a3b8;"><b>Tableau/Power BI</b> <span style="color:#ef4444;font-size:0.7rem;">~$70/mo</span></td>
@@ -141,8 +141,8 @@ def render_about():
                 <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Text-to-SQL + RAG dual mode</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;">
-                <div><span style="color:#10b981;font-size:0.7rem;">ETL PIPELINE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⚙️ Dagster + GitHub Actions</span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">30min schedule, auto-embeds headlines</div>
+                <div><span style="color:#10b981;font-size:0.7rem;">ETL PIPELINE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⚡ Polars + Dagster + dbt</span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">15min schedule, 10x faster ingestion</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -154,7 +154,8 @@ def render_about():
             <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.95rem;">🛠️ TECH STACK</h4>
             <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.4rem;">
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🐍 Python</span>
-                <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">📝 SQL</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">⚡ Polars</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🔧 dbt</span>
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🦆 DuckDB</span>
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">☁️ MotherDuck</span>
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">⚙️ Dagster</span>
