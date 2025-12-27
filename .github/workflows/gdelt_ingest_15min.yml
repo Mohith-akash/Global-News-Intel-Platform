@@ -37,9 +37,20 @@ jobs:
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
 
-    # 5. Keep Streamlit app awake
+    # 5. Keep Streamlit app awake (improved browser-like request)
     - name: Keep Streamlit Alive
       run: |
-        echo "🔄 Pinging Streamlit app..."
-        curl -s -o /dev/null -w "%{http_code}" https://global-news-intel-platform.streamlit.app/ || true
-        echo "✅ Keep-alive ping sent."
+        echo "🔄 Waking Streamlit app..."
+        # First request - wakes up sleeping app (with retries)
+        curl -s -o /dev/null -w "Wake request: %{http_code}\n" \
+          -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0" \
+          -H "Accept: text/html" \
+          --retry 3 --retry-delay 10 --max-time 60 \
+          https://global-news-intel-platform.streamlit.app/ || true
+        # Wait for app to fully initialize
+        sleep 10
+        # Second request - confirms app is responding
+        curl -s -o /dev/null -w "Confirm request: %{http_code}\n" \
+          -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0" \
+          https://global-news-intel-platform.streamlit.app/ || true
+        echo "✅ Keep-alive complete"
