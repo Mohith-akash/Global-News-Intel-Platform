@@ -26,8 +26,14 @@ def render_about():
         <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin:0 0.2rem;">
             <div style="font-size:1.5rem;">⚡</div>
-            <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">Dagster</div>
-            <div style="color:#64748b;font-size:0.6rem;">Orchestration</div>
+            <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">Polars + Dagster</div>
+            <div style="color:#64748b;font-size:0.6rem;">10x Faster ETL</div>
+        </div>
+        <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
+        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin:0 0.2rem;">
+            <div style="font-size:1.5rem;">🔧</div>
+            <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">dbt + DuckDB</div>
+            <div style="color:#64748b;font-size:0.6rem;">Transform</div>
         </div>
         <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin:0 0.2rem;">
@@ -36,16 +42,10 @@ def render_about():
             <div style="color:#64748b;font-size:0.6rem;">DWH + Vectors</div>
         </div>
         <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1.3;margin:0 0.2rem;">
-            <div style="font-size:1.5rem;">🚀 / 🦙</div>
-            <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">Voyage / LlamaIndex</div>
-            <div style="color:#64748b;font-size:0.6rem;">RAG | SQL Mode</div>
-        </div>
-        <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin:0 0.2rem;">
             <div style="font-size:1.5rem;">🧠</div>
-            <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">Cerebras</div>
-            <div style="color:#64748b;font-size:0.6rem;">Llama 3.1 8B</div>
+            <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">Cerebras AI</div>
+            <div style="color:#64748b;font-size:0.6rem;">RAG + SQL</div>
         </div>
         <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin-left:0.2rem;">
@@ -129,20 +129,20 @@ def render_about():
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;margin-top:0.75rem;">
             <h4 style="color:#e2e8f0;text-align:center;margin-bottom:0.75rem;font-size:0.95rem;">🔄 TECHNOLOGY EVOLUTION</h4>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div><span style="color:#06b6d4;font-size:0.7rem;">DATA WAREHOUSE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">$0 cost, same SQL + vector search</div>
+                <div><span style="color:#f59e0b;font-size:0.7rem;">DATA PROCESSING</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">🐼 Pandas → ⚡ <b>Polars</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">10x faster ingestion, lazy evaluation</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div><span style="color:#06b6d4;font-size:0.7rem;">RAG EMBEDDINGS</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">🚀 <b>Voyage AI</b></span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Vector embeddings + semantic search</div>
+                <div><span style="color:#06b6d4;font-size:0.7rem;">TRANSFORMATIONS</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">📝 Raw SQL → 🔧 <b>dbt Core</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Staging/marts pattern with tests</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
-                <div><span style="color:#8b5cf6;font-size:0.7rem;">AI CHAT</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">🦙 LlamaIndex + 🧠 Cerebras</span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Text-to-SQL + RAG dual mode</div>
+                <div><span style="color:#10b981;font-size:0.7rem;">DATA WAREHOUSE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">❄️ Snowflake → 🦆 <b>MotherDuck</b></span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">$0 cost, SQL + vector search</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;">
-                <div><span style="color:#10b981;font-size:0.7rem;">ETL PIPELINE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⚡ Polars + Dagster + dbt</span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">15min schedule, 10x faster ingestion</div>
+                <div><span style="color:#8b5cf6;font-size:0.7rem;">SCHEDULE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⏱️ 30min → ⚡ <b>15min</b> updates</span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Near real-time data freshness</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
