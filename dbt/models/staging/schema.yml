@@ -1,0 +1,66 @@
+version: 2
+
+sources:
+  - name: gdelt
+    description: "Raw GDELT data ingested by Dagster pipeline"
+    tables:
+      - name: events_dagster
+        description: "Raw events from GDELT API"
+        columns:
+          - name: EVENT_ID
+            description: "Unique event identifier"
+            tests:
+              - unique
+              - not_null
+          - name: DATE
+            description: "Event date in YYYYMMDD format"
+            tests:
+              - not_null
+          - name: MAIN_ACTOR
+            description: "Primary actor in the event"
+          - name: ACTOR_COUNTRY_CODE
+            description: "3-letter country code of actor"
+          - name: EVENT_CATEGORY_CODE
+            description: "CAMEO event code"
+          - name: IMPACT_SCORE
+            description: "Goldstein scale (-10 to +10)"
+          - name: ARTICLE_COUNT
+            description: "Number of articles covering this event"
+          - name: SENTIMENT_SCORE
+            description: "Average tone of coverage"
+          - name: NEWS_LINK
+            description: "URL to source article"
+          - name: HEADLINE
+            description: "Extracted headline from URL"
+          - name: EMBEDDING
+            description: "1024-dim vector embedding for RAG"
+
+models:
+  - name: stg_events
+    description: "Cleaned and standardized GDELT events"
+    columns:
+      - name: event_id
+        description: "Unique event identifier"
+        tests:
+          - unique
+          - not_null
+      - name: event_date_raw
+        description: "Raw date string (YYYYMMDD)"
+        tests:
+          - not_null
+      - name: actor_name
+        description: "Name of primary actor"
+      - name: actor_country_code
+        description: "3-letter ISO country code"
+      - name: goldstein_scale
+        description: "Event impact score (-10 to +10)"
+        tests:
+          - accepted_values:
+              values: [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+              quote: false
+              severity: warn
+      - name: sentiment_category
+        description: "Derived sentiment classification"
+        tests:
+          - accepted_values:
+              values: ['Very Negative', 'Negative', 'Neutral', 'Positive', 'Very Positive']

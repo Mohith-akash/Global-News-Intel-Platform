@@ -1,0 +1,45 @@
+name: 15-Min GDELT Refresh (Polars + GE)
+
+on:
+  schedule:
+    # Runs every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  refresh-data:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Checkout code
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Set up Python with caching
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    # 3. Install Dependencies
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Run Dagster Pipeline (Polars-powered)
+    - name: Execute Dagster Job (Polars)
+      env:
+        MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+      run: |
+        echo "🚀 Starting GDELT Ingestion (Polars + Great Expectations)..."
+        python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
+        echo "✅ Data Refresh Complete."
+
+    # 5. Keep Streamlit app awake
+    - name: Keep Streamlit Alive
+      run: |
+        echo "🔄 Pinging Streamlit app..."
+        curl -s -o /dev/null -w "%{http_code}" https://global-news-intel-platform.streamlit.app/ || true
+        echo "✅ Keep-alive ping sent."

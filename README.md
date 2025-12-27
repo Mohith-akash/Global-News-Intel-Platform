@@ -1,10 +1,11 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/Streamlit-1.35+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Polars-10x_Faster-CD792C?style=for-the-badge&logo=polars&logoColor=white" alt="Polars">
+  <img src="https://img.shields.io/badge/dbt-Transformations-FF694B?style=for-the-badge&logo=dbt&logoColor=white" alt="dbt">
   <img src="https://img.shields.io/badge/DuckDB-Motherduck-FDD023?style=for-the-badge&logo=duckdb&logoColor=black" alt="DuckDB">
   <img src="https://img.shields.io/badge/Dagster-Orchestration-4F43DD?style=for-the-badge&logo=dagster&logoColor=white" alt="Dagster">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
-  <a href="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions"><img src="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions/workflows/hourly_update.yml/badge.svg" alt="Pipeline"></a>
+  <a href="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions"><img src="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions/workflows/gdelt_ingest_15min.yml/badge.svg" alt="Pipeline"></a>
 </p>
 
 
@@ -73,7 +74,8 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 |---------|-------------|
 | **📊 Real-Time Dashboard** | Live metrics, trending news, sentiment analysis, geographic distribution |
 | **🤖 AI Chat Interface** | Ask questions in plain English → Get SQL-powered answers |
-| **⚡ Automated Pipeline** | 30-minute refresh cycles via GitHub Actions + Dagster |
+| **⚡ 15-Min Updates** | Near real-time refresh cycles via GitHub Actions + Dagster |
+| **🔍 Data Quality Gates** | Great Expectations-style validation prevents bad data |
 | **🌍 Global Coverage** | Events from 200+ countries with country code mapping |
 | **📈 Trend Analysis** | 30-day time series, intensity tracking, actor monitoring |
 | **🎨 Dark Mode UI** | Custom dark theme, responsive Plotly charts |
@@ -83,26 +85,46 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   GDELT API     │────▶│ GitHub Actions   │────▶│    Dagster      │
-│  (Raw Events)   │     │  (Scheduler)     │     │ (Orchestrator)  │
-└─────────────────┘     └──────────────────┘     └────────┬────────┘
-                                                          │
-                                                          ▼
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Streamlit     │◀────│   Cerebras AI    │◀────│   MotherDuck    │
-│  (Dashboard)    │     │  (LLM Layer)     │     │   (DuckDB DWH)  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         SUPERCHARGED ARCHITECTURE                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+                    ┌──────────────┐
+                    │  GDELT API   │
+                    └──────┬───────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  INGESTION (Every 15 min)                                                │
+│  GitHub Actions → Dagster → Polars (10x faster) → Great Expectations    │
+└─────────────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  TRANSFORMATION                                                          │
+│  dbt Core: staging (stg_events) → marts (fct_daily, dim_actors, etc.)   │
+└─────────────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  STORAGE & AI                                                            │
+│  MotherDuck (DWH) ← Voyage AI (Embeddings) → Cerebras LLM (RAG/SQL)     │
+└─────────────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  PRESENTATION                                                            │
+│  Streamlit Dashboard + Plotly Charts + AI Chat                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Data Flow (ETL/ELT Pipeline)
-1. **Extract**: GDELT API provides 15-minute update intervals
-2. **Transform**: Headlines extracted, country codes mapped, scores normalized
-3. **Load**: Deduplicated data inserted into MotherDuck (serverless DuckDB)
-4. **Serve**: Streamlit dashboard with Plotly visualizations
-5. **AI Query**: Dual mode AI chat:
-   - **SQL Mode**: LlamaIndex Text-to-SQL → Cerebras LLM → SQL execution
-   - **RAG Mode**: Voyage AI embeddings → MotherDuck vector search → Cerebras LLM
+### Data Flow (ELT Pipeline)
+1. **Extract**: GDELT API → Polars (10x faster than Pandas)
+2. **Validate**: Great Expectations-style data quality checks
+3. **Load**: Deduplicated data into MotherDuck (serverless DuckDB)
+4. **Transform**: dbt models create staging views and mart tables
+5. **Embed**: Voyage AI generates vectors every 12 hours
+6. **Serve**: Streamlit dashboard with AI chat (SQL + RAG modes)
 
 ---
 
@@ -111,12 +133,12 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### Data Engineering
 | Tool | Purpose | Replaces |
 |------|---------|----------|
+| **Polars** | High-performance DataFrame processing (10x faster) | Pandas |
+| **dbt Core** | SQL transformations with staging/marts pattern | Raw SQL |
+| **Great Expectations** | Data quality validation & testing | Manual checks |
 | **Dagster** | Pipeline orchestration with asset-based design | Apache Airflow |
-| **DuckDB** | In-process OLAP database for fast analytics | Apache Spark |
-| **MotherDuck** | Serverless cloud DuckDB warehouse | Snowflake/Redshift |
-| **GitHub Actions** | CI/CD and scheduled pipeline execution | AWS Lambda |
-| **SQL** | Data transformations in pipeline.py | dbt Cloud |
-| **Pandas** | Data manipulation and processing | PySpark |
+| **DuckDB/MotherDuck** | Serverless cloud OLAP warehouse | Snowflake/Redshift |
+| **GitHub Actions** | CI/CD with 15-min + 12-hr scheduled jobs | AWS Lambda |
 
 ### AI/ML
 | Tool | Purpose | Replaces |
@@ -132,13 +154,13 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **Streamlit** | Interactive dashboard framework | Tableau / Power BI |
 | **Plotly** | Dynamic charts and visualizations | D3.js / Chart.js |
 
-### Other Skills Demonstrated
-- **Python** (Pandas, Requests, RegEx)
-- **SQL** (Complex queries, aggregations, window functions)
-- **ETL/ELT** (Extract, Transform, Load patterns)
-- **API Integration** (REST, JSON parsing)
+### Skills Demonstrated
+- **Python** (Polars, Pandas, RegEx, API integration)
+- **SQL** (Complex queries, window functions, dbt models)
+- **Data Quality** (Great Expectations patterns, schema testing)
+- **ELT Pipelines** (Extract, Load, Transform with dbt)
 - **CI/CD** (GitHub Actions, cron scheduling)
-- **Vector Search** (Embeddings, cosine similarity)
+- **Vector Search** (Embeddings, cosine similarity, RAG)
 
 ---
 
@@ -185,7 +207,14 @@ streamlit run app.py
 ### Run the Pipeline Manually
 
 ```bash
-python -m dagster job execute -f etl/pipeline.py -j gdelt_ingestion_job
+# Polars-powered ingestion (15-min schedule)
+python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
+
+# Embedding generation (12-hour schedule)
+python -m dagster job execute -f etl/embedding_job.py -j gdelt_embedding_job
+
+# Run dbt models
+cd dbt && dbt run
 ```
 
 ---
@@ -199,7 +228,7 @@ This project demonstrates how to achieve enterprise-grade capabilities at **zero
 | **Databricks/Spark** | ~$500 | DuckDB | $0 |
 | **Snowflake/BigQuery** | ~$300 | MotherDuck | $0 |
 | **Managed Airflow** | ~$300 | Dagster + GitHub Actions | $0 |
-| **dbt Cloud** | ~$100 | SQL in Python | $0 |
+| **dbt Cloud** | ~$100 | dbt Core (self-hosted) | $0 |
 | **Pinecone/Weaviate** | ~$70 | MotherDuck Vectors | $0 |
 | **OpenAI Embeddings** | ~$50 | Voyage AI | $0 |
 | **OpenAI GPT-4** | ~$100 | Cerebras | $0 |
@@ -245,34 +274,44 @@ This project evolved through multiple iterations to optimize for cost and perfor
 
 ```
 gdelt_project/
-├── app.py                # Streamlit dashboard entry point
-├── src/                  # Core modules
-│   ├── config.py         # Configuration constants
-│   ├── database.py       # Database connection
-│   ├── queries.py        # SQL query functions
-│   ├── ai_engine.py      # LLM/AI setup (Cerebras + LlamaIndex)
-│   ├── rag_engine.py     # RAG engine (Voyage AI + vector search)
-│   ├── data_processing.py# Headline extraction
-│   ├── utils.py          # Utility functions
-│   └── styles.py         # CSS styling
-├── etl/                  # Data pipeline
-│   └── pipeline.py       # Dagster ETL pipeline
-├── components/           # UI components
-│   ├── render.py         # Dashboard rendering
-│   ├── ai_chat.py        # AI chat interface
-│   └── about.py          # About page
-├── requirements.txt      # Python dependencies
-├── .env                  # Environment variables (not in repo)
-└── .github/
-    └── workflows/
-        └── hourly_update.yml  # GitHub Actions scheduler
+├── app.py                    # Streamlit dashboard entry point
+├── src/                      # Core modules
+│   ├── config.py             # Configuration constants
+│   ├── database.py           # Database connection
+│   ├── queries.py            # SQL query functions
+│   ├── ai_engine.py          # LLM/AI setup (Cerebras + LlamaIndex)
+│   ├── rag_engine.py         # RAG engine (Voyage AI + vector search)
+│   ├── data_processing.py    # Headline extraction
+│   ├── utils.py              # Utility functions
+│   └── styles.py             # CSS styling
+├── etl/                      # Data pipeline
+│   ├── pipeline_polars.py    # 🆕 Polars ingestion + GE validation
+│   ├── embedding_job.py      # 🆕 12-hour embedding generation
+│   └── pipeline.py           # Legacy Pandas pipeline (deprecated)
+├── dbt/                      # 🆕 dbt transformation layer
+│   ├── dbt_project.yml       # dbt configuration
+│   ├── profiles.yml          # MotherDuck connection
+│   └── models/
+│       ├── staging/          # stg_events (cleaned data)
+│       └── marts/            # fct_daily_events, dim_actors, dim_countries
+├── components/               # UI components
+│   ├── render.py             # Dashboard rendering
+│   ├── ai_chat.py            # AI chat interface
+│   └── about.py              # About page
+├── requirements.txt          # Python dependencies
+├── .env                      # Environment variables (not in repo)
+└── .github/workflows/
+    ├── gdelt_ingest_15min.yml    # 🆕 15-min Polars ingestion
+    └── gdelt_embeddings_12hr.yml # 🆕 12-hour embedding job
 ```
 
 ---
 
 ## 🔮 Future Enhancements
 
-- [ ] Add dbt transformations for advanced modeling
+- [x] ~~Add dbt transformations for advanced modeling~~ ✅ Done!
+- [x] ~~Upgrade to Polars for faster processing~~ ✅ Done!
+- [x] ~~Add data quality validation~~ ✅ Done!
 - [ ] Implement event clustering with ML
 - [ ] Add email/Slack alerts for crisis events
 - [ ] Expand AI chat with multi-turn conversations
