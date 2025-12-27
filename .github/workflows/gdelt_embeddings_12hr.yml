@@ -1,0 +1,39 @@
+name: 12-Hour Embedding Generation (Voyage AI)
+
+on:
+  schedule:
+    # Runs every 12 hours (at midnight and noon UTC)
+    - cron: '0 0,12 * * *'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  generate-embeddings:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Checkout code
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Set up Python with caching
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    # 3. Install Dependencies
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 4. Run Embedding Job
+    - name: Generate Embeddings (Voyage AI)
+      env:
+        MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+        VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      run: |
+        echo "🧠 Starting Embedding Generation..."
+        python -m dagster job execute -f etl/embedding_job.py -j gdelt_embedding_job
+        echo "✅ Embedding Generation Complete."

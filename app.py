@@ -132,7 +132,8 @@ def main():
         with c2:
             st.markdown('''<div class="card">
                 <h4 class="title-cyan">ℹ️ HOW IT WORKS</h4>
-                <p class="text-muted">Your question → Cerebras AI → SQL query → Results</p>
+                <p class="text-muted" style="margin-bottom:0.5rem;"><b>🔍 SQL Mode:</b><br>Question → Cerebras AI → SQL query → Results</p>
+                <p class="text-muted" style="margin-bottom:0.5rem;"><b>🧠 RAG Mode:</b><br>Question → Voyage AI → Vector search → AI synthesis</p>
                 <hr style="border-color:#1e3a5f;margin:1rem 0;">
                 <p class="text-xs text-muted">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
             </div>''', unsafe_allow_html=True)

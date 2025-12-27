@@ -1,0 +1,19 @@
+gdelt_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'md:gdelt_db'
+      extensions:
+        - httpfs
+        - parquet
+      settings:
+        motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
+    prod:
+      type: duckdb
+      path: 'md:gdelt_db'
+      extensions:
+        - httpfs
+        - parquet
+      settings:
+        motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"

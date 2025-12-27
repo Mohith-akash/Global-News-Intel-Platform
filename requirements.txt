@@ -1,14 +1,30 @@
+# Core Dependencies
 streamlit==1.51.0
-pandas==2.2.3
 plotly==6.5.0
 python-dotenv==1.0.1
+
+# Data Processing
+pandas==2.2.3
+polars==1.18.0
+
+# Database
 duckdb==1.4.2
 duckdb-engine==0.17.0
 sqlalchemy==2.0.44
+
+# AI/ML
 llama-index-core==0.14.8
 llama-index-llms-cerebras==0.3.1
-pycountry==24.6.1
+voyageai==0.3.2
+
+# Orchestration
 dagster==1.12.3
 dagster-duckdb==0.28.3
+
+# Utilities
+pycountry==24.6.1
 requests==2.32.5
-voyageai==0.3.2
+
+# dbt (for transformations)
+dbt-core==1.9.4
+dbt-duckdb==1.9.2
