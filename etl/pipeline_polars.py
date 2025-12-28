@@ -5,7 +5,7 @@ Changes from v1.0:
 - Polars instead of Pandas (10x faster processing)
 - Great Expectations for data quality validation
 - Separated ingestion (every 15 min) from embeddings (every 12 hours)
-- Cleaner, more maintainable code
+- Cleaner, more maintainable code 
 
 Author: Mohith Akash
 """
