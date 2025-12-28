@@ -1,7 +1,7 @@
 """
 Emotions & Themes Dashboard Component
 Visualizes GDELT GKG emotion data and trending themes.
-Premium design with animations and modern UI.
+Premium design with modern UI.
 """
 
 import streamlit as st
@@ -90,22 +90,14 @@ def render_emotions_pulse(conn):
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Mood label with pulsing animation
+        # Mood label badge
         st.markdown(f"""
-            <style>
-                @keyframes pulse {{
-                    0% {{ opacity: 0.7; }}
-                    50% {{ opacity: 1; }}
-                    100% {{ opacity: 0.7; }}
-                }}
-                .mood-pulse {{ animation: pulse 2s infinite; }}
-            </style>
             <div style="text-align: center; margin-top: -15px;">
-                <span class="mood-pulse" style="display: inline-block; padding: 0.4rem 1.2rem; background: {mood_color}22; border: 1px solid {mood_color}; border-radius: 20px; color: {mood_color}; font-weight: 600; font-size: 0.9rem;">
+                <span style="display: inline-block; padding: 0.4rem 1.2rem; background: {mood_color}22; border: 1px solid {mood_color}; border-radius: 20px; color: {mood_color}; font-weight: 600; font-size: 0.9rem;">
                     {mood_label}
                 </span>
                 <div style="color: #64748b; font-size: 0.8rem; margin-top: 0.5rem;">
-                    Analyzed from <b style="color: #00d4ff;">{articles:,}</b> news articles
+                    Based on <b style="color: #00d4ff;">{articles:,}</b> articles
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -206,7 +198,7 @@ def render_emotion_breakdown(conn):
         
         st.markdown(f"""
             <div style="text-align: center; padding: 0.5rem; background: linear-gradient(90deg, rgba(0,212,255,0.1) 0%, rgba(139,92,246,0.1) 100%); border-radius: 8px; margin-top: -10px;">
-                <span style="color: #94a3b8;">Dominant emotion:</span>
+                <span style="color: #94a3b8;">Dominant:</span>
                 <span style="color: #00d4ff; font-weight: bold; margin-left: 0.5rem;">{dominant}</span>
                 <span style="color: #64748b; margin-left: 0.3rem;">({dominant_val:.1f})</span>
             </div>
@@ -259,45 +251,55 @@ def humanize_theme(theme):
 
 
 def render_trending_themes(conn):
-    """Render trending themes with beautiful horizontal bars."""
+    """Render trending themes from TOP_THEMES field."""
     try:
+        # Get raw TOP_THEMES data
         df = conn.execute("""
-            SELECT 
-                TRIM(theme.value) as theme,
-                COUNT(*) as mention_count
-            FROM gkg_emotions,
-            LATERAL UNNEST(STRING_SPLIT(TOP_THEMES, ',')) AS theme(value)
+            SELECT TOP_THEMES FROM gkg_emotions 
             WHERE TOP_THEMES IS NOT NULL AND TOP_THEMES != ''
-            GROUP BY TRIM(theme.value)
-            HAVING COUNT(*) >= 3
-            ORDER BY mention_count DESC
-            LIMIT 20
+            LIMIT 1000
         """).df()
         
         if df.empty:
             st.info("📊 Theme data is being collected...")
             return
         
-        # Filter and humanize themes
+        # Count themes manually in Python
+        from collections import Counter
+        theme_counts = Counter()
+        
+        for themes_str in df['TOP_THEMES']:
+            if themes_str:
+                for theme in str(themes_str).split(','):
+                    theme = theme.strip()
+                    if theme and len(theme) > 2:
+                        theme_counts[theme] += 1
+        
+        if not theme_counts:
+            st.info("📊 Theme data loading...")
+            return
+        
+        # Get top themes and humanize
         themes_data = []
-        for _, row in df.iterrows():
-            name = humanize_theme(row['theme'])
-            if name and name not in [t[0] for t in themes_data]:
-                themes_data.append((name, row['mention_count']))
+        seen = set()
+        for theme, count in theme_counts.most_common(30):
+            name = humanize_theme(theme)
+            if name and name not in seen:
+                themes_data.append((name, count))
+                seen.add(name)
             if len(themes_data) >= 8:
                 break
         
         if not themes_data:
+            st.info("📊 Processing themes...")
             return
-            
-        max_count = max(t[1] for t in themes_data)
         
         # Create bar chart
         names = [t[0] for t in themes_data]
         values = [t[1] for t in themes_data]
         
-        # Gradient colors
-        colors = ['#00d4ff', '#00c4ef', '#00b4df', '#00a4cf', '#0094bf', '#0084af', '#00749f', '#00648f']
+        # Gradient colors  
+        colors = ['#00d4ff', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef']
         
         fig = go.Figure(go.Bar(
             x=values,
@@ -305,11 +307,10 @@ def render_trending_themes(conn):
             orientation='h',
             marker=dict(
                 color=colors[:len(names)],
-                line=dict(color='rgba(0,0,0,0)', width=0),
             ),
             text=[f'{v:,}' for v in values],
             textposition='inside',
-            textfont=dict(color='white', size=11, family='Arial Black'),
+            textfont=dict(color='white', size=11),
             hovertemplate='<b>%{y}</b><br>Mentions: %{x:,}<extra></extra>'
         ))
         
@@ -335,11 +336,11 @@ def render_trending_themes(conn):
         st.plotly_chart(fig, use_container_width=True)
             
     except Exception as e:
-        st.info("📊 Theme data loading...")
+        st.info(f"📊 Theme data loading...")
 
 
 def render_emotion_stats(conn):
-    """Render emotion statistics cards with icons."""
+    """Render emotion statistics cards using st.columns."""
     try:
         df = conn.execute("""
             SELECT 
@@ -356,46 +357,47 @@ def render_emotion_stats(conn):
         row = df.iloc[0]
         pos = row['avg_positive'] if row['avg_positive'] else 0
         neg = row['avg_negative'] if row['avg_negative'] else 0
+        tone = row['avg_tone'] if row['avg_tone'] else 0
+        articles = int(row['total_articles'])
         
-        # Sentiment ratio visual
-        total = pos + neg if (pos + neg) > 0 else 1
-        pos_pct = (pos / total) * 100
-        neg_pct = (neg / total) * 100
+        # Use st.columns for reliable rendering
+        c1, c2, c3, c4 = st.columns(4)
         
-        st.markdown(f"""
-            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                <!-- Articles Card -->
-                <div style="flex: 1; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f; text-align: center;">
-                    <div style="font-size: 2rem;">📰</div>
-                    <div style="color: #00d4ff; font-size: 1.8rem; font-weight: bold;">{int(row['total_articles']):,}</div>
-                    <div style="color: #64748b; font-size: 0.75rem;">Articles Analyzed</div>
+        with c1:
+            st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
+                    <div style="font-size: 1.5rem;">📰</div>
+                    <div style="color: #00d4ff; font-size: 1.5rem; font-weight: bold;">{articles:,}</div>
+                    <div style="color: #64748b; font-size: 0.7rem;">Articles</div>
                 </div>
-                
-                <!-- Sentiment Balance Card -->
-                <div style="flex: 2; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem; text-align: center;">Sentiment Balance</div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="color: #22c55e; font-size: 0.85rem; width: 60px; text-align: right;">{pos:.1f}%</span>
-                        <div style="flex: 1; height: 12px; background: #0f2744; border-radius: 6px; overflow: hidden; display: flex;">
-                            <div style="width: {pos_pct}%; background: linear-gradient(90deg, #22c55e, #84cc16); border-radius: 6px 0 0 6px;"></div>
-                            <div style="width: {neg_pct}%; background: linear-gradient(90deg, #f97316, #ef4444); border-radius: 0 6px 6px 0;"></div>
-                        </div>
-                        <span style="color: #ef4444; font-size: 0.85rem; width: 60px;">{neg:.1f}%</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 0.3rem;">
-                        <span style="color: #64748b; font-size: 0.7rem;">👍 Positive</span>
-                        <span style="color: #64748b; font-size: 0.7rem;">Negative 👎</span>
-                    </div>
+            """, unsafe_allow_html=True)
+        
+        with c2:
+            st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
+                    <div style="font-size: 1.5rem;">👍</div>
+                    <div style="color: #22c55e; font-size: 1.5rem; font-weight: bold;">{pos:.1f}%</div>
+                    <div style="color: #64748b; font-size: 0.7rem;">Positive</div>
                 </div>
-                
-                <!-- Tone Card -->
-                <div style="flex: 1; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f; text-align: center;">
-                    <div style="font-size: 2rem;">📊</div>
-                    <div style="color: #8b5cf6; font-size: 1.8rem; font-weight: bold;">{row['avg_tone']:.2f}</div>
-                    <div style="color: #64748b; font-size: 0.75rem;">Average Tone</div>
+            """, unsafe_allow_html=True)
+        
+        with c3:
+            st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
+                    <div style="font-size: 1.5rem;">👎</div>
+                    <div style="color: #ef4444; font-size: 1.5rem; font-weight: bold;">{neg:.1f}%</div>
+                    <div style="color: #64748b; font-size: 0.7rem;">Negative</div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        
+        with c4:
+            st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
+                    <div style="font-size: 1.5rem;">📊</div>
+                    <div style="color: #8b5cf6; font-size: 1.5rem; font-weight: bold;">{tone:.2f}</div>
+                    <div style="color: #64748b; font-size: 0.7rem;">Avg Tone</div>
+                </div>
+            """, unsafe_allow_html=True)
                 
     except Exception as e:
         pass
@@ -424,25 +426,26 @@ def render_emotion_insights(conn):
         
         # Generate insight based on data
         if fear > joy * 1.5:
-            insight = "Global news coverage is dominated by <b style='color:#ef4444'>fear and anxiety</b>, indicating heightened concerns."
+            insight = "Global news is dominated by <b style='color:#ef4444'>fear and anxiety</b>, indicating heightened concerns."
+            emoji = "🔴"
         elif joy > fear * 1.5:
-            insight = "News sentiment leans <b style='color:#22c55e'>positive</b>, with optimism outweighing concerns."
+            insight = "News sentiment is <b style='color:#22c55e'>positive</b>, with optimism outweighing concerns."
+            emoji = "🟢"
         elif tone < -2:
-            insight = "Media tone is <b style='color:#f97316'>notably negative</b>, reflecting challenging global conditions."
+            insight = "Media tone is <b style='color:#f97316'>notably negative</b>, reflecting challenging conditions."
+            emoji = "🟠"
         elif tone > 2:
-            insight = "Coverage reflects <b style='color:#84cc16'>positive developments</b> across major news sources."
+            insight = "Coverage reflects <b style='color:#84cc16'>positive developments</b> across news sources."
+            emoji = "🟢"
         else:
-            insight = "News sentiment is <b style='color:#eab308'>balanced</b>, with mixed emotions across global coverage."
+            insight = "News sentiment is <b style='color:#eab308'>balanced</b>, with mixed emotions in coverage."
+            emoji = "🟡"
         
         st.markdown(f"""
-            <div style="padding: 1rem; background: linear-gradient(90deg, rgba(139,92,246,0.1) 0%, rgba(0,212,255,0.1) 100%); border-radius: 10px; border-left: 4px solid #8b5cf6; margin-top: 0.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;">
-                    <span style="font-size: 1rem;">🤖</span>
-                    <span style="color: #8b5cf6; font-weight: 600; font-size: 0.85rem;">AI Insight</span>
-                </div>
-                <div style="color: #e2e8f0; font-size: 0.9rem; line-height: 1.5;">
-                    {insight}
-                </div>
+            <div style="padding: 0.8rem 1rem; background: linear-gradient(90deg, rgba(139,92,246,0.1) 0%, rgba(0,212,255,0.1) 100%); border-radius: 10px; border-left: 4px solid #8b5cf6; margin: 0.5rem 0;">
+                <span style="margin-right: 0.5rem;">{emoji}</span>
+                <span style="color: #8b5cf6; font-weight: 600; font-size: 0.85rem;">AI Insight: </span>
+                <span style="color: #e2e8f0; font-size: 0.9rem;">{insight}</span>
             </div>
         """, unsafe_allow_html=True)
         
@@ -468,13 +471,13 @@ def render_emotions_tab(conn):
         """, unsafe_allow_html=True)
         return
     
-    # Stats row at top
+    # Stats row at top using columns
     render_emotion_stats(conn)
     
     # AI Insight
     render_emotion_insights(conn)
     
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    st.markdown("")
     
     # Main content - 2 columns
     col1, col2 = st.columns([1, 1])
@@ -487,7 +490,7 @@ def render_emotions_tab(conn):
         st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Radar</span></div>', unsafe_allow_html=True)
         render_emotion_breakdown(conn)
     
-    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+    st.markdown("")
     
     # Trending themes full width
     st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Topics</span></div>', unsafe_allow_html=True)
