@@ -565,14 +565,243 @@ def gdelt_motherduck_table_polars(context: AssetExecutionContext, gdelt_raw_data
 
 
 # =============================================================================
+# GKG (GLOBAL KNOWLEDGE GRAPH) - EMOTIONS & THEMES
+# =============================================================================
+
+GKG_TABLE = "gkg_emotions"
+
+# Key GCAM emotion codes we want to extract
+# Format: c{dictionary_id}.{dimension_id}
+GCAM_EMOTIONS = {
+    "c9.1": "fear",
+    "c9.2": "anger", 
+    "c9.3": "sadness",
+    "c9.4": "joy",
+    "c9.5": "disgust",
+    "c9.6": "surprise",
+    "c9.7": "trust",
+    "c9.8": "anticipation",
+    "c18.1": "anxiety",
+    "c18.2": "hostility",
+    "c18.3": "depression",
+}
+
+
+def get_gdelt_gkg_url() -> str:
+    """Get the URL for the latest GDELT GKG file."""
+    now = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=20)
+    rounded_minute = (now.minute // 15) * 15
+    rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
+    timestamp = rounded_time.strftime("%Y%m%d%H%M00")
+    return f"http://data.gdeltproject.org/gdeltv2/{timestamp}.gkg.csv.zip"
+
+
+def parse_gcam_field(gcam_str: str) -> dict:
+    """
+    Parse GCAM field into emotion scores.
+    GCAM format: dimension:value,dimension:value,...
+    """
+    emotions = {name: 0.0 for name in GCAM_EMOTIONS.values()}
+    
+    if not gcam_str or not isinstance(gcam_str, str):
+        return emotions
+    
+    try:
+        for pair in gcam_str.split(","):
+            if ":" in pair:
+                parts = pair.split(":")
+                if len(parts) == 2:
+                    code, value = parts
+                    if code in GCAM_EMOTIONS:
+                        try:
+                            emotions[GCAM_EMOTIONS[code]] = float(value)
+                        except ValueError:
+                            pass
+    except Exception:
+        pass
+    
+    return emotions
+
+
+def parse_themes_field(themes_str: str) -> list:
+    """Extract top themes from GKG themes field."""
+    if not themes_str or not isinstance(themes_str, str):
+        return []
+    
+    try:
+        # Themes are semicolon-separated, may have character offsets
+        themes = []
+        for item in themes_str.split(";"):
+            # Remove character offset if present (format: THEME,offset)
+            theme = item.split(",")[0].strip()
+            if theme and len(theme) > 2:
+                themes.append(theme)
+        return themes[:10]  # Keep top 10 themes
+    except Exception:
+        return []
+
+
+def process_gkg_batch_polars(content: bytes) -> pl.DataFrame:
+    """
+    Process GDELT GKG CSV content using Polars.
+    Extracts emotions and themes from news articles.
+    """
+    z = zipfile.ZipFile(io.BytesIO(content))
+    csv_name = z.namelist()[0]
+    
+    with z.open(csv_name) as f:
+        # GKG columns we need:
+        # 0: GKGRECORDID, 1: DATE, 3: SourceCommonName, 7: Themes
+        # 11: Persons, 12: Organizations, 15: Tone, 17: GCAM
+        try:
+            df = pl.read_csv(
+                f,
+                separator='\t',
+                has_header=False,
+                columns=[0, 1, 3, 7, 11, 12, 15, 17],
+                new_columns=["GKG_ID", "DATE", "SOURCE", "THEMES", 
+                            "PERSONS", "ORGS", "TONE", "GCAM"],
+                infer_schema_length=10000,
+                ignore_errors=True,
+                truncate_ragged_lines=True,
+            )
+        except Exception as e:
+            logger.error(f"Error reading GKG CSV: {e}")
+            return pl.DataFrame()
+    
+    if df.is_empty():
+        return df
+    
+    # Parse TONE field (format: tone,positive,negative,polarity,activity,self/group)
+    def extract_tone(tone_str):
+        if not tone_str:
+            return (0.0, 0.0, 0.0)
+        try:
+            parts = str(tone_str).split(",")
+            avg_tone = float(parts[0]) if len(parts) > 0 else 0.0
+            positive = float(parts[1]) if len(parts) > 1 else 0.0
+            negative = float(parts[2]) if len(parts) > 2 else 0.0
+            return (avg_tone, positive, negative)
+        except:
+            return (0.0, 0.0, 0.0)
+    
+    # Extract tone components
+    tones = [extract_tone(t) for t in df["TONE"].to_list()]
+    df = df.with_columns([
+        pl.Series("AVG_TONE", [t[0] for t in tones]),
+        pl.Series("POSITIVE_SCORE", [t[1] for t in tones]),
+        pl.Series("NEGATIVE_SCORE", [t[2] for t in tones]),
+    ])
+    
+    # Parse GCAM emotions
+    gcam_data = [parse_gcam_field(g) for g in df["GCAM"].to_list()]
+    for emotion_name in GCAM_EMOTIONS.values():
+        df = df.with_columns(
+            pl.Series(f"EMOTION_{emotion_name.upper()}", 
+                     [d.get(emotion_name, 0.0) for d in gcam_data])
+        )
+    
+    # Parse themes into list (store as comma-separated string for simplicity)
+    themes_list = [",".join(parse_themes_field(t)) for t in df["THEMES"].to_list()]
+    df = df.with_columns(pl.Series("TOP_THEMES", themes_list))
+    
+    # Clean up - drop raw fields, keep processed ones
+    df = df.drop(["TONE", "GCAM", "THEMES"])
+    
+    # Filter out rows with null GKG_ID
+    df = df.filter(pl.col("GKG_ID").is_not_null())
+    
+    logger.info(f"📊 Processed {len(df):,} GKG records")
+    return df
+
+
+@asset(description="Extract emotions and themes from GDELT GKG")
+def gdelt_gkg_data(context: AssetExecutionContext) -> pl.DataFrame:
+    """
+    Extract GKG data with emotions and themes.
+    Runs alongside event ingestion every 15 minutes.
+    """
+    logger.info("🧠 Starting GDELT GKG extraction (emotions & themes)")
+    url = get_gdelt_gkg_url()
+    
+    response = download_with_retry(url)
+    if not response:
+        context.log.warning("GKG download failed, returning empty DataFrame")
+        return pl.DataFrame()
+    
+    try:
+        df = process_gkg_batch_polars(response.content)
+        if df.is_empty():
+            context.log.warning("No GKG data processed")
+            return df
+        
+        logger.info(f"✅ Extracted {len(df):,} GKG records with emotions")
+        return df
+        
+    except Exception as e:
+        logger.error(f"❌ Error processing GKG data: {e}")
+        context.log.error(f"GKG processing error: {e}")
+        return pl.DataFrame()
+
+
+@asset(description="Load GKG emotions data into MotherDuck")
+def gdelt_gkg_motherduck(context: AssetExecutionContext, gdelt_gkg_data: pl.DataFrame) -> Output:
+    """Load GKG emotions data into MotherDuck."""
+    if gdelt_gkg_data.is_empty():
+        return Output(None, metadata={"status": "Skipped", "rows": 0})
+    
+    token = os.getenv("MOTHERDUCK_TOKEN")
+    if not token:
+        return Output(None, metadata={"status": "Error", "message": "Missing token"})
+    
+    try:
+        pdf = gdelt_gkg_data.to_pandas()
+        
+        with duckdb.connect(f'md:gdelt_db?motherduck_token={token}') as con:
+            try:
+                # Check if table exists and deduplicate
+                existing = con.execute(f"""
+                    SELECT GKG_ID FROM {GKG_TABLE} 
+                    WHERE DATE >= '{pdf['DATE'].min()}'
+                """).df()
+                
+                if not existing.empty:
+                    pdf = pdf[~pdf['GKG_ID'].isin(existing['GKG_ID'])]
+                
+                if pdf.empty:
+                    return Output("No new GKG data", metadata={"status": "Skipped", "rows": 0})
+                
+                con.register('gkg_data', pdf)
+                con.execute(f"INSERT INTO {GKG_TABLE} SELECT * FROM gkg_data")
+                
+                total = con.execute(f"SELECT COUNT(*) FROM {GKG_TABLE}").fetchone()[0]
+                context.log.info(f"✅ Inserted {len(pdf):,} GKG rows. Total: {total:,}")
+                return Output(f"Inserted {len(pdf):,}", metadata={"rows": len(pdf), "total": total})
+                
+            except Exception as e:
+                if "does not exist" in str(e).lower():
+                    con.register('gkg_data', pdf)
+                    con.execute(f"CREATE TABLE {GKG_TABLE} AS SELECT * FROM gkg_data")
+                    context.log.info(f"✅ Created {GKG_TABLE} with {len(pdf):,} rows")
+                    return Output(f"Created table with {len(pdf):,} rows", metadata={"rows": len(pdf)})
+                else:
+                    raise e
+                
+    except Exception as e:
+        context.log.error(f"❌ GKG MotherDuck error: {e}")
+        return Output(None, metadata={"status": "Error", "message": str(e)})
+
+
+# =============================================================================
 # DAGSTER JOBS & SCHEDULES
 # =============================================================================
 
-# Main ingestion job - runs every 15 minutes
+# Main ingestion job - runs every 15 minutes (now includes GKG)
 gdelt_ingestion_job = define_asset_job(
     name="gdelt_ingestion_job",
-    selection=["gdelt_raw_data_polars", "gdelt_motherduck_table_polars"],
-    description="Ingest GDELT data every 15 minutes (no embeddings)"
+    selection=["gdelt_raw_data_polars", "gdelt_motherduck_table_polars", 
+               "gdelt_gkg_data", "gdelt_gkg_motherduck"],
+    description="Ingest GDELT events + GKG emotions every 15 minutes"
 )
 
 # Schedule: Every 15 minutes
@@ -585,7 +814,9 @@ gdelt_ingestion_schedule = ScheduleDefinition(
 
 # Definitions
 defs = Definitions(
-    assets=[gdelt_raw_data_polars, gdelt_motherduck_table_polars],
+    assets=[gdelt_raw_data_polars, gdelt_motherduck_table_polars,
+            gdelt_gkg_data, gdelt_gkg_motherduck],
     jobs=[gdelt_ingestion_job],
     schedules=[gdelt_ingestion_schedule]
 )
+
