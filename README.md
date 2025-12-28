@@ -66,6 +66,9 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### AI Chat - Natural Language Queries
 ![AI Chat](docs/images/ai_chat.png)
 
+### RAG Chat - AI Analysis of World Events
+![RAG Chat](docs/images/rag_chat.png)
+
 ### Feed - Event Stream
 ![Feed Tab](docs/images/trends_tab.png)
 
