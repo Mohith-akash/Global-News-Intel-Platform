@@ -79,7 +79,7 @@ def main():
         sql_db = None
     
     render_header()
-    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
+    tabs = st.tabs(["📊 HOME", "📋 FEED", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
     
     with tabs[0]:
         render_metrics(conn, tbl)

@@ -361,21 +361,55 @@ def render_emotion_stats(conn):
         fear = row['avg_fear'] if row['avg_fear'] else 0
         joy = row['avg_joy'] if row['avg_joy'] else 0
         articles = int(row['total_articles'])
-        ratio = (joy / fear) if fear > 0 else 1.0
         
         # Use st.metric like HOME page for consistency
         c1, c2, c3, c4, c5 = st.columns(5)
         
         with c1:
-            st.metric("📰 ARTICLES", f"{articles:,}", "GKG analyzed")
+            st.metric("📰 ARTICLES", f"{articles:,}", "GKG data")
+            st.markdown('''
+                <div style="text-align:center;margin-top:-0.5rem;">
+                    <span style="font-size:0.7rem;color:#64748b;">
+                        💡 Total articles from GKG feed (rolling 24h)
+                    </span>
+                </div>
+            ''', unsafe_allow_html=True)
         with c2:
             st.metric("👍 POSITIVE", f"{pos:.1f}%", "Word ratio")
+            st.markdown('''
+                <div style="text-align:center;margin-top:-0.5rem;">
+                    <span style="font-size:0.7rem;color:#64748b;">
+                        💡 Positive words in article content
+                    </span>
+                </div>
+            ''', unsafe_allow_html=True)
         with c3:
             st.metric("👎 NEGATIVE", f"{neg:.1f}%", "Word ratio")
+            st.markdown('''
+                <div style="text-align:center;margin-top:-0.5rem;">
+                    <span style="font-size:0.7rem;color:#64748b;">
+                        💡 Negative words in article content
+                    </span>
+                </div>
+            ''', unsafe_allow_html=True)
         with c4:
             st.metric("😨 FEAR", f"{fear:.1f}", "Avg score")
+            st.markdown('''
+                <div style="text-align:center;margin-top:-0.5rem;">
+                    <span style="font-size:0.7rem;color:#64748b;">
+                        💡 Fear emotion intensity (0-100 scale)
+                    </span>
+                </div>
+            ''', unsafe_allow_html=True)
         with c5:
             st.metric("😊 JOY", f"{joy:.1f}", "Avg score")
+            st.markdown('''
+                <div style="text-align:center;margin-top:-0.5rem;">
+                    <span style="font-size:0.7rem;color:#64748b;">
+                        💡 Joy emotion intensity (0-100 scale)
+                    </span>
+                </div>
+            ''', unsafe_allow_html=True)
                 
     except Exception as e:
         pass
