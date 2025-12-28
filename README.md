@@ -32,7 +32,7 @@
 
 ---
 
-## 🎯 Overview
+## 🎯 Overview 
 
 A full-stack data engineering project that ingests, processes, and visualizes **100,000+ daily global news events** from the GDELT Project. Includes AI chat for natural language queries and a live analytics dashboard.
 
