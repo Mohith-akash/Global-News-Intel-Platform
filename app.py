@@ -1,6 +1,6 @@
 """
 GDELT News Intelligence Dashboard
-Real-time global news analytics powered by AI.
+Real-time global news analytics powered by AI. 
 """
 
 import streamlit as st
