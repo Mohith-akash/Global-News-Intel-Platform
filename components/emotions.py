@@ -25,31 +25,41 @@ def get_emoji_for_mood(mood_score):
         return "😊"
 
 
+def check_gkg_table_exists(conn):
+    """Check if gkg_emotions table exists and has data."""
+    try:
+        result = conn.execute("""
+            SELECT COUNT(*) as cnt FROM gkg_emotions LIMIT 1
+        """).df()
+        return result['cnt'].iloc[0] > 0
+    except:
+        return False
+
+
 def render_emotions_pulse(conn):
     """Render the global emotion pulse meter."""
     try:
-        # Get latest day's mood
+        # Query raw gkg_emotions table directly (not dbt)
         df = conn.execute("""
             SELECT 
-                event_date,
-                avg_mood,
-                avg_fear,
-                avg_anger,
-                avg_joy,
-                avg_trust,
-                avg_anxiety,
-                article_count
-            FROM fct_daily_emotions
-            ORDER BY event_date DESC
+                SUBSTR(DATE, 1, 8) as date_key,
+                AVG(AVG_TONE) as avg_mood,
+                AVG(EMOTION_FEAR) as avg_fear,
+                AVG(EMOTION_JOY) as avg_joy,
+                AVG(EMOTION_ANXIETY) as avg_anxiety,
+                COUNT(*) as article_count
+            FROM gkg_emotions
+            GROUP BY SUBSTR(DATE, 1, 8)
+            ORDER BY date_key DESC
             LIMIT 7
         """).df()
         
         if df.empty:
-            st.info("📊 Emotion data is being collected. Check back soon!")
+            st.info("📊 Emotion data is being collected. Check back in ~15 minutes after the next pipeline run.")
             return
         
         today = df.iloc[0]
-        mood = today['avg_mood']
+        mood = today['avg_mood'] if today['avg_mood'] else 0
         emoji = get_emoji_for_mood(mood)
         
         # Mood description
@@ -84,24 +94,30 @@ def render_emotions_pulse(conn):
         # Weekly mood trend
         st.markdown("#### 📅 Weekly Mood Trend")
         
-        df_sorted = df.sort_values('event_date')
-        emojis = [get_emoji_for_mood(m) for m in df_sorted['avg_mood']]
+        df_sorted = df.sort_values('date_key')
+        emojis = [get_emoji_for_mood(m if m else 0) for m in df_sorted['avg_mood']]
         
         cols = st.columns(min(7, len(df_sorted)))
         for i, (idx, row) in enumerate(df_sorted.iterrows()):
             if i < len(cols):
                 with cols[i]:
-                    day_name = row['event_date'].strftime('%a') if hasattr(row['event_date'], 'strftime') else str(row['event_date'])[-2:]
+                    date_str = row['date_key']
+                    # Format: YYYYMMDD -> day name
+                    try:
+                        day_name = datetime.strptime(date_str, '%Y%m%d').strftime('%a')
+                    except:
+                        day_name = date_str[-2:]
+                    mood_val = row['avg_mood'] if row['avg_mood'] else 0
                     st.markdown(f"""
                         <div style="text-align: center; padding: 0.5rem; background: #0f2744; border-radius: 8px;">
                             <div style="font-size: 0.7rem; color: #64748b;">{day_name}</div>
                             <div style="font-size: 1.5rem;">{emojis[i]}</div>
-                            <div style="font-size: 0.7rem; color: #94a3b8;">{row['avg_mood']:.1f}</div>
+                            <div style="font-size: 0.7rem; color: #94a3b8;">{mood_val:.1f}</div>
                         </div>
                     """, unsafe_allow_html=True)
                     
     except Exception as e:
-        st.warning(f"Emotion pulse data not yet available. Run the pipeline first.")
+        st.info("📊 Emotion pulse: Waiting for GKG data collection. Check back in ~15 minutes.")
 
 
 def render_emotion_breakdown(conn):
@@ -109,15 +125,14 @@ def render_emotion_breakdown(conn):
     try:
         df = conn.execute("""
             SELECT 
-                AVG(avg_fear) as fear,
-                AVG(avg_anger) as anger,
-                AVG(avg_sadness) as sadness,
-                AVG(avg_joy) as joy,
-                AVG(avg_trust) as trust,
-                AVG(avg_anxiety) as anxiety,
-                AVG(avg_anticipation) as anticipation
-            FROM fct_daily_emotions
-            WHERE event_date >= CURRENT_DATE - INTERVAL '7 days'
+                AVG(EMOTION_FEAR) as fear,
+                AVG(EMOTION_ANGER) as anger,
+                AVG(EMOTION_SADNESS) as sadness,
+                AVG(EMOTION_JOY) as joy,
+                AVG(EMOTION_TRUST) as trust,
+                AVG(EMOTION_ANXIETY) as anxiety,
+                AVG(EMOTION_ANTICIPATION) as anticipation
+            FROM gkg_emotions
         """).df()
         
         if df.empty:
@@ -162,15 +177,22 @@ def render_emotion_breakdown(conn):
         st.plotly_chart(fig, use_container_width=True)
         
     except Exception as e:
-        st.info("Emotion breakdown loading...")
+        st.info("📊 Emotion breakdown: Waiting for data...")
 
 
 def render_trending_themes(conn):
     """Render trending themes."""
     try:
         df = conn.execute("""
-            SELECT theme, mention_count, avg_daily_mentions
-            FROM fct_trending_themes
+            SELECT 
+                TRIM(theme.value) as theme,
+                COUNT(*) as mention_count
+            FROM gkg_emotions,
+            LATERAL UNNEST(STRING_SPLIT(TOP_THEMES, ',')) AS theme(value)
+            WHERE TOP_THEMES IS NOT NULL AND TOP_THEMES != ''
+            GROUP BY TRIM(theme.value)
+            HAVING COUNT(*) >= 5
+            ORDER BY mention_count DESC
             LIMIT 15
         """).df()
         
@@ -181,7 +203,6 @@ def render_trending_themes(conn):
         for _, row in df.iterrows():
             theme = row['theme']
             count = row['mention_count']
-            daily = row['avg_daily_mentions']
             
             # Make theme display-friendly
             display_theme = theme.replace('_', ' ').title()
@@ -196,7 +217,7 @@ def render_trending_themes(conn):
             """, unsafe_allow_html=True)
             
     except Exception as e:
-        st.info("Theme data loading...")
+        st.info("📊 Theme data: Waiting for collection...")
 
 
 def render_emotion_timeline(conn):
@@ -204,20 +225,24 @@ def render_emotion_timeline(conn):
     try:
         df = conn.execute("""
             SELECT 
-                event_date,
-                avg_mood,
-                avg_fear,
-                avg_joy,
-                avg_anger,
-                avg_trust
-            FROM fct_daily_emotions
-            WHERE event_date >= CURRENT_DATE - INTERVAL '30 days'
-            ORDER BY event_date
+                SUBSTR(DATE, 1, 8) as date_key,
+                AVG(AVG_TONE) as avg_mood,
+                AVG(EMOTION_FEAR) as avg_fear,
+                AVG(EMOTION_JOY) as avg_joy,
+                AVG(EMOTION_ANGER) as avg_anger
+            FROM gkg_emotions
+            GROUP BY SUBSTR(DATE, 1, 8)
+            ORDER BY date_key
         """).df()
         
         if df.empty or len(df) < 2:
-            st.info("📊 Building emotion timeline...")
+            st.info("📊 Building emotion timeline... Need at least 2 days of data.")
             return
+        
+        # Convert date_key to proper dates
+        df['event_date'] = df['date_key'].apply(
+            lambda x: datetime.strptime(x, '%Y%m%d') if x else None
+        )
         
         fig = go.Figure()
         
@@ -262,11 +287,28 @@ def render_emotion_timeline(conn):
         st.plotly_chart(fig, use_container_width=True)
         
     except Exception as e:
-        st.info("Emotion timeline loading...")
+        st.info("📊 Emotion timeline: Waiting for data...")
 
 
 def render_emotions_tab(conn):
     """Main render function for Emotions & Themes tab."""
+    
+    # Check if GKG table exists
+    if not check_gkg_table_exists(conn):
+        st.markdown("""
+            <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f; margin: 2rem 0;">
+                <div style="font-size: 4rem;">🧠</div>
+                <h2 style="color: #00d4ff; margin: 1rem 0;">Emotions & Themes Coming Soon!</h2>
+                <p style="color: #94a3b8; max-width: 500px; margin: 0 auto;">
+                    This feature analyzes 2,200+ emotional dimensions from global news.
+                    <br><br>
+                    <b>Status:</b> Waiting for GKG data collection.<br>
+                    The pipeline runs every 15 minutes. Check back soon!
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        return
+    
     st.markdown('<div class="card-hdr"><span>🧠</span><span class="card-title">Global Emotion Pulse</span></div>', unsafe_allow_html=True)
     render_emotions_pulse(conn)
     
@@ -275,7 +317,7 @@ def render_emotions_tab(conn):
     col1, col2 = st.columns([6, 4])
     
     with col1:
-        st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Breakdown</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(7 Days)</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Breakdown</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(All Data)</span></div>', unsafe_allow_html=True)
         render_emotion_breakdown(conn)
     
     with col2:
@@ -284,5 +326,5 @@ def render_emotions_tab(conn):
     
     st.markdown("---")
     
-    st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">30-Day Emotion Timeline</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">Emotion Timeline</span></div>', unsafe_allow_html=True)
     render_emotion_timeline(conn)
