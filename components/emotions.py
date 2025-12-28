@@ -4,25 +4,8 @@ Visualizes GDELT GKG emotion data and trending themes.
 """
 
 import streamlit as st
-import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-
-
-def get_emoji_for_mood(mood_score):
-    """Return emoji based on mood score."""
-    if mood_score < -5:
-        return "😡"
-    elif mood_score < -2:
-        return "😨"
-    elif mood_score < 0:
-        return "😟"
-    elif mood_score < 2:
-        return "😐"
-    elif mood_score < 5:
-        return "🙂"
-    else:
-        return "😊"
+from datetime import datetime
 
 
 def check_gkg_table_exists(conn):
@@ -37,91 +20,79 @@ def check_gkg_table_exists(conn):
 
 
 def render_emotions_pulse(conn):
-    """Render the global emotion pulse meter."""
+    """Render the global emotion pulse meter with a beautiful gauge."""
     try:
-        # Query raw gkg_emotions table directly (not dbt)
         df = conn.execute("""
             SELECT 
-                SUBSTR(CAST(DATE AS VARCHAR), 1, 8) as date_key,
                 AVG(AVG_TONE) as avg_mood,
                 AVG(EMOTION_FEAR) as avg_fear,
                 AVG(EMOTION_JOY) as avg_joy,
-                AVG(EMOTION_ANXIETY) as avg_anxiety,
+                AVG(EMOTION_ANGER) as avg_anger,
+                AVG(EMOTION_TRUST) as avg_trust,
                 COUNT(*) as article_count
             FROM gkg_emotions
-            GROUP BY SUBSTR(CAST(DATE AS VARCHAR), 1, 8)
-            ORDER BY date_key DESC
-            LIMIT 7
         """).df()
         
         if df.empty:
-            st.info("📊 Emotion data is being collected. Check back in ~15 minutes after the next pipeline run.")
+            st.info("📊 Emotion data is being collected...")
             return
         
-        today = df.iloc[0]
-        mood = today['avg_mood'] if today['avg_mood'] else 0
-        emoji = get_emoji_for_mood(mood)
+        row = df.iloc[0]
+        mood = row['avg_mood'] if row['avg_mood'] else 0
+        articles = int(row['article_count'])
         
-        # Mood description
-        if mood < -3:
-            mood_text = "Very Negative"
-            color = "#ef4444"
-        elif mood < -1:
-            mood_text = "Slightly Negative"
-            color = "#f97316"
-        elif mood < 1:
-            mood_text = "Neutral"
-            color = "#eab308"
-        elif mood < 3:
-            mood_text = "Slightly Positive"
-            color = "#84cc16"
-        else:
-            mood_text = "Positive"
-            color = "#22c55e"
+        # Create a gauge chart for global mood
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=mood,
+            number={'suffix': '', 'font': {'size': 40, 'color': '#e2e8f0'}},
+            title={'text': "Global Mood Index", 'font': {'size': 18, 'color': '#94a3b8'}},
+            gauge={
+                'axis': {'range': [-10, 10], 'tickcolor': '#64748b', 
+                         'tickfont': {'color': '#64748b'}},
+                'bar': {'color': '#00d4ff'},
+                'bgcolor': '#0f2744',
+                'borderwidth': 2,
+                'bordercolor': '#1e3a5f',
+                'steps': [
+                    {'range': [-10, -5], 'color': '#ef4444'},
+                    {'range': [-5, -2], 'color': '#f97316'},
+                    {'range': [-2, 2], 'color': '#eab308'},
+                    {'range': [2, 5], 'color': '#84cc16'},
+                    {'range': [5, 10], 'color': '#22c55e'},
+                ],
+                'threshold': {
+                    'line': {'color': '#00d4ff', 'width': 4},
+                    'thickness': 0.75,
+                    'value': mood
+                }
+            }
+        ))
         
-        # Display current mood
+        fig.update_layout(
+            height=220,
+            margin=dict(l=30, r=30, t=50, b=20),
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e2e8f0'),
+        )
+        
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            st.plotly_chart(fig, width='stretch')
             st.markdown(f"""
-                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="font-size: 3rem;">{emoji}</div>
-                    <div style="font-size: 1.5rem; font-weight: bold; color: {color};">{mood_text}</div>
-                    <div style="font-size: 0.9rem; color: #94a3b8;">Global Mood Score: {mood:.1f}</div>
-                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">Based on {today['article_count']:,.0f} articles</div>
+                <div style="text-align: center; margin-top: -20px;">
+                    <span style="color: #64748b; font-size: 0.85rem;">
+                        Based on <b style="color: #00d4ff;">{articles:,}</b> articles analyzed
+                    </span>
                 </div>
             """, unsafe_allow_html=True)
-        
-        # Weekly mood trend
-        st.markdown("#### 📅 Weekly Mood Trend")
-        
-        df_sorted = df.sort_values('date_key')
-        emojis = [get_emoji_for_mood(m if m else 0) for m in df_sorted['avg_mood']]
-        
-        cols = st.columns(min(7, len(df_sorted)))
-        for i, (idx, row) in enumerate(df_sorted.iterrows()):
-            if i < len(cols):
-                with cols[i]:
-                    date_str = row['date_key']
-                    # Format: YYYYMMDD -> day name
-                    try:
-                        day_name = datetime.strptime(date_str, '%Y%m%d').strftime('%a')
-                    except:
-                        day_name = date_str[-2:]
-                    mood_val = row['avg_mood'] if row['avg_mood'] else 0
-                    st.markdown(f"""
-                        <div style="text-align: center; padding: 0.5rem; background: #0f2744; border-radius: 8px;">
-                            <div style="font-size: 0.7rem; color: #64748b;">{day_name}</div>
-                            <div style="font-size: 1.5rem;">{emojis[i]}</div>
-                            <div style="font-size: 0.7rem; color: #94a3b8;">{mood_val:.1f}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
                     
     except Exception as e:
-        st.info("📊 Emotion pulse: Waiting for GKG data collection. Check back in ~15 minutes.")
+        st.info("📊 Emotion data loading...")
 
 
 def render_emotion_breakdown(conn):
-    """Render emotion breakdown chart."""
+    """Render emotion breakdown as a beautiful radar chart."""
     try:
         df = conn.execute("""
             SELECT 
@@ -140,93 +111,122 @@ def render_emotion_breakdown(conn):
             return
         
         row = df.iloc[0]
-        # Define emotions with their colors
-        emotion_data = [
-            ('😨 Fear', row['fear'] if row['fear'] else 0, '#ef4444'),
-            ('😡 Anger', row['anger'] if row['anger'] else 0, '#f97316'),
-            ('😢 Sadness', row['sadness'] if row['sadness'] else 0, '#3b82f6'),
-            ('😊 Joy', row['joy'] if row['joy'] else 0, '#22c55e'),
-            ('🤝 Trust', row['trust'] if row['trust'] else 0, '#06b6d4'),
-            ('😰 Anxiety', row['anxiety'] if row['anxiety'] else 0, '#eab308'),
-            ('🎯 Anticipation', row['anticipation'] if row['anticipation'] else 0, '#8b5cf6'),
+        
+        # Prepare data for radar chart
+        emotions = ['Fear', 'Anger', 'Sadness', 'Joy', 'Trust', 'Anxiety', 'Anticipation']
+        values = [
+            row['fear'] if row['fear'] else 0,
+            row['anger'] if row['anger'] else 0,
+            row['sadness'] if row['sadness'] else 0,
+            row['joy'] if row['joy'] else 0,
+            row['trust'] if row['trust'] else 0,
+            row['anxiety'] if row['anxiety'] else 0,
+            row['anticipation'] if row['anticipation'] else 0,
         ]
         
-        # Sort by value while keeping colors matched
-        emotion_data = sorted(emotion_data, key=lambda x: x[1], reverse=True)
+        # Close the radar chart
+        emotions_closed = emotions + [emotions[0]]
+        values_closed = values + [values[0]]
         
-        names = [e[0] for e in emotion_data]
-        values = [e[1] for e in emotion_data]
-        colors = [e[2] for e in emotion_data]
+        fig = go.Figure()
         
-        # Create horizontal bar chart
-        fig = go.Figure(go.Bar(
-            x=values,
-            y=names,
-            orientation='h',
-            marker_color=colors
+        fig.add_trace(go.Scatterpolar(
+            r=values_closed,
+            theta=emotions_closed,
+            fill='toself',
+            fillcolor='rgba(0, 212, 255, 0.2)',
+            line=dict(color='#00d4ff', width=2),
+            name='Current'
         ))
         
         fig.update_layout(
-            title=None,
-            xaxis_title="Average Score",
-            yaxis_title=None,
-            height=300,
-            margin=dict(l=0, r=20, t=10, b=40),
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, max(values) * 1.2 if max(values) > 0 else 10],
+                    gridcolor='#1e3a5f',
+                    tickfont=dict(color='#64748b', size=10),
+                ),
+                angularaxis=dict(
+                    gridcolor='#1e3a5f',
+                    tickfont=dict(color='#e2e8f0', size=12),
+                ),
+                bgcolor='rgba(0,0,0,0)',
+            ),
+            showlegend=False,
+            height=320,
+            margin=dict(l=60, r=60, t=30, b=30),
             paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#e2e8f0'),
-            xaxis=dict(gridcolor='#1e3a5f', zeroline=False),
-            yaxis=dict(gridcolor='#1e3a5f'),
         )
         
         st.plotly_chart(fig, width='stretch')
         
+        # Show top 3 emotions below
+        emotion_values = list(zip(emotions, values))
+        top_3 = sorted(emotion_values, key=lambda x: x[1], reverse=True)[:3]
+        
+        cols = st.columns(3)
+        colors = ['#00d4ff', '#8b5cf6', '#06b6d4']
+        for i, (emo, val) in enumerate(top_3):
+            with cols[i]:
+                st.markdown(f"""
+                    <div style="text-align: center; padding: 0.5rem; background: #0f2744; border-radius: 8px; border-left: 3px solid {colors[i]};">
+                        <div style="color: #94a3b8; font-size: 0.75rem;">#{i+1}</div>
+                        <div style="color: #e2e8f0; font-weight: bold;">{emo}</div>
+                        <div style="color: {colors[i]}; font-size: 1.1rem;">{val:.1f}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
     except Exception as e:
-        st.info("📊 Emotion breakdown: Waiting for data...")
+        st.info("📊 Emotion breakdown loading...")
 
 
 # Map common GDELT theme codes to human-readable names
 THEME_TRANSLATIONS = {
-    'TAX_FNCACT': 'Tax Policy',
+    'TAX_FNCACT': 'Financial Activity',
     'EPU_POLICY': 'Economic Policy',
     'TAX_ETHNICITY': 'Ethnic Issues',
     'TAX_WORLDLANGUAGES': 'Languages',
     'CRISISLEX_CRISISLEXREC': 'Crisis Events',
     'UNGP_FORESTS_RIVERS': 'Environment',
     'USPEC_POLITICS_GENERAL1': 'Politics',
-    'TAX_ECON_PRICE': 'Economic Prices',
+    'TAX_ECON_PRICE': 'Pricing & Economy',
     'GENERAL_GOVERNMENT': 'Government',
     'MANMADE_DISASTER_IMPLIED': 'Disasters',
     'EPU_ECONOMY_HISTORIC': 'Economic History',
     'EDUCATION': 'Education',
     'SOC_POINTSOFINTEREST': 'Social Issues',
-    'GENERAL_HEALTH': 'Health',
+    'GENERAL_HEALTH': 'Healthcare',
     'LEADER': 'Leadership',
     'TERROR': 'Terrorism',
     'PROTEST': 'Protests',
     'MILITARY': 'Military',
-    'ENV_': 'Environment',
-    'WB_': 'World Bank Topics',
+    'ARREST': 'Law Enforcement',
+    'KILL': 'Violence',
 }
+
 
 def humanize_theme(theme):
     """Convert GDELT theme code to human-readable name."""
     if not theme:
         return None
     theme_upper = theme.upper()
-    # Check for exact matches
     if theme_upper in THEME_TRANSLATIONS:
         return THEME_TRANSLATIONS[theme_upper]
-    # Check for prefix matches
     for prefix, name in THEME_TRANSLATIONS.items():
         if theme_upper.startswith(prefix):
             return name
-    # Default: clean up the name
-    return theme.replace('_', ' ').title()
+    # Clean up for display
+    cleaned = theme.replace('_', ' ').title()
+    # Remove common prefixes
+    for prefix in ['Tax ', 'Epu ', 'Soc ', 'Wb ', 'Ungp ']:
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):]
+    return cleaned if len(cleaned) > 2 else None
 
 
 def render_trending_themes(conn):
-    """Render trending themes."""
+    """Render trending themes with beautiful styling."""
     try:
         df = conn.execute("""
             SELECT 
@@ -236,111 +236,88 @@ def render_trending_themes(conn):
             LATERAL UNNEST(STRING_SPLIT(TOP_THEMES, ',')) AS theme(value)
             WHERE TOP_THEMES IS NOT NULL AND TOP_THEMES != ''
             GROUP BY TRIM(theme.value)
-            HAVING COUNT(*) >= 5
+            HAVING COUNT(*) >= 3
             ORDER BY mention_count DESC
-            LIMIT 15
+            LIMIT 12
         """).df()
         
         if df.empty:
             st.info("📊 Theme data is being collected...")
             return
         
-        for _, row in df.iterrows():
+        # Get max for relative sizing
+        max_count = df['mention_count'].max()
+        
+        for idx, row in df.iterrows():
             theme = row['theme']
             count = row['mention_count']
             
-            # Make theme display-friendly
             display_theme = humanize_theme(theme)
-            if not display_theme:
+            if not display_theme or len(display_theme) < 3:
                 continue
-            if len(display_theme) > 25:
-                display_theme = display_theme[:22] + "..."
+            if len(display_theme) > 20:
+                display_theme = display_theme[:18] + "..."
+            
+            # Calculate bar width percentage
+            bar_pct = (count / max_count) * 100 if max_count > 0 else 0
             
             st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; padding: 0.5rem; margin-bottom: 0.25rem; background: #0f2744; border-radius: 6px; border-left: 3px solid #00d4ff;">
-                    <span style="color: #e2e8f0; font-weight: 500;">#{display_theme}</span>
-                    <span style="color: #94a3b8; font-size: 0.85rem;">{count:,} mentions</span>
+                <div style="position: relative; padding: 0.6rem 0.8rem; margin-bottom: 0.4rem; background: #0f2744; border-radius: 6px; overflow: hidden;">
+                    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: {bar_pct}%; background: linear-gradient(90deg, rgba(0,212,255,0.3) 0%, rgba(0,212,255,0.05) 100%);"></div>
+                    <div style="position: relative; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #e2e8f0; font-weight: 500; font-size: 0.9rem;">#{display_theme}</span>
+                        <span style="color: #00d4ff; font-size: 0.8rem; font-weight: bold;">{count:,}</span>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
             
     except Exception as e:
-        st.info("📊 Theme data: Waiting for collection...")
+        st.info("📊 Theme data loading...")
 
 
-def render_emotion_timeline(conn):
-    """Render emotion timeline chart."""
+def render_emotion_stats(conn):
+    """Render emotion statistics cards."""
     try:
         df = conn.execute("""
             SELECT 
-                SUBSTR(CAST(DATE AS VARCHAR), 1, 8) as date_key,
-                AVG(AVG_TONE) as avg_mood,
-                AVG(EMOTION_FEAR) as avg_fear,
-                AVG(EMOTION_JOY) as avg_joy,
-                AVG(EMOTION_ANGER) as avg_anger
+                COUNT(*) as total_articles,
+                AVG(POSITIVE_SCORE) as avg_positive,
+                AVG(NEGATIVE_SCORE) as avg_negative,
+                AVG(AVG_TONE) as avg_tone
             FROM gkg_emotions
-            GROUP BY SUBSTR(CAST(DATE AS VARCHAR), 1, 8)
-            ORDER BY date_key
         """).df()
         
-        if df.empty or len(df) < 2:
-            st.info("📊 Building emotion timeline... Need at least 2 days of data.")
+        if df.empty:
             return
         
-        # Convert date_key to proper dates
-        df['event_date'] = df['date_key'].apply(
-            lambda x: datetime.strptime(x, '%Y%m%d') if x else None
-        )
+        row = df.iloc[0]
         
-        fig = go.Figure()
+        cols = st.columns(4)
         
-        fig.add_trace(go.Scatter(
-            x=df['event_date'], y=df['avg_mood'],
-            name='Overall Mood', line=dict(color='#00d4ff', width=3),
-            fill='tozeroy', fillcolor='rgba(0, 212, 255, 0.1)'
-        ))
+        metrics = [
+            ("📰", "Articles", f"{int(row['total_articles']):,}", "#00d4ff"),
+            ("👍", "Positive", f"{row['avg_positive']:.1f}%", "#22c55e"),
+            ("👎", "Negative", f"{row['avg_negative']:.1f}%", "#ef4444"),
+            ("📊", "Avg Tone", f"{row['avg_tone']:.2f}", "#8b5cf6"),
+        ]
         
-        fig.add_trace(go.Scatter(
-            x=df['event_date'], y=df['avg_joy'],
-            name='Joy', line=dict(color='#22c55e', width=2, dash='dot')
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=df['event_date'], y=df['avg_fear'],
-            name='Fear', line=dict(color='#ef4444', width=2, dash='dot')
-        ))
-        
-        fig.update_layout(
-            title=None,
-            xaxis_title="Date",
-            yaxis_title="Score",
-            height=350,
-            margin=dict(l=0, r=20, t=10, b=40),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#e2e8f0'),
-            xaxis=dict(gridcolor='#1e3a5f', zeroline=False),
-            yaxis=dict(gridcolor='#1e3a5f', zeroline=True, zerolinecolor='#475569'),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
-                bgcolor='rgba(0,0,0,0)'
-            ),
-            hovermode='x unified'
-        )
-        
-        st.plotly_chart(fig, width='stretch')
-        
+        for i, (icon, label, value, color) in enumerate(metrics):
+            with cols[i]:
+                st.markdown(f"""
+                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 10px; border: 1px solid #1e3a5f;">
+                        <div style="font-size: 1.5rem;">{icon}</div>
+                        <div style="color: {color}; font-size: 1.3rem; font-weight: bold;">{value}</div>
+                        <div style="color: #64748b; font-size: 0.75rem;">{label}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
     except Exception as e:
-        st.info("📊 Emotion timeline: Waiting for data...")
+        pass
 
 
 def render_emotions_tab(conn):
     """Main render function for Emotions & Themes tab."""
     
-    # Check if GKG table exists
     if not check_gkg_table_exists(conn):
         st.markdown("""
             <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f; margin: 2rem 0;">
@@ -356,22 +333,23 @@ def render_emotions_tab(conn):
         """, unsafe_allow_html=True)
         return
     
-    st.markdown('<div class="card-hdr"><span>🧠</span><span class="card-title">Global Emotion Pulse</span></div>', unsafe_allow_html=True)
-    render_emotions_pulse(conn)
+    # Stats row at top
+    render_emotion_stats(conn)
     
     st.markdown("---")
     
-    col1, col2 = st.columns([6, 4])
+    # Main content
+    col1, col2 = st.columns([5, 5])
     
     with col1:
-        st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Breakdown</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(All Data)</span></div>', unsafe_allow_html=True)
-        render_emotion_breakdown(conn)
+        st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Global Mood Index</span></div>', unsafe_allow_html=True)
+        render_emotions_pulse(conn)
     
     with col2:
-        st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Themes</span></div>', unsafe_allow_html=True)
-        render_trending_themes(conn)
+        st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Radar</span></div>', unsafe_allow_html=True)
+        render_emotion_breakdown(conn)
     
     st.markdown("---")
     
-    st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">Emotion Timeline</span></div>', unsafe_allow_html=True)
-    render_emotion_timeline(conn)
+    st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Topics</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(from news themes)</span></div>', unsafe_allow_html=True)
+    render_trending_themes(conn)
