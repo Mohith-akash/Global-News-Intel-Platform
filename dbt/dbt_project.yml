@@ -15,7 +15,7 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
-# Model configurations
+# Model configurations 
 models:
   gdelt_dbt:
     staging:
