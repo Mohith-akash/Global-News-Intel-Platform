@@ -484,7 +484,13 @@ def render_emotions_tab(conn):
     
     st.markdown("")
     
-    # Main content - 2 columns
+    # Trending themes - now above the charts for visibility
+    st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Topics</span></div>', unsafe_allow_html=True)
+    render_trending_themes(conn)
+    
+    st.markdown("")
+    
+    # Main content - 2 columns (charts below)
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -494,9 +500,3 @@ def render_emotions_tab(conn):
     with col2:
         st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Radar</span></div>', unsafe_allow_html=True)
         render_emotion_breakdown(conn)
-    
-    st.markdown("")
-    
-    # Trending themes full width
-    st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Topics</span></div>', unsafe_allow_html=True)
-    render_trending_themes(conn)
