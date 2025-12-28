@@ -340,7 +340,7 @@ def render_trending_themes(conn):
 
 
 def render_emotion_stats(conn):
-    """Render emotion statistics cards using st.columns."""
+    """Render emotion statistics cards using st.metric - consistent with HOME page."""
     try:
         df = conn.execute("""
             SELECT 
@@ -361,48 +361,21 @@ def render_emotion_stats(conn):
         fear = row['avg_fear'] if row['avg_fear'] else 0
         joy = row['avg_joy'] if row['avg_joy'] else 0
         articles = int(row['total_articles'])
+        ratio = (joy / fear) if fear > 0 else 1.0
         
-        # Use st.columns for reliable rendering
-        c1, c2, c3, c4 = st.columns(4)
+        # Use st.metric like HOME page for consistency
+        c1, c2, c3, c4, c5 = st.columns(5)
         
         with c1:
-            st.markdown(f"""
-                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="font-size: 1.5rem;">📰</div>
-                    <div style="color: #00d4ff; font-size: 1.5rem; font-weight: bold;">{articles:,}</div>
-                    <div style="color: #64748b; font-size: 0.7rem;">Articles</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
+            st.metric("📰 ARTICLES", f"{articles:,}", "GKG analyzed")
         with c2:
-            st.markdown(f"""
-                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="font-size: 1.5rem;">👍</div>
-                    <div style="color: #22c55e; font-size: 1.5rem; font-weight: bold;">{pos:.1f}%</div>
-                    <div style="color: #64748b; font-size: 0.7rem;">Positive</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
+            st.metric("👍 POSITIVE", f"{pos:.1f}%", "Word ratio")
         with c3:
-            st.markdown(f"""
-                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="font-size: 1.5rem;">👎</div>
-                    <div style="color: #ef4444; font-size: 1.5rem; font-weight: bold;">{neg:.1f}%</div>
-                    <div style="color: #64748b; font-size: 0.7rem;">Negative</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
-        # Show Fear vs Joy ratio instead of duplicate Avg Tone
+            st.metric("👎 NEGATIVE", f"{neg:.1f}%", "Word ratio")
         with c4:
-            ratio = (joy / fear) if fear > 0 else 1.0
-            color = "#22c55e" if ratio > 1 else "#ef4444" if ratio < 0.8 else "#eab308"
-            st.markdown(f"""
-                <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="font-size: 1.5rem;">⚖️</div>
-                    <div style="color: {color}; font-size: 1.5rem; font-weight: bold;">{ratio:.2f}</div>
-                    <div style="color: #64748b; font-size: 0.7rem;">Joy/Fear</div>
-                </div>
-            """, unsafe_allow_html=True)
+            st.metric("😨 FEAR", f"{fear:.1f}", "Avg score")
+        with c5:
+            st.metric("😊 JOY", f"{joy:.1f}", "Avg score")
                 
     except Exception as e:
         pass
