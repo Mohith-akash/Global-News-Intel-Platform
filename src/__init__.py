@@ -1,5 +1,5 @@
 """
-Core modules for GDELT platform.
+Core modules for GDELT platform. 
 """
 
 from src.config import REQUIRED_ENVS, CEREBRAS_MODEL, COUNTRY_ALIASES, VOYAGE_MODEL, EMBEDDING_DIMENSIONS, RAG_TOP_K
