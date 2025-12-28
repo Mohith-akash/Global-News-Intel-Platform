@@ -347,7 +347,8 @@ def render_emotion_stats(conn):
                 COUNT(*) as total_articles,
                 AVG(POSITIVE_SCORE) as avg_positive,
                 AVG(NEGATIVE_SCORE) as avg_negative,
-                AVG(AVG_TONE) as avg_tone
+                AVG(EMOTION_FEAR) as avg_fear,
+                AVG(EMOTION_JOY) as avg_joy
             FROM gkg_emotions
         """).df()
         
@@ -357,7 +358,8 @@ def render_emotion_stats(conn):
         row = df.iloc[0]
         pos = row['avg_positive'] if row['avg_positive'] else 0
         neg = row['avg_negative'] if row['avg_negative'] else 0
-        tone = row['avg_tone'] if row['avg_tone'] else 0
+        fear = row['avg_fear'] if row['avg_fear'] else 0
+        joy = row['avg_joy'] if row['avg_joy'] else 0
         articles = int(row['total_articles'])
         
         # Use st.columns for reliable rendering
@@ -390,12 +392,15 @@ def render_emotion_stats(conn):
                 </div>
             """, unsafe_allow_html=True)
         
+        # Show Fear vs Joy ratio instead of duplicate Avg Tone
         with c4:
+            ratio = (joy / fear) if fear > 0 else 1.0
+            color = "#22c55e" if ratio > 1 else "#ef4444" if ratio < 0.8 else "#eab308"
             st.markdown(f"""
                 <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f;">
-                    <div style="font-size: 1.5rem;">📊</div>
-                    <div style="color: #8b5cf6; font-size: 1.5rem; font-weight: bold;">{tone:.2f}</div>
-                    <div style="color: #64748b; font-size: 0.7rem;">Avg Tone</div>
+                    <div style="font-size: 1.5rem;">⚖️</div>
+                    <div style="color: {color}; font-size: 1.5rem; font-weight: bold;">{ratio:.2f}</div>
+                    <div style="color: #64748b; font-size: 0.7rem;">Joy/Fear</div>
                 </div>
             """, unsafe_allow_html=True)
                 
