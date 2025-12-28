@@ -456,7 +456,7 @@ def render_emotion_insights(conn):
         st.markdown(f"""
             <div style="padding: 0.8rem 1rem; background: linear-gradient(90deg, rgba(139,92,246,0.1) 0%, rgba(0,212,255,0.1) 100%); border-radius: 10px; border-left: 4px solid #8b5cf6; margin: 0.5rem 0;">
                 <span style="margin-right: 0.5rem;">{emoji}</span>
-                <span style="color: #8b5cf6; font-weight: 600; font-size: 0.85rem;">AI Insight: </span>
+                <span style="color: #8b5cf6; font-weight: 600; font-size: 0.85rem;">Status: </span>
                 <span style="color: #e2e8f0; font-size: 0.9rem;">{insight}</span>
             </div>
         """, unsafe_allow_html=True)
