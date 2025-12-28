@@ -42,14 +42,14 @@ def render_emotions_pulse(conn):
         # Query raw gkg_emotions table directly (not dbt)
         df = conn.execute("""
             SELECT 
-                SUBSTR(DATE, 1, 8) as date_key,
+                SUBSTR(CAST(DATE AS VARCHAR), 1, 8) as date_key,
                 AVG(AVG_TONE) as avg_mood,
                 AVG(EMOTION_FEAR) as avg_fear,
                 AVG(EMOTION_JOY) as avg_joy,
                 AVG(EMOTION_ANXIETY) as avg_anxiety,
                 COUNT(*) as article_count
             FROM gkg_emotions
-            GROUP BY SUBSTR(DATE, 1, 8)
+            GROUP BY SUBSTR(CAST(DATE AS VARCHAR), 1, 8)
             ORDER BY date_key DESC
             LIMIT 7
         """).df()
@@ -272,13 +272,13 @@ def render_emotion_timeline(conn):
     try:
         df = conn.execute("""
             SELECT 
-                SUBSTR(DATE, 1, 8) as date_key,
+                SUBSTR(CAST(DATE AS VARCHAR), 1, 8) as date_key,
                 AVG(AVG_TONE) as avg_mood,
                 AVG(EMOTION_FEAR) as avg_fear,
                 AVG(EMOTION_JOY) as avg_joy,
                 AVG(EMOTION_ANGER) as avg_anger
             FROM gkg_emotions
-            GROUP BY SUBSTR(DATE, 1, 8)
+            GROUP BY SUBSTR(CAST(DATE AS VARCHAR), 1, 8)
             ORDER BY date_key
         """).df()
         
