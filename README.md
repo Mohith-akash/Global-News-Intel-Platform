@@ -57,14 +57,17 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### Home - KPIs & Trending News
 ![Dashboard Home](docs/images/dashboard_home.png)
 
+### Emotions - GKG Mood Analysis (NEW!)
+![Emotions Tab](docs/images/emotions_tab.png)
+
 ### Analytics - Actors & Countries
 ![Dashboard Charts](docs/images/dashboard_charts.png)
 
 ### AI Chat - Natural Language Queries
 ![AI Chat](docs/images/ai_chat.png)
 
-### Trends - Event Feed
-![Trends Tab](docs/images/trends_tab.png)
+### Feed - Event Stream
+![Feed Tab](docs/images/trends_tab.png)
 
 ---
 
@@ -73,11 +76,13 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | Feature | Description |
 |---------|-------------|
 | **📊 Real-Time Dashboard** | Live metrics, trending news, sentiment analysis, geographic distribution |
+| **🧠 Emotion Analytics** | GKG-powered emotion tracking: Fear, Joy, Positive/Negative, Global Mood Index |
 | **🤖 AI Chat Interface** | Ask questions in plain English → Get SQL-powered answers |
 | **⚡ 15-Min Updates** | Near real-time refresh cycles via GitHub Actions + Dagster |
 | **🔍 Data Quality Gates** | Great Expectations-style validation prevents bad data |
 | **🌍 Global Coverage** | Events from 200+ countries with country code mapping |
 | **📈 Trend Analysis** | 30-day time series, intensity tracking, actor monitoring |
+| **🔥 Trending Topics** | AI-extracted themes from global news (GKG) |
 | **🎨 Dark Mode UI** | Custom dark theme, responsive Plotly charts |
 
 ---
@@ -119,12 +124,13 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ```
 
 ### Data Flow (ELT Pipeline)
-1. **Extract**: GDELT API → Polars (10x faster than Pandas)
+1. **Extract**: GDELT Events API + GKG Feed → Polars (10x faster than Pandas)
 2. **Validate**: Great Expectations-style data quality checks
 3. **Load**: Deduplicated data into MotherDuck (serverless DuckDB)
 4. **Transform**: dbt models create staging views and mart tables
-5. **Embed**: Voyage AI generates vectors every 12 hours
-6. **Serve**: Streamlit dashboard with AI chat (SQL + RAG modes)
+5. **Emotions**: GKG data → Extract tone, fear, joy, topics (rolling 24h)
+6. **Embed**: Voyage AI generates vectors every 12 hours
+7. **Serve**: Streamlit dashboard with AI chat (SQL + RAG modes)
 
 ---
 

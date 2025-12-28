@@ -21,7 +21,7 @@ def render_about():
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin-right:0.2rem;">
             <div style="font-size:1.5rem;">📰</div>
             <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">GDELT</div>
-            <div style="color:#64748b;font-size:0.6rem;">100K+ events</div>
+            <div style="color:#64748b;font-size:0.6rem;">Events + GKG</div>
         </div>
         <span style="color:#06b6d4;font-size:1.1rem;font-weight:bold;">→</span>
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin:0 0.2rem;">
@@ -51,7 +51,40 @@ def render_about():
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.6rem 0.5rem;text-align:center;flex:1;margin-left:0.2rem;">
             <div style="font-size:1.5rem;">🎨</div>
             <div style="color:#e2e8f0;font-size:0.75rem;font-weight:600;">Streamlit</div>
-            <div style="color:#64748b;font-size:0.6rem;">Dashboard</div>
+            <div style="color:#64748b;font-size:0.6rem;">5 Tabs</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # FEATURES SECTION - NEW
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem;margin-bottom:0.5rem;">
+        <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:0.5rem;">
+            <div style="text-align:center;padding:0.3rem 0.5rem;">
+                <div style="font-size:1.1rem;">📊</div>
+                <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">HOME</div>
+                <div style="color:#64748b;font-size:0.55rem;">KPIs + Trends</div>
+            </div>
+            <div style="text-align:center;padding:0.3rem 0.5rem;">
+                <div style="font-size:1.1rem;">📋</div>
+                <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">FEED</div>
+                <div style="color:#64748b;font-size:0.55rem;">Latest Events</div>
+            </div>
+            <div style="text-align:center;padding:0.3rem 0.5rem;background:#1e3a5f33;border-radius:6px;">
+                <div style="font-size:1.1rem;">🧠</div>
+                <div style="color:#10b981;font-size:0.7rem;font-weight:600;">EMOTIONS</div>
+                <div style="color:#64748b;font-size:0.55rem;">GKG Analysis</div>
+            </div>
+            <div style="text-align:center;padding:0.3rem 0.5rem;">
+                <div style="font-size:1.1rem;">🤖</div>
+                <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">AI</div>
+                <div style="color:#64748b;font-size:0.55rem;">Chat + SQL</div>
+            </div>
+            <div style="text-align:center;padding:0.3rem 0.5rem;">
+                <div style="font-size:1.1rem;">👤</div>
+                <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">ABOUT</div>
+                <div style="color:#64748b;font-size:0.55rem;">Architecture</div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
