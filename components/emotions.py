@@ -7,6 +7,7 @@ Premium design with modern UI.
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
+from collections import Counter
 
 
 def check_gkg_table_exists(conn):
@@ -88,7 +89,7 @@ def render_emotions_pulse(conn):
             font=dict(color='#e2e8f0'),
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Mood label badge
         st.markdown(f"""
@@ -188,7 +189,7 @@ def render_emotion_breakdown(conn):
             paper_bgcolor='rgba(0,0,0,0)',
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Show dominant emotion
         emotion_labels = ['Fear', 'Anger', 'Sadness', 'Joy', 'Trust', 'Anxiety', 'Anticipation']
@@ -265,7 +266,6 @@ def render_trending_themes(conn):
             return
         
         # Count themes manually in Python
-        from collections import Counter
         theme_counts = Counter()
         
         for themes_str in df['TOP_THEMES']:
@@ -333,7 +333,7 @@ def render_trending_themes(conn):
             bargap=0.3,
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
             
     except Exception as e:
         st.info(f"📊 Theme data loading...")
