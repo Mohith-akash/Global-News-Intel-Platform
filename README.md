@@ -94,32 +94,34 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 │                         SUPERCHARGED ARCHITECTURE                        │
 └─────────────────────────────────────────────────────────────────────────┘
 
-                    ┌──────────────┐
-                    │  GDELT API   │
-                    └──────┬───────┘
-                           │
-                           ▼
+              ┌──────────────┐          ┌──────────────┐
+              │ GDELT Events │          │  GDELT GKG   │
+              └──────┬───────┘          └──────┬───────┘
+                     │                         │
+                     └────────────┬────────────┘
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  INGESTION (Every 15 min)                                                │
 │  GitHub Actions → Dagster → Polars (10x faster) → Great Expectations    │
 └─────────────────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
+                                  │
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  TRANSFORMATION                                                          │
 │  dbt Core: staging (stg_events) → marts (fct_daily, dim_actors, etc.)   │
 └─────────────────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
+                                  │
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  STORAGE & AI                                                            │
 │  MotherDuck (DWH) ← Voyage AI (Embeddings) → Cerebras LLM (RAG/SQL)     │
+│  └── gkg_emotions: Fear, Joy, Tone, Topics                              │
 └─────────────────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
+                                  │
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  PRESENTATION                                                            │
-│  Streamlit Dashboard + Plotly Charts + AI Chat                          │
+│  Streamlit: HOME | FEED | EMOTIONS | AI Chat | ABOUT                    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
