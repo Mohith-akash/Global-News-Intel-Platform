@@ -179,7 +179,7 @@ def render_emotion_breakdown(conn):
             yaxis=dict(gridcolor='#1e3a5f'),
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
     except Exception as e:
         st.info("📊 Emotion breakdown: Waiting for data...")
@@ -331,7 +331,7 @@ def render_emotion_timeline(conn):
             hovermode='x unified'
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
     except Exception as e:
         st.info("📊 Emotion timeline: Waiting for data...")
