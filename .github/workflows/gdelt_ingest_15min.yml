@@ -37,11 +37,31 @@ jobs:
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
 
-    # 5. Keep Streamlit app awake (Playwright browser automation)
+    # 5. Cache Playwright browsers (avoid 160MB download every run)
+    - name: Get Playwright version
+      id: playwright-version
+      run: |
+        PLAYWRIGHT_VERSION=$(pip show playwright 2>/dev/null | grep Version | cut -d' ' -f2 || echo "1.49.0")
+        echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ steps.playwright-version.outputs.version }}
+    
+    # 6. Keep Streamlit app awake (Playwright browser automation)
     - name: Keep Streamlit Alive (Playwright)
       run: |
         pip install playwright
-        playwright install chromium
+        # Only install browsers if not cached
+        if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+          echo "📥 Installing Chromium (not cached)..."
+          playwright install chromium
+        else
+          echo "✅ Using cached Chromium"
+        fi
         python << 'EOF'
         import asyncio
         from playwright.async_api import async_playwright
@@ -86,3 +106,4 @@ jobs:
 
         asyncio.run(keep_alive())
         EOF
+
