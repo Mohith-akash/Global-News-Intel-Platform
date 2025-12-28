@@ -16,6 +16,7 @@ from components.render import (
 )
 from components.ai_chat import render_ai_chat
 from components.about import render_about
+from components.emotions import render_emotions_tab
 
 __all__ = [
     'render_header',
@@ -29,5 +30,7 @@ __all__ = [
     'render_feed',
     'render_timeseries',
     'render_ai_chat',
-    'render_about'
+    'render_about',
+    'render_emotions_tab'
 ]
+

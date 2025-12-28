@@ -24,7 +24,8 @@ from components import (
     render_feed,
     render_timeseries,
     render_ai_chat,
-    render_about
+    render_about,
+    render_emotions_tab
 )
 
 # Page config
@@ -78,7 +79,7 @@ def main():
         sql_db = None
     
     render_header()
-    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🤖 AI", "👤 ABOUT"])
+    tabs = st.tabs(["📊 HOME", "📈 TRENDS", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
     
     with tabs[0]:
         render_metrics(conn, tbl)
@@ -125,6 +126,9 @@ def main():
         render_timeseries(conn, tbl)
     
     with tabs[2]:
+        render_emotions_tab(conn)
+    
+    with tabs[3]:
         c1, c2 = st.columns([7, 3])
         with c1:
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
@@ -138,7 +142,7 @@ def main():
                 <p class="text-xs text-muted">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
             </div>''', unsafe_allow_html=True)
     
-    with tabs[3]:
+    with tabs[4]:
         render_about()
     
     st.markdown('''<div class="footer">
