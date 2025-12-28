@@ -37,20 +37,52 @@ jobs:
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
 
-    # 5. Keep Streamlit app awake (improved browser-like request)
-    - name: Keep Streamlit Alive
+    # 5. Keep Streamlit app awake (Playwright browser automation)
+    - name: Keep Streamlit Alive (Playwright)
       run: |
-        echo "🔄 Waking Streamlit app..."
-        # First request - wakes up sleeping app (with retries)
-        curl -s -o /dev/null -w "Wake request: %{http_code}\n" \
-          -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0" \
-          -H "Accept: text/html" \
-          --retry 3 --retry-delay 10 --max-time 60 \
-          https://global-news-intel-platform.streamlit.app/ || true
-        # Wait for app to fully initialize
-        sleep 10
-        # Second request - confirms app is responding
-        curl -s -o /dev/null -w "Confirm request: %{http_code}\n" \
-          -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0" \
-          https://global-news-intel-platform.streamlit.app/ || true
-        echo "✅ Keep-alive complete"
+        pip install playwright
+        playwright install chromium
+        python << 'EOF'
+        import asyncio
+        from playwright.async_api import async_playwright
+
+        async def keep_alive():
+            print("🔄 Starting Playwright browser...")
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page()
+                
+                try:
+                    # Navigate to the app
+                    print("📡 Connecting to Streamlit app...")
+                    await page.goto("https://global-news-intel-platform.streamlit.app/", 
+                                    wait_until="domcontentloaded", timeout=60000)
+                    
+                    # Check if app is sleeping (look for wake button)
+                    await asyncio.sleep(3)
+                    content = await page.content()
+                    
+                    if "Zzzz" in content or "gone to sleep" in content:
+                        print("😴 App is sleeping! Attempting to wake...")
+                        # Try to click the wake button
+                        try:
+                            wake_btn = page.get_by_text("Yes, get this app back up!")
+                            await wake_btn.click(timeout=5000)
+                            print("🔘 Clicked wake button, waiting for app to start...")
+                            await page.wait_for_timeout(30000)  # Wait 30s for app to wake
+                            print("✅ Wake request sent!")
+                        except Exception as e:
+                            print(f"⚠️  Could not click wake button: {e}")
+                    else:
+                        # App is awake - wait a bit to establish WebSocket connection
+                        print("✅ App is awake! Establishing connection...")
+                        await page.wait_for_timeout(10000)  # Stay connected for 10s
+                        print("✅ Keep-alive complete - WebSocket connection established")
+                    
+                except Exception as e:
+                    print(f"⚠️  Error: {e}")
+                finally:
+                    await browser.close()
+
+        asyncio.run(keep_alive())
+        EOF
