@@ -140,25 +140,30 @@ def render_emotion_breakdown(conn):
             return
         
         row = df.iloc[0]
-        emotions = {
-            '😨 Fear': row['fear'] if row['fear'] else 0,
-            '😡 Anger': row['anger'] if row['anger'] else 0,
-            '😢 Sadness': row['sadness'] if row['sadness'] else 0,
-            '😊 Joy': row['joy'] if row['joy'] else 0,
-            '🤝 Trust': row['trust'] if row['trust'] else 0,
-            '😰 Anxiety': row['anxiety'] if row['anxiety'] else 0,
-            '🎯 Anticipation': row['anticipation'] if row['anticipation'] else 0,
-        }
+        # Define emotions with their colors
+        emotion_data = [
+            ('😨 Fear', row['fear'] if row['fear'] else 0, '#ef4444'),
+            ('😡 Anger', row['anger'] if row['anger'] else 0, '#f97316'),
+            ('😢 Sadness', row['sadness'] if row['sadness'] else 0, '#3b82f6'),
+            ('😊 Joy', row['joy'] if row['joy'] else 0, '#22c55e'),
+            ('🤝 Trust', row['trust'] if row['trust'] else 0, '#06b6d4'),
+            ('😰 Anxiety', row['anxiety'] if row['anxiety'] else 0, '#eab308'),
+            ('🎯 Anticipation', row['anticipation'] if row['anticipation'] else 0, '#8b5cf6'),
+        ]
         
-        # Sort by value
-        emotions = dict(sorted(emotions.items(), key=lambda x: x[1], reverse=True))
+        # Sort by value while keeping colors matched
+        emotion_data = sorted(emotion_data, key=lambda x: x[1], reverse=True)
+        
+        names = [e[0] for e in emotion_data]
+        values = [e[1] for e in emotion_data]
+        colors = [e[2] for e in emotion_data]
         
         # Create horizontal bar chart
         fig = go.Figure(go.Bar(
-            x=list(emotions.values()),
-            y=list(emotions.keys()),
+            x=values,
+            y=names,
             orientation='h',
-            marker_color=['#ef4444', '#f97316', '#3b82f6', '#22c55e', '#06b6d4', '#eab308', '#8b5cf6']
+            marker_color=colors
         ))
         
         fig.update_layout(
@@ -178,6 +183,46 @@ def render_emotion_breakdown(conn):
         
     except Exception as e:
         st.info("📊 Emotion breakdown: Waiting for data...")
+
+
+# Map common GDELT theme codes to human-readable names
+THEME_TRANSLATIONS = {
+    'TAX_FNCACT': 'Tax Policy',
+    'EPU_POLICY': 'Economic Policy',
+    'TAX_ETHNICITY': 'Ethnic Issues',
+    'TAX_WORLDLANGUAGES': 'Languages',
+    'CRISISLEX_CRISISLEXREC': 'Crisis Events',
+    'UNGP_FORESTS_RIVERS': 'Environment',
+    'USPEC_POLITICS_GENERAL1': 'Politics',
+    'TAX_ECON_PRICE': 'Economic Prices',
+    'GENERAL_GOVERNMENT': 'Government',
+    'MANMADE_DISASTER_IMPLIED': 'Disasters',
+    'EPU_ECONOMY_HISTORIC': 'Economic History',
+    'EDUCATION': 'Education',
+    'SOC_POINTSOFINTEREST': 'Social Issues',
+    'GENERAL_HEALTH': 'Health',
+    'LEADER': 'Leadership',
+    'TERROR': 'Terrorism',
+    'PROTEST': 'Protests',
+    'MILITARY': 'Military',
+    'ENV_': 'Environment',
+    'WB_': 'World Bank Topics',
+}
+
+def humanize_theme(theme):
+    """Convert GDELT theme code to human-readable name."""
+    if not theme:
+        return None
+    theme_upper = theme.upper()
+    # Check for exact matches
+    if theme_upper in THEME_TRANSLATIONS:
+        return THEME_TRANSLATIONS[theme_upper]
+    # Check for prefix matches
+    for prefix, name in THEME_TRANSLATIONS.items():
+        if theme_upper.startswith(prefix):
+            return name
+    # Default: clean up the name
+    return theme.replace('_', ' ').title()
 
 
 def render_trending_themes(conn):
@@ -205,7 +250,9 @@ def render_trending_themes(conn):
             count = row['mention_count']
             
             # Make theme display-friendly
-            display_theme = theme.replace('_', ' ').title()
+            display_theme = humanize_theme(theme)
+            if not display_theme:
+                continue
             if len(display_theme) > 25:
                 display_theme = display_theme[:22] + "..."
             
