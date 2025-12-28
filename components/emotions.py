@@ -326,7 +326,7 @@ def render_trending_themes(conn):
                 showticklabels=False,
             ),
             yaxis=dict(
-                gridcolor='transparent',
+                showgrid=False,
                 tickfont=dict(size=12),
                 autorange='reversed',
             ),
