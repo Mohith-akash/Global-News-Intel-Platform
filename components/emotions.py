@@ -257,26 +257,26 @@ def render_trending_themes(conn):
         # Get raw TOP_THEMES data
         df = conn.execute("""
             SELECT TOP_THEMES FROM gkg_emotions 
-            WHERE TOP_THEMES IS NOT NULL AND TOP_THEMES != ''
-            LIMIT 1000
+            WHERE TOP_THEMES IS NOT NULL AND LENGTH(TOP_THEMES) > 0
+            LIMIT 500
         """).df()
         
-        if df.empty:
+        if df.empty or len(df) == 0:
             st.info("📊 Theme data is being collected...")
             return
         
         # Count themes manually in Python
         theme_counts = Counter()
         
-        for themes_str in df['TOP_THEMES']:
-            if themes_str:
+        for themes_str in df['TOP_THEMES'].tolist():
+            if themes_str and str(themes_str).strip():
                 for theme in str(themes_str).split(','):
                     theme = theme.strip()
                     if theme and len(theme) > 2:
                         theme_counts[theme] += 1
         
-        if not theme_counts:
-            st.info("📊 Theme data loading...")
+        if len(theme_counts) == 0:
+            st.info("📊 No themes found yet...")
             return
         
         # Get top themes and humanize
@@ -290,7 +290,7 @@ def render_trending_themes(conn):
             if len(themes_data) >= 8:
                 break
         
-        if not themes_data:
+        if len(themes_data) == 0:
             st.info("📊 Processing themes...")
             return
         
@@ -336,7 +336,7 @@ def render_trending_themes(conn):
         st.plotly_chart(fig, width='stretch')
             
     except Exception as e:
-        st.info(f"📊 Theme data loading...")
+        st.warning(f"📊 Theme error: {str(e)[:100]}")
 
 
 def render_emotion_stats(conn):
