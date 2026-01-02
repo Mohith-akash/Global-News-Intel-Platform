@@ -390,13 +390,20 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         if not text:
                                             return None
                                         # Remove leading dots and punctuation
-                                        text = re_mod.sub(r'^[.,;:\'"!?\-_\s\.]+', '', text)
+                                        text = re_mod.sub(r'^[.,;:\'\"!?\-_\s\.]+', '', text)
                                         # Remove embedded or trailing date-time stamps (like 20251216151211)
                                         text = re_mod.sub(r'\d{8,}', '', text)
                                         # Remove trailing alphanumeric garbage (like Four202512230l)
                                         text = re_mod.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
                                         text = re_mod.sub(r'\d+[A-Za-z]?$', '', text)
                                         text = re_mod.sub(r'\s+\d+$', '', text)
+                                        
+                                        # FIX CAMELCASE: Insert spaces before uppercase letters
+                                        # "InfrastructureContract" -> "Infrastructure Contract"
+                                        text = re_mod.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+                                        # Also handle "253m" patterns - insert space before lowercase after digit
+                                        text = re_mod.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
+                                        
                                         # Remove "Hunt on for Two Mo" type truncations
                                         text = re_mod.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
                                         # Remove trailing partial words (2 chars or less)
