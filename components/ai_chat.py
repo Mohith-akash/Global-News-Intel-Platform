@@ -97,8 +97,8 @@ def render_rag_chat(c):
                 try:
                     result = rag_query(prompt, c, llm, top_k=5)
                     
-                    # Display answer
-                    st.markdown(result["answer"])
+                    # Display answer (escape $ to prevent LaTeX rendering)
+                    st.markdown(result["answer"].replace('$', r'\$'))
                     
                     # Display retrieved headlines
                     if not result["headlines"].empty:
@@ -329,7 +329,7 @@ Question: {prompt}
 Provide a brief, factual answer using ONLY this data. State the count clearly."""
 
                                 answer = str(llm.complete(ai_prompt))
-                                st.markdown(answer)
+                                st.markdown(answer.replace('$', r'\$'))
                                 
                                 st.markdown(f"""
                                 <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;text-align:center;margin:1rem 0;">
@@ -362,7 +362,7 @@ Question: {prompt}
 Briefly explain why these countries lead and any notable patterns. Keep response concise."""
 
                                 answer = str(llm.complete(ai_prompt))
-                                st.markdown(answer)
+                                st.markdown(answer.replace('$', r'\$'))
                                 
                                 st.dataframe(
                                     dd[['COUNTRY', 'EVENT_COUNT']],
@@ -390,50 +390,78 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         if not text:
                                             return None
                                         # Remove leading dots and punctuation
-                                        text = re_mod.sub(r'^[.,;:\'"!?\-_\s\.]+', '', text)
+                                        text = re_mod.sub(r'^[.,;:\'\"!?\-_\s\.]+', '', text)
                                         # Remove embedded or trailing date-time stamps (like 20251216151211)
                                         text = re_mod.sub(r'\d{8,}', '', text)
                                         # Remove trailing alphanumeric garbage (like Four202512230l)
                                         text = re_mod.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
                                         text = re_mod.sub(r'\d+[A-Za-z]?$', '', text)
                                         text = re_mod.sub(r'\s+\d+$', '', text)
-                                        # Remove "Hunt on for Two Mo" type truncations
+                                        
+                                        # FIX CAMELCASE: Insert spaces before uppercase letters
+                                        text = re_mod.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+                                        text = re_mod.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
+                                        
+                                        # Fix Apos and apostrophes
+                                        text = re_mod.sub(r'Apos(?=[a-z])', "'", text)
+                                        text = re_mod.sub(r'\bApos\b', "'", text, flags=re_mod.I)
+                                        text = re_mod.sub(r"^'", "", text)
+                                        
+                                        # Fix number spacing (6 5 -> 6.5)
+                                        text = re_mod.sub(r'(\d)\s+(\d)', r'\1.\2', text)
+                                        
+                                        # Merge single letters (U S -> US)
+                                        text = re_mod.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
+                                        
+                                        # Remove truncations and trailing garbage
                                         text = re_mod.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
-                                        # Remove trailing partial words (2 chars or less)
                                         words = text.strip().split()
                                         while words and len(words[-1]) <= 2:
                                             words.pop()
                                         text = ' '.join(words)
-                                        # Cap at 80 chars, don't cut mid-word
+                                        
+                                        # Cap at 80 chars
                                         if len(text) > 80:
                                             text = text[:80].rsplit(' ', 1)[0]
                                         text = text.strip()
-                                        # Require 4+ words for quality
-                                        if len(text) < 15 or len(text.split()) < 4:
+                                        
+                                        # Strict quality: 4+ words, 20+ chars
+                                        if len(text) < 20 or len(text.split()) < 4:
                                             return None
                                         return text
                                     
                                     headlines = []
                                     valid_indices = []
                                     for idx, row in dd.iterrows():
-                                        # Try DB headline first
+                                        # Use DB headline first, fallback to URL extraction (same as Feed/Trending)
                                         db_headline = row.get('HEADLINE')
                                         if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 15:
                                             headline = clean_display_headline(db_headline)
                                         else:
-                                            # Extract from URL
+                                            # Extract from URL if DB headline missing/bad
                                             headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
+                                            if headline:
+                                                headline = clean_display_headline(headline)
                                         
-                                        # ONLY keep events with proper headlines - no fallbacks
-                                        if headline and len(headline) > 15 and len(headline.split()) >= 3:
+                                        # Quality check: 4+ words, 20+ chars
+                                        if headline and len(headline) > 20 and len(headline.split()) >= 4:
                                             headlines.append(headline)
                                             valid_indices.append(idx)
                                     
                                     # Filter to only rows with valid headlines
                                     if valid_indices:
                                         dd = dd.loc[valid_indices].copy()
+                                        dd = dd.reset_index(drop=True)  # Reset index for proper list assignment
                                         dd['HEADLINE'] = headlines
-                                        dd = dd.drop_duplicates(subset=['HEADLINE'])
+                                        
+                                        # Smart deduplication: skip first word, use words 2-6
+                                        # "Snow Expected Across Much Uk" -> "expected across much uk"
+                                        # "Snowfall Expected Across Much Uk" -> "expected across much uk" (SAME!)
+                                        dd['_dedup_key'] = dd['HEADLINE'].apply(
+                                            lambda x: ' '.join(x.lower().split()[1:6]) if x and len(x.split()) > 1 else x.lower() if x else ''
+                                        )
+                                        dd = dd.drop_duplicates(subset=['_dedup_key'])
+                                        dd = dd.drop(columns=['_dedup_key'])
                                     else:
                                         dd = dd.head(0)  # Empty dataframe
                                 
@@ -473,7 +501,7 @@ Question: {prompt}
 There are exactly {len(summary_data)} events. Describe EACH one with 2-3 sentences. Number 1 through {len(summary_data)}. Do NOT skip any."""
 
                                     answer = str(llm.complete(ai_prompt))
-                                    st.markdown(answer)
+                                    st.markdown(answer.replace('$', r'\$'))
                                     
                                     display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY']
                                     if 'NEWS_LINK' in dd.columns:

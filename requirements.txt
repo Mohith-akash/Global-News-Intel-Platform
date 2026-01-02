@@ -15,11 +15,9 @@ sqlalchemy==2.0.44
 # AI/ML
 llama-index-core==0.14.8
 llama-index-llms-cerebras==0.3.1
-voyageai==0.3.2
 
 # Orchestration
 dagster==1.12.3
-dagster-duckdb==0.28.3
 
 # Utilities
 pycountry==24.6.1

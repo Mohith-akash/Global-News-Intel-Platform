@@ -72,7 +72,7 @@ def render_about():
             </div>
             <div style="text-align:center;padding:0.3rem 0.5rem;background:#1e3a5f33;border-radius:6px;">
                 <div style="font-size:1.1rem;">🧠</div>
-                <div style="color:#10b981;font-size:0.7rem;font-weight:600;">EMOTIONS</div>
+                <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">EMOTIONS</div>
                 <div style="color:#64748b;font-size:0.55rem;">GKG Analysis</div>
             </div>
             <div style="text-align:center;padding:0.3rem 0.5rem;">
@@ -125,7 +125,7 @@ def render_about():
                 <td style="padding:0.4rem;color:#64748b;">200M free tokens — creates RAG embeddings</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
-                <td style="padding:0.4rem;color:#94a3b8;"><b>OpenAI GPT-4</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
+                <td style="padding:0.4rem;color:#94a3b8;"><b>OpenAI GPT-4 API</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>Cerebras</b></td>
                 <td style="padding:0.4rem;color:#64748b;">Llama 3.1 8B free tier — Text-to-SQL + RAG</td>
             </tr>
