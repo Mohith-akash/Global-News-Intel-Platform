@@ -440,7 +440,14 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     if valid_indices:
                                         dd = dd.loc[valid_indices].copy()
                                         dd['HEADLINE'] = headlines
-                                        dd = dd.drop_duplicates(subset=['HEADLINE'])
+                                        
+                                        # Smart deduplication: use first 5 words to catch similar headlines
+                                        # "Snow Expected Across Much Uk" vs "Snowfall Expected Across Much Uk"
+                                        dd['_dedup_key'] = dd['HEADLINE'].apply(
+                                            lambda x: ' '.join(x.lower().split()[:5]) if x else ''
+                                        )
+                                        dd = dd.drop_duplicates(subset=['_dedup_key'])
+                                        dd = dd.drop(columns=['_dedup_key'])
                                     else:
                                         dd = dd.head(0)  # Empty dataframe
                                 
