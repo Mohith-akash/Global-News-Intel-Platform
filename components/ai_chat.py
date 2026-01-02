@@ -399,24 +399,34 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         text = re_mod.sub(r'\s+\d+$', '', text)
                                         
                                         # FIX CAMELCASE: Insert spaces before uppercase letters
-                                        # "InfrastructureContract" -> "Infrastructure Contract"
                                         text = re_mod.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-                                        # Also handle "253m" patterns - insert space before lowercase after digit
                                         text = re_mod.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
                                         
-                                        # Remove "Hunt on for Two Mo" type truncations
+                                        # Fix Apos and apostrophes
+                                        text = re_mod.sub(r'Apos(?=[a-z])', "'", text)
+                                        text = re_mod.sub(r'\bApos\b', "'", text, flags=re_mod.I)
+                                        text = re_mod.sub(r"^'", "", text)
+                                        
+                                        # Fix number spacing (6 5 -> 6.5)
+                                        text = re_mod.sub(r'(\d)\s+(\d)', r'\1.\2', text)
+                                        
+                                        # Merge single letters (U S -> US)
+                                        text = re_mod.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
+                                        
+                                        # Remove truncations and trailing garbage
                                         text = re_mod.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
-                                        # Remove trailing partial words (2 chars or less)
                                         words = text.strip().split()
                                         while words and len(words[-1]) <= 2:
                                             words.pop()
                                         text = ' '.join(words)
-                                        # Cap at 80 chars, don't cut mid-word
+                                        
+                                        # Cap at 80 chars
                                         if len(text) > 80:
                                             text = text[:80].rsplit(' ', 1)[0]
                                         text = text.strip()
-                                        # Require 4+ words for quality
-                                        if len(text) < 15 or len(text.split()) < 4:
+                                        
+                                        # Strict quality: 4+ words, 20+ chars
+                                        if len(text) < 20 or len(text.split()) < 4:
                                             return None
                                         return text
                                     
