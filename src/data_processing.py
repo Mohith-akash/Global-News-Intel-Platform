@@ -96,9 +96,25 @@ def extract_headline(url, actor=None, impact_score=None):
             
             text = text.strip()
             
-            # Quality check: require 3+ words and 15+ chars for meaningful headlines
+            # Fix common URL artifacts
+            text = re.sub(r'\bApos\b', "'", text, flags=re.I)  # "Apos" -> apostrophe
+            text = re.sub(r"''", "'", text)  # Double apostrophe
+            text = re.sub(r"'\s*'", "'", text)  # Spaced apostrophe
+            
+            # Merge single letter words (U S -> US, U K -> UK)
+            text = re.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
+            text = re.sub(r'\b([A-Z])\s+([A-Z])\s+([A-Z])\b', r'\1\2\3', text)
+            
+            # Remove generic/incomplete headlines
+            generic_patterns = ['Business Online', 'Full List', 'Read More', 'Click Here', 
+                               'View Gallery', 'Photo Gallery', 'See Also', 'Related']
+            for pattern in generic_patterns:
+                if text.lower().startswith(pattern.lower()):
+                    return None
+            
+            # Quality check: require 4+ words and 20+ chars for meaningful headlines
             words = text.split()
-            if len(text) < 15 or len(words) < 3:
+            if len(text) < 20 or len(words) < 4:
                 return None
             
             # Reject if still looks like garbage (too many numbers/hex chars)
