@@ -152,10 +152,24 @@ def process_df(df):
         db_headline = row.get('HEADLINE')
         if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 15:
             # Clean the headline
-            headline = re.sub(r'^[.,;:\'"!?\-_\s\.]+', '', str(db_headline))  # Remove leading dots/punctuation
+            headline = re.sub(r'^[.,;:\'\"!?\-_\s\.]+', '', str(db_headline))  # Remove leading dots/punctuation
             headline = re.sub(r'\d{8,}', '', headline)  # Remove 8+ digit timestamps
             headline = re.sub(r'\s+\d+$', '', headline)  # Remove trailing numbers
             headline = headline.strip()
+            
+            # Fix common URL artifacts
+            headline = re.sub(r'\bApos\b', "'", headline, flags=re.I)  # "Apos" -> apostrophe
+            headline = re.sub(r"''", "'", headline)
+            
+            # Merge single letter words (U S -> US)
+            headline = re.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', headline)
+            headline = re.sub(r'\b([A-Z])\s+([A-Z])\s+([A-Z])\b', r'\1\2\3', headline)
+            
+            # Reject generic/incomplete headlines
+            generic_patterns = ['Business Online', 'Full List', 'Read More', 'Click Here']
+            is_generic = any(headline.lower().startswith(p.lower()) for p in generic_patterns)
+            if is_generic or len(headline) < 20 or len(headline.split()) < 4:
+                headline = None
         else:
             # Only extract from URL if DB headline missing/bad
             headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
