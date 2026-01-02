@@ -97,8 +97,8 @@ def render_rag_chat(c):
                 try:
                     result = rag_query(prompt, c, llm, top_k=5)
                     
-                    # Display answer
-                    st.markdown(result["answer"])
+                    # Display answer (escape $ to prevent LaTeX rendering)
+                    st.markdown(result["answer"].replace('$', r'\$'))
                     
                     # Display retrieved headlines
                     if not result["headlines"].empty:
@@ -329,7 +329,7 @@ Question: {prompt}
 Provide a brief, factual answer using ONLY this data. State the count clearly."""
 
                                 answer = str(llm.complete(ai_prompt))
-                                st.markdown(answer)
+                                st.markdown(answer.replace('$', r'\$'))
                                 
                                 st.markdown(f"""
                                 <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;text-align:center;margin:1rem 0;">
@@ -362,7 +362,7 @@ Question: {prompt}
 Briefly explain why these countries lead and any notable patterns. Keep response concise."""
 
                                 answer = str(llm.complete(ai_prompt))
-                                st.markdown(answer)
+                                st.markdown(answer.replace('$', r'\$'))
                                 
                                 st.dataframe(
                                     dd[['COUNTRY', 'EVENT_COUNT']],
@@ -501,7 +501,7 @@ Question: {prompt}
 There are exactly {len(summary_data)} events. Describe EACH one with 2-3 sentences. Number 1 through {len(summary_data)}. Do NOT skip any."""
 
                                     answer = str(llm.complete(ai_prompt))
-                                    st.markdown(answer)
+                                    st.markdown(answer.replace('$', r'\$'))
                                     
                                     display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY']
                                     if 'NEWS_LINK' in dd.columns:
