@@ -441,10 +441,11 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                         dd = dd.loc[valid_indices].copy()
                                         dd['HEADLINE'] = headlines
                                         
-                                        # Smart deduplication: use first 5 words to catch similar headlines
-                                        # "Snow Expected Across Much Uk" vs "Snowfall Expected Across Much Uk"
+                                        # Smart deduplication: skip first word, use words 2-6
+                                        # "Snow Expected Across Much Uk" -> "expected across much uk"
+                                        # "Snowfall Expected Across Much Uk" -> "expected across much uk" (SAME!)
                                         dd['_dedup_key'] = dd['HEADLINE'].apply(
-                                            lambda x: ' '.join(x.lower().split()[:5]) if x else ''
+                                            lambda x: ' '.join(x.lower().split()[1:6]) if x and len(x.split()) > 1 else x.lower() if x else ''
                                         )
                                         dd = dd.drop_duplicates(subset=['_dedup_key'])
                                         dd = dd.drop(columns=['_dedup_key'])
