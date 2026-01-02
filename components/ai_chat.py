@@ -451,6 +451,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     # Filter to only rows with valid headlines
                                     if valid_indices:
                                         dd = dd.loc[valid_indices].copy()
+                                        dd = dd.reset_index(drop=True)  # Reset index for proper list assignment
                                         dd['HEADLINE'] = headlines
                                         
                                         # Smart deduplication: skip first word, use words 2-6
