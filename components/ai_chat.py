@@ -423,15 +423,17 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     headlines = []
                                     valid_indices = []
                                     for idx, row in dd.iterrows():
-                                        # Always extract fresh from URL (more reliable than stored HEADLINE)
-                                        url = row.get('NEWS_LINK', '')
-                                        headline = extract_headline(url, None, row.get('IMPACT_SCORE', None))
+                                        # Use DB headline first, fallback to URL extraction (same as Feed/Trending)
+                                        db_headline = row.get('HEADLINE')
+                                        if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 15:
+                                            headline = clean_display_headline(db_headline)
+                                        else:
+                                            # Extract from URL if DB headline missing/bad
+                                            headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
+                                            if headline:
+                                                headline = clean_display_headline(headline)
                                         
-                                        # Clean and validate
-                                        if headline:
-                                            headline = clean_display_headline(headline)
-                                        
-                                        # Strict quality check: 4+ words, 20+ chars
+                                        # Quality check: 4+ words, 20+ chars
                                         if headline and len(headline) > 20 and len(headline.split()) >= 4:
                                             headlines.append(headline)
                                             valid_indices.append(idx)
