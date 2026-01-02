@@ -158,15 +158,21 @@ def process_df(df):
             headline = headline.strip()
             
             # Fix common URL artifacts
-            headline = re.sub(r'\bApos\b', "'", headline, flags=re.I)  # "Apos" -> apostrophe
+            headline = re.sub(r'Apos(?=[a-z])', "'", headline)  # "Aposapocalypse" -> "'apocalypse"
+            headline = re.sub(r'\bApos\b', "'", headline, flags=re.I)  # standalone "Apos"
             headline = re.sub(r"''", "'", headline)
+            headline = re.sub(r"^'", "", headline)  # Remove leading apostrophe
+            
+            # Fix number spacing (6 5 -> 6.5)
+            headline = re.sub(r'(\d)\s+(\d)', r'\1.\2', headline)
             
             # Merge single letter words (U S -> US)
             headline = re.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', headline)
             headline = re.sub(r'\b([A-Z])\s+([A-Z])\s+([A-Z])\b', r'\1\2\3', headline)
             
             # Reject generic/incomplete headlines
-            generic_patterns = ['Business Online', 'Full List', 'Read More', 'Click Here']
+            generic_patterns = ['Business Online', 'Full List', 'Read More', 'Click Here',
+                               'Like the', 'Alex Van Halen', 'Westcliff Stranded']
             is_generic = any(headline.lower().startswith(p.lower()) for p in generic_patterns)
             if is_generic or len(headline) < 20 or len(headline.split()) < 4:
                 headline = None
