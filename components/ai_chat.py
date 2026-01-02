@@ -423,16 +423,16 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     headlines = []
                                     valid_indices = []
                                     for idx, row in dd.iterrows():
-                                        # Try DB headline first
-                                        db_headline = row.get('HEADLINE')
-                                        if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 15:
-                                            headline = clean_display_headline(db_headline)
-                                        else:
-                                            # Extract from URL
-                                            headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
+                                        # Always extract fresh from URL (more reliable than stored HEADLINE)
+                                        url = row.get('NEWS_LINK', '')
+                                        headline = extract_headline(url, None, row.get('IMPACT_SCORE', None))
                                         
-                                        # ONLY keep events with proper headlines - no fallbacks
-                                        if headline and len(headline) > 15 and len(headline.split()) >= 3:
+                                        # Clean and validate
+                                        if headline:
+                                            headline = clean_display_headline(headline)
+                                        
+                                        # Strict quality check: 4+ words, 20+ chars
+                                        if headline and len(headline) > 20 and len(headline.split()) >= 4:
                                             headlines.append(headline)
                                             valid_indices.append(idx)
                                     
