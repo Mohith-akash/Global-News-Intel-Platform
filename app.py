@@ -73,10 +73,8 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
     
-    try:
-        sql_db = get_ai_engine(get_engine())
-    except:
-        sql_db = None
+    # NOTE: AI engine is now lazy-loaded inside the AI tab to reduce memory usage.
+    # This prevents Streamlit Cloud segfaults caused by llama-index loading on startup.
     
     render_header()
     tabs = st.tabs(["📊 HOME", "📋 FEED", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
@@ -129,6 +127,12 @@ def main():
         render_emotions_tab(conn)
     
     with tabs[3]:
+        # Lazy load AI engine only when this tab is opened
+        try:
+            sql_db = get_ai_engine(get_engine())
+        except:
+            sql_db = None
+        
         c1, c2 = st.columns([7, 3])
         with c1:
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
