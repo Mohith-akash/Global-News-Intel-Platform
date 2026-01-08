@@ -189,6 +189,23 @@ def clean_headline(text: str) -> Optional[str]:
     words = text.strip().split()
     while words and len(words[-1]) <= 2:
         words.pop()
+    
+    # Remove truncated words (3 chars or less ending in consonant)
+    # Catches obvious cases like "Def", "Bui", "Mur"
+    while words:
+        last_word = words[-1]
+        # Very short words ending in consonant are likely truncated
+        if len(last_word) <= 3 and last_word[-1].lower() in 'bcdfghjklmnpqrstvwxz':
+            words.pop()
+        # Words ending in 'f' after vowel are likely truncated (e.g. "Presidentf")
+        elif last_word.endswith('f') and len(last_word) > 3 and last_word[-2].lower() not in 'aeiou':
+            words.pop()
+        # Still has internal camelCase (not properly split)
+        elif re.search(r'[a-z][A-Z]', last_word):
+            words.pop()
+        else:
+            break
+    
     text = ' '.join(words)
 
     # Truncate if too long
@@ -200,9 +217,18 @@ def clean_headline(text: str) -> Optional[str]:
     # Remove trailing punctuation
     text = re.sub(r'[.,;:\'\"!?\-_\s]+$', '', text)
 
-    # Quality check: require 4+ words, 20+ chars
-    if len(text) < 20 or len(text.split()) < 4:
+    # Quality check - need enough content to be useful
+    if len(text) < 25 or len(text.split()) < 5:
         return None
+    
+    # Reject if last word has weird capitalization
+    words = text.split()
+    if words:
+        last_word = words[-1]
+        if re.match(r'^[A-Z][a-z]*[A-Z]', last_word):
+            return None
+        if re.search(r'[a-z]{2}[A-Z]', last_word):
+            return None
 
     # Check for generic patterns
     text_lower = text.lower()

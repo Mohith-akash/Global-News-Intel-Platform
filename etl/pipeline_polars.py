@@ -275,32 +275,94 @@ def clean_url_segment(text: str) -> str | None:
             return None
     
     # Clean up text
-    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml)$', '', text, flags=re.I)
+    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml|amp)$', '', text, flags=re.I)
     text = re.sub(r'^\d{8}[-_]?', '', text)
     text = re.sub(r'^\d{4}[-/]\d{2}[-/]\d{2}[-_]?', '', text)
     text = re.sub(r'^\d{4}[-_]', '', text)
     text = re.sub(r'^[a-f0-9]{6,8}[-_]', '', text)
     text = re.sub(r'[-_]+', ' ', text)
+    
+    # Remove embedded timestamps (8+ digits)
+    text = re.sub(r'\d{8,}', '', text)
+    
+    # Remove trailing garbage patterns
+    text = re.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
+    text = re.sub(r'\d+[A-Za-z]?$', '', text)
     text = re.sub(r'\s+\d{5,}$', '', text)
     text = re.sub(r'\s+[a-f0-9]{8,}$', '', text, flags=re.I)
     text = re.sub(r'\s+\d{1,8}$', '', text)
+    
+    # FIX CAMELCASE: Insert spaces before uppercase letters
+    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
+    
+    # Fix common URL artifacts
+    text = re.sub(r'Apos(?=[a-z])', "'", text)
+    text = re.sub(r'\bApos\b', "'", text, flags=re.I)
+    text = re.sub(r"''", "'", text)
+    text = re.sub(r"^'", "", text)
+    
+    # Fix number spacing (6 5 -> 6.5)
+    text = re.sub(r'(\d)\s+(\d)', r'\1.\2', text)
+    
+    # Merge single letters (U S -> US)
+    text = re.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
+    text = re.sub(r'\b([A-Z])\s+([A-Z])\s+([A-Z])\b', r'\1\2\3', text)
+    
+    # Remove truncated endings (prepositions with short words)
+    text = re.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
+    
+    # Clean whitespace and punctuation
     text = ' '.join(text.split())
-    text = re.sub(r'^[.,;:\'\"!?\-_\s]+', '', text)
+    text = re.sub(r'^[.,;:\'\"!?\-_\s\.]+', '', text)
     text = re.sub(r'[.,;:\'\"!?\-_\s]+$', '', text)
     
-    # Validate
-    if len(text) < 15 or ' ' not in text:
+    # Remove trailing words that look truncated
+    words = text.split()
+    
+    # Remove short trailing words
+    while words and len(words[-1]) <= 2:
+        words.pop()
+    
+    # Remove truncated words (3 chars or less ending in consonant)
+    # Catches obvious cases like "Def", "Bui", "Mur"
+    while words:
+        last_word = words[-1]
+        # Very short words ending in consonant are likely truncated
+        if len(last_word) <= 3 and last_word[-1].lower() in 'bcdfghjklmnpqrstvwxz':
+            words.pop()
+        # Words ending in 'f' after consonant are likely truncated (e.g. "Presidentf")
+        elif last_word.endswith('f') and len(last_word) > 3 and last_word[-2].lower() not in 'aeiou':
+            words.pop()
+        # Still has internal camelCase (not properly split)
+        elif re.search(r'[a-z][A-Z]', last_word):
+            words.pop()
+        else:
+            break
+    
+    text = ' '.join(words)
+    
+    # Quality check - need enough content to be useful
+    if len(text) < 25 or ' ' not in text:  # Require 25+ chars (was 20)
         return None
     
     words = text.split()
-    if len(words) < 3:
+    if len(words) < 5:  # Require 5+ words (was 4)
         return None
     
-    # Truncate and title case
+    # Reject if last word has weird capitalization
+    last_word = words[-1]
+    if re.match(r'^[A-Z][a-z]*[A-Z]', last_word):  # Internal caps like "PropFortnight"
+        return None
+    if re.search(r'[a-z]{2}[A-Z]', last_word):  # Random caps at end
+        return None
+    
+    # Truncate if too long
     if len(text) > 100:
         text = text[:100].rsplit(' ', 1)[0]
     
-    if len(text) < 15:
+    if len(text) < 25:
         return None
     
     # Title case

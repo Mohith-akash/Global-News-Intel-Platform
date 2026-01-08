@@ -425,7 +425,7 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                             text = text[:80].rsplit(' ', 1)[0]
                                         text = text.strip()
                                         
-                                        # Strict quality: 4+ words, 20+ chars
+                                        # Need 4+ words, 20+ chars to be valid
                                         if len(text) < 20 or len(text.split()) < 4:
                                             return None
                                         return text
