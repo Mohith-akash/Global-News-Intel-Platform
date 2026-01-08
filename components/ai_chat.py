@@ -10,6 +10,7 @@ import streamlit as st
 from src.database import safe_query
 from src.ai_engine import get_query_engine, get_cerebras_llm
 from src.data_processing import extract_headline
+from src.headline_utils import clean_headline
 from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
 from src.rag_engine import rag_query, get_voyage_api_key
 
@@ -383,68 +384,18 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
                                 
                                 if 'NEWS_LINK' in dd.columns:
-                                    import re as re_mod
-                                    
-                                    def clean_display_headline(text):
-                                        """Clean headline for display - remove dots, numbers, garbage."""
-                                        if not text:
-                                            return None
-                                        # Remove leading dots and punctuation
-                                        text = re_mod.sub(r'^[.,;:\'\"!?\-_\s\.]+', '', text)
-                                        # Remove embedded or trailing date-time stamps (like 20251216151211)
-                                        text = re_mod.sub(r'\d{8,}', '', text)
-                                        # Remove trailing alphanumeric garbage (like Four202512230l)
-                                        text = re_mod.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
-                                        text = re_mod.sub(r'\d+[A-Za-z]?$', '', text)
-                                        text = re_mod.sub(r'\s+\d+$', '', text)
-                                        
-                                        # FIX CAMELCASE: Insert spaces before uppercase letters
-                                        text = re_mod.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-                                        text = re_mod.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
-                                        
-                                        # Fix Apos and apostrophes
-                                        text = re_mod.sub(r'Apos(?=[a-z])', "'", text)
-                                        text = re_mod.sub(r'\bApos\b', "'", text, flags=re_mod.I)
-                                        text = re_mod.sub(r"^'", "", text)
-                                        
-                                        # Fix number spacing (6 5 -> 6.5)
-                                        text = re_mod.sub(r'(\d)\s+(\d)', r'\1.\2', text)
-                                        
-                                        # Merge single letters (U S -> US)
-                                        text = re_mod.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
-                                        
-                                        # Remove truncations and trailing garbage
-                                        text = re_mod.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
-                                        words = text.strip().split()
-                                        while words and len(words[-1]) <= 2:
-                                            words.pop()
-                                        text = ' '.join(words)
-                                        
-                                        # Cap at 80 chars
-                                        if len(text) > 80:
-                                            text = text[:80].rsplit(' ', 1)[0]
-                                        text = text.strip()
-                                        
-                                        # Need 4+ words, 20+ chars to be valid
-                                        if len(text) < 20 or len(text.split()) < 4:
-                                            return None
-                                        return text
-                                    
                                     headlines = []
                                     valid_indices = []
                                     for idx, row in dd.iterrows():
-                                        # Use DB headline first, fallback to URL extraction (same as Feed/Trending)
+                                        # Use DB headline first, fallback to URL extraction
                                         db_headline = row.get('HEADLINE')
                                         if db_headline and isinstance(db_headline, str) and len(db_headline.strip()) > 15:
-                                            headline = clean_display_headline(db_headline)
+                                            headline = clean_headline(db_headline)
                                         else:
                                             # Extract from URL if DB headline missing/bad
                                             headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
-                                            if headline:
-                                                headline = clean_display_headline(headline)
                                         
-                                        # Quality check: 4+ words, 20+ chars
-                                        if headline and len(headline) > 20 and len(headline.split()) >= 4:
+                                        if headline:
                                             headlines.append(headline)
                                             valid_indices.append(idx)
                                     
