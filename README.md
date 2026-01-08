@@ -39,7 +39,7 @@ A full-stack data engineering project that ingests, processes, and visualizes **
 ### 📊 By the Numbers
 | Metric | Value |
 |--------|-------|
-| **Cumulative Events** | 12M+ processed |
+| **Cumulative Events** | 13M+ processed |
 | **Daily Ingestion** | 100K+ events/day |
 | **Data History** | 3.5+ months live data |
 | **Languages** | 100+ monitored |

@@ -1,13 +1,11 @@
 """
 AI/LLM setup and query engine for GDELT platform.
+Imports are deferred to avoid memory issues on Streamlit Cloud startup.
 """
 
 import os
 import logging
 import streamlit as st
-from llama_index.llms.cerebras import Cerebras
-from llama_index.core import SQLDatabase, Settings
-from llama_index.core.query_engine import NLSQLTableQueryEngine
 
 from src.config import CEREBRAS_MODEL
 from src.database import get_db, detect_table
@@ -18,6 +16,9 @@ logger = logging.getLogger("gdelt")
 @st.cache_resource
 def get_ai_engine(_engine):
     """Set up AI query engine."""
+    # Import inside function to avoid memory issues on startup
+    from llama_index.llms.cerebras import Cerebras
+    from llama_index.core import SQLDatabase, Settings
     try:
         api_key = os.getenv("CEREBRAS_API_KEY")
         if not api_key:
@@ -39,6 +40,8 @@ def get_ai_engine(_engine):
 @st.cache_resource
 def get_query_engine(_sql_db):
     """Create AI query engine."""
+    # Import inside function to avoid memory issues on startup
+    from llama_index.core.query_engine import NLSQLTableQueryEngine
     if not _sql_db:
         return None
     try:
@@ -54,6 +57,8 @@ def get_query_engine(_sql_db):
 @st.cache_resource
 def get_cerebras_llm():
     """Initialize Cerebras LLM."""
+    # Import inside function to avoid memory issues on startup
+    from llama_index.llms.cerebras import Cerebras
     try:
         api_key = os.getenv("CEREBRAS_API_KEY")
         if not api_key:
