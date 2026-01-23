@@ -134,8 +134,8 @@ def search_similar_headlines(
     """Find semantically similar headlines using vector similarity search."""
     query_embedding = get_embedding(query)
     if query_embedding is None:
-        logger.warning("Failed to get query embedding")
-        return pd.DataFrame()
+        logger.warning("Failed to get query embedding, falling back to keyword search")
+        return _fallback_keyword_search(query, conn, top_k, min_date)
 
     date_filter = f"AND DATE >= '{min_date}'" if min_date else ""
     embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
@@ -168,6 +168,49 @@ def search_similar_headlines(
         return result
     except Exception as e:
         logger.error(f"Vector search error: {e}")
+        # Fall back to keyword search if vector search fails
+        return _fallback_keyword_search(query, conn, top_k, min_date)
+
+
+def _fallback_keyword_search(
+    query: str,
+    conn,
+    top_k: int = 10,
+    min_date: str = None
+) -> pd.DataFrame:
+    """Fallback keyword search when vector search fails."""
+    date_filter = f"AND DATE >= '{min_date}'" if min_date else ""
+    # Extract keywords from query (simple approach)
+    keywords = [w.strip() for w in query.lower().split() if len(w) > 3]
+    
+    if not keywords:
+        return pd.DataFrame()
+    
+    # Build LIKE clauses for each keyword
+    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%{kw}%'" for kw in keywords[:5]])
+    
+    sql = f"""
+        SELECT 
+            DATE,
+            HEADLINE,
+            ACTOR_COUNTRY_CODE,
+            MAIN_ACTOR,
+            IMPACT_SCORE,
+            ARTICLE_COUNT,
+            NEWS_LINK
+        FROM {TARGET_TABLE}
+        WHERE HEADLINE IS NOT NULL
+          AND LENGTH(HEADLINE) > 15
+          AND ({like_clauses})
+          {date_filter}
+        ORDER BY ARTICLE_COUNT DESC
+        LIMIT {top_k}
+    """
+    
+    try:
+        return conn.execute(sql).df()
+    except Exception as e:
+        logger.error(f"Fallback search error: {e}")
         return pd.DataFrame()
 
 
