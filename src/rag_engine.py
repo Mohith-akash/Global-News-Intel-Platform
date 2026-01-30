@@ -214,9 +214,9 @@ def _fallback_keyword_search(
         return pd.DataFrame()
 
 
-def rag_query(question: str, conn, llm, top_k: int = 10) -> dict:
+def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None) -> dict:
     """Full RAG pipeline: embed query → search → synthesize answer."""
-    headlines_df = search_similar_headlines(question, conn, top_k=top_k)
+    headlines_df = search_similar_headlines(question, conn, top_k=top_k, min_date=min_date)
 
     if headlines_df.empty:
         return {

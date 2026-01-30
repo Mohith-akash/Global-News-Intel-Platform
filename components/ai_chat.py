@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from src.database import safe_query
-from src.ai_engine import get_query_engine, get_cerebras_llm
+from src.ai_engine import get_query_engine, get_cerebras_llm, AI_AVAILABLE
 from src.data_processing import extract_headline
 from src.headline_utils import clean_headline
 from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
@@ -17,6 +17,24 @@ from src.rag_engine import rag_query, get_voyage_api_key
 
 def render_ai_chat(c, sql_db):
     """Main AI Chat component with SQL and RAG modes."""
+    # Check if AI features are available
+    if not AI_AVAILABLE:
+        st.markdown('''<div class="card">
+            <h3 style="color:#06b6d4;">🔧 AI Features Temporarily Unavailable</h3>
+            <p class="text-muted">The AI chat interface requires additional dependencies that are currently unavailable.</p>
+            <p class="text-muted">Don't worry! All other dashboard features (Home, Feed, Emotions) are working normally.</p>
+            <div style="background:#1e293b;border-radius:8px;padding:1rem;margin-top:1rem;">
+                <div style="color:#64748b;font-size:0.85rem;">
+                    <b>📊 What you can still do:</b><br>
+                    • View real-time event metrics and trends<br>
+                    • Browse the news feed and timeseries charts<br>
+                    • Analyze emotion data from GKG<br>
+                    • Explore geographic distribution and actors
+                </div>
+            </div>
+        </div>''', unsafe_allow_html=True)
+        return
+    
     if "qa_history" not in st.session_state:
         st.session_state.qa_history = []
     if "ai_mode" not in st.session_state:
@@ -82,7 +100,7 @@ def render_rag_chat(c):
     """RAG-based semantic search chat."""
     from src.ai_engine import get_cerebras_llm
     from src.rag_engine import rag_query
-    from src.utils import get_country, get_impact_label
+    from src.utils import get_country, get_impact_label, get_dates
     
     prompt = st.chat_input("Ask about events semantically...", key="rag_chat")
     if prompt:
@@ -96,7 +114,9 @@ def render_rag_chat(c):
             
             with st.spinner("🧠 Searching semantically..."):
                 try:
-                    result = rag_query(prompt, c, llm, top_k=5)
+                    # Get date range - use last 30 days like SQL mode
+                    dates = get_dates()
+                    result = rag_query(prompt, c, llm, top_k=5, min_date=dates['month_ago'])
                     
                     # Display answer (escape $ to prevent LaTeX rendering)
                     st.markdown(result["answer"].replace('$', r'\$'))

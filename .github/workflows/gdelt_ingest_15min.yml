@@ -55,13 +55,10 @@ jobs:
     - name: Keep Streamlit Alive (Playwright)
       run: |
         pip install playwright
-        # Only install browsers if not cached
-        if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
-          echo "📥 Installing Chromium (not cached)..."
-          playwright install chromium
-        else
-          echo "✅ Using cached Chromium"
-        fi
+        # Always install browsers to ensure correct version and path
+        echo "📥 Installing Chromium..."
+        playwright install chromium --with-deps
+        echo "✅ Chromium ready"
         python << 'EOF'
         import asyncio
         from playwright.async_api import async_playwright

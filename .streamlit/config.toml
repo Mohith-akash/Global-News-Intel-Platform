@@ -1,0 +1,14 @@
+[server]
+maxUploadSize = 50
+enableCORS = false
+enableXsrfProtection = true
+
+[runner]
+magicEnabled = false
+fastReruns = true
+
+[client]
+showErrorDetails = true
+
+[logger]
+level = "info"

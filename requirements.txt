@@ -12,8 +12,8 @@ duckdb==1.4.2
 duckdb-engine==0.17.0
 sqlalchemy==2.0.44
 
-# AI/ML
-llama-index-core==0.14.8
+# AI/ML - Using latest compatible versions
+llama-index-core==0.13.0
 llama-index-llms-cerebras==0.3.1
 
 # Orchestration
