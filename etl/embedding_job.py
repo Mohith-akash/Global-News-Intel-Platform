@@ -21,8 +21,11 @@ load_dotenv()
 # Configuration
 TARGET_TABLE = "events_dagster"
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
-VOYAGE_MODEL = "voyage-3.5-lite"
-EMBEDDING_DIMENSIONS = 1024
+try:
+    from src.config import VOYAGE_MODEL, EMBEDDING_DIMENSIONS
+except ImportError:
+    VOYAGE_MODEL = "voyage-3.5-lite"
+    EMBEDDING_DIMENSIONS = 1024
 MIN_ARTICLE_COUNT = 3  # Only embed events with 3+ articles
 BATCH_SIZE = 50  # Voyage AI batch size
 EVENTS_PER_RUN = 500  # Max events to embed per run (token efficiency)

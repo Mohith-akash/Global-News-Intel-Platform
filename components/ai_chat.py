@@ -15,7 +15,7 @@ from src.utils import get_dates, get_country, get_country_code, get_impact_label
 from src.rag_engine import rag_query, get_voyage_api_key
 
 
-def render_ai_chat(c, sql_db):
+def render_ai_chat(c, sql_db, tbl="events_dagster"):
     """Main AI Chat component with SQL and RAG modes."""
     # Check if AI features are available
     if not AI_AVAILABLE:
@@ -80,7 +80,7 @@ def render_ai_chat(c, sql_db):
             <div class="ai-example-label">💡 SQL MODE - Precise Queries:</div>
             <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East"<br>• "Top 5 countries by events"<br>• "How many events in October?"</div>
         </div>''', unsafe_allow_html=True)
-        render_sql_chat(c, sql_db)
+        render_sql_chat(c, sql_db, tbl)
     else:
         if not rag_available:
             st.warning("⚠️ RAG Mode requires VOYAGE_API_KEY. Add it to your environment or Streamlit secrets.")
@@ -93,10 +93,10 @@ def render_ai_chat(c, sql_db):
                 <div class="ai-example-label">💡 RAG MODE - Semantic Search:</div>
                 <div class="ai-examples">• "What are the tensions in Asia about?"<br>• "Tell me about military conflicts"<br>• "What is happening between US and China?"<br>• "Summarize news about Russia and Ukraine"</div>
             </div>''', unsafe_allow_html=True)
-            render_rag_chat(c)
+            render_rag_chat(c, tbl)
 
 
-def render_rag_chat(c):
+def render_rag_chat(c, tbl="events_dagster"):
     """RAG-based semantic search chat."""
     from src.ai_engine import get_cerebras_llm
     from src.rag_engine import rag_query
@@ -116,7 +116,7 @@ def render_rag_chat(c):
                 try:
                     # Get date range - use last 30 days like SQL mode
                     dates = get_dates()
-                    result = rag_query(prompt, c, llm, top_k=5, min_date=dates['month_ago'])
+                    result = rag_query(prompt, c, llm, top_k=5, min_date=dates['month_ago'], table_name=tbl)
                     
                     # Display answer (escape $ to prevent LaTeX rendering)
                     st.markdown(result["answer"].replace('$', r'\$'))
@@ -168,7 +168,7 @@ def render_rag_chat(c):
                     st.error(f"❌ Error: {str(e)[:100]}")
 
 
-def render_sql_chat(c, sql_db):
+def render_sql_chat(c, sql_db, tbl="events_dagster"):
     """SQL-based precise query chat (original implementation)."""
     prompt = st.chat_input("Ask about global events (SQL)...", key="sql_chat")
     if prompt:
@@ -268,7 +268,7 @@ def render_sql_chat(c, sql_db):
                     # 1. COUNTRIES WITH CRISIS - must come before plain crisis
                     if has_crisis and has_country_word:
                         is_country_aggregate = True
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
+                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
                     
                     # 2. Plain crisis events (require 10+ articles for quality headlines)
                     elif has_crisis:
@@ -280,18 +280,18 @@ def render_sql_chat(c, sql_db):
                             else:
                                 codes_str = "', '".join(crisis_codes)
                                 crisis_country_filter = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {crisis_country_filter} AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
+                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {crisis_country_filter} AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
                         else:
-                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
+                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 10 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
                     
                     # 3. MAJOR/IMPORTANT events - high article count (trending stories)
                     elif has_major:
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 50 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
+                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 50 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                     
                     # 4. TOP COUNTRIES - check this BEFORE is_aggregate
                     elif 'top' in prompt_lower and has_country_word:
                         is_country_aggregate = True
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
+                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
                     
                     # 5. Aggregate queries (how many, count, total) - now with country support
                     elif qi['is_aggregate']:
@@ -300,9 +300,9 @@ def render_sql_chat(c, sql_db):
                         if codes:
                             cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
                             country_filter_name = get_country(codes[0]) or codes[0]
-                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter}"
+                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter}"
                         else:
-                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
+                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
                     
                     # 6. Default: specific events query
                     else:
@@ -323,9 +323,9 @@ def render_sql_chat(c, sql_db):
                                 else:
                                     codes_str = "', '".join(codes)
                                     cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
                             else:
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
+                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                     
                     # Enforce LIMIT on aggregate queries only (event queries need more rows for filtering)
                     if sql and (is_count_aggregate or is_country_aggregate):

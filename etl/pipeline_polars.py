@@ -33,8 +33,11 @@ RETRY_DELAY = 5
 
 # Voyage AI Configuration
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
-VOYAGE_MODEL = "voyage-3.5-lite"
-EMBEDDING_DIMENSIONS = 1024
+try:
+    from src.config import VOYAGE_MODEL, EMBEDDING_DIMENSIONS
+except ImportError:
+    VOYAGE_MODEL = "voyage-3.5-lite"
+    EMBEDDING_DIMENSIONS = 1024
 MIN_ARTICLE_COUNT_FOR_EMBEDDING = 3
 
 # Logging setup

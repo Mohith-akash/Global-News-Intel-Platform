@@ -1,21 +1,33 @@
 """
 RAG (Retrieval-Augmented Generation) engine for GDELT platform.
 Uses Voyage AI for embeddings and DuckDB for vector similarity search.
+
+Optimized for MotherDuck (which doesn't support the vss/HNSW extension):
+- Two-stage search: pre-filter by metadata → compute similarity on reduced set
+- Hybrid mode: keyword pre-filter → vector reranking  
+- Similarity thresholds to skip irrelevant results
+- Proper ARRAY type casting for DuckDB 1.5.x
 """
 
 import os
 import logging
 import requests
+import time
 from typing import Optional
 import pandas as pd
 
 logger = logging.getLogger("gdelt.rag")
 
+from src.config import VOYAGE_MODEL, EMBEDDING_DIMENSIONS
+
 # Configuration
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
-VOYAGE_MODEL = "voyage-3.5-lite"
-EMBEDDING_DIMENSIONS = 1024
-TARGET_TABLE = "events_dagster"
+TARGET_TABLE = "events_dagster"  # Default, can be overridden per-call
+
+# Search tuning
+SIMILARITY_THRESHOLD = 0.25  # Skip results below this cosine similarity
+PRE_FILTER_LIMIT = 2000  # Max rows to scan for similarity (MotherDuck perf guard)
+MIN_ARTICLE_COUNT_FOR_SEARCH = 2  # Pre-filter: only search events with 2+ articles
 
 
 def get_voyage_api_key() -> Optional[str]:
@@ -125,22 +137,120 @@ def get_embeddings_batch(texts: list, batch_size: int = 50) -> list:
     return results
 
 
+def _extract_keywords(query: str) -> list[str]:
+    """Extract meaningful keywords from a query string, sanitized for SQL."""
+    stopwords = {
+        'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how',
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+        'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+        'could', 'should', 'may', 'might', 'must', 'about', 'tell', 'me',
+        'show', 'find', 'get', 'give', 'any', 'some', 'all', 'most', 'many',
+        'much', 'more', 'than', 'that', 'this', 'these', 'those', 'there',
+        'here', 'between', 'during', 'recent', 'latest', 'events', 'news',
+        'happening', 'going', 'related',
+    }
+    words = [w.strip().lower() for w in query.split() if len(w.strip()) > 2]
+    # Sanitize: keep only alphanumeric chars to prevent SQL injection
+    words = [''.join(c for c in w if c.isalnum()) for w in words]
+    keywords = [w for w in words if w and len(w) > 2 and w not in stopwords]
+    return keywords[:8]  # Cap at 8 keywords
+
+
 def search_similar_headlines(
     query: str,
     conn,
     top_k: int = 10,
-    min_date: str = None
+    min_date: str = None,
+    table_name: str = None
 ) -> pd.DataFrame:
-    """Find semantically similar headlines using vector similarity search."""
+    """
+    Find semantically similar headlines using optimized vector similarity search.
+    
+    Optimized for MotherDuck (no HNSW/vss extension):
+    1. Pre-filters by date + article count to reduce scan size
+    2. Computes cosine similarity only on the filtered candidate set
+    3. Applies similarity threshold to skip irrelevant noise
+    4. Falls back to hybrid search (keyword + vector rerank) if pure vector fails
+    """
+    tbl = table_name or TARGET_TABLE
+    
+    # Step 1: Get query embedding
+    t0 = time.time()
     query_embedding = get_embedding(query)
+    embed_time = time.time() - t0
+    
     if query_embedding is None:
         logger.warning("Failed to get query embedding, falling back to keyword search")
-        return _fallback_keyword_search(query, conn, top_k, min_date)
+        return _fallback_keyword_search(query, conn, top_k, min_date, table_name=tbl)
 
-    date_filter = f"AND DATE >= '{min_date}'" if min_date else ""
+    logger.info(f"Query embedding retrieved in {embed_time:.2f}s")
+
+    # Step 2: Build the embedding literal string
     embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+    date_filter = f"AND DATE >= '{min_date}'" if min_date else ""
 
+    # Step 3: Try hybrid search first (keyword pre-filter → vector rerank)
+    # This is much faster than full-table vector scan on MotherDuck
+    keywords = _extract_keywords(query)
+    
+    if keywords:
+        result = _hybrid_search(
+            keywords, embedding_str, conn, tbl, 
+            top_k, date_filter
+        )
+        if result is not None and not result.empty:
+            logger.info(f"Hybrid search returned {len(result)} results")
+            return result
+    
+    # Step 4: Fall back to pre-filtered vector scan
+    # Scan only high-article-count events with embeddings (much smaller set)
+    result = _prefiltered_vector_search(
+        embedding_str, conn, tbl,
+        top_k, date_filter
+    )
+    if result is not None and not result.empty:
+        logger.info(f"Pre-filtered vector search returned {len(result)} results")
+        return result
+    
+    # Step 5: Last resort — keyword search without vectors
+    logger.info("Vector searches returned no results, falling back to keyword search")
+    return _fallback_keyword_search(query, conn, top_k, min_date, table_name=tbl)
+
+
+def _hybrid_search(
+    keywords: list[str],
+    embedding_str: str,
+    conn,
+    tbl: str,
+    top_k: int,
+    date_filter: str,
+) -> Optional[pd.DataFrame]:
+    """
+    Two-stage hybrid search:
+    Stage 1: Use keyword LIKE filters to narrow candidates (~100-500 rows)
+    Stage 2: Compute vector cosine similarity only on those candidates, rerank
+    
+    This avoids scanning the entire table's embeddings on MotherDuck.
+    """
+    # Build keyword filter — require ANY keyword to match headline
+    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%{kw}%'" for kw in keywords])
+    
     sql = f"""
+        WITH keyword_candidates AS (
+            SELECT 
+                EVENT_ID, DATE, HEADLINE, ACTOR_COUNTRY_CODE,
+                MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK,
+                EMBEDDING
+            FROM {tbl}
+            WHERE EMBEDDING IS NOT NULL 
+              AND HEADLINE IS NOT NULL
+              AND LENGTH(HEADLINE) > 15
+              AND ({like_clauses})
+              {date_filter}
+            ORDER BY ARTICLE_COUNT DESC
+            LIMIT {PRE_FILTER_LIMIT}
+        )
         SELECT 
             MAX(DATE) as DATE,
             HEADLINE,
@@ -153,41 +263,106 @@ def search_similar_headlines(
                 EMBEDDING::DOUBLE[{EMBEDDING_DIMENSIONS}], 
                 {embedding_str}::DOUBLE[{EMBEDDING_DIMENSIONS}]
             )) as similarity
-        FROM {TARGET_TABLE}
-        WHERE EMBEDDING IS NOT NULL 
-          AND HEADLINE IS NOT NULL
-          AND LENGTH(HEADLINE) > 15
-          {date_filter}
+        FROM keyword_candidates
         GROUP BY HEADLINE
+        HAVING similarity >= {SIMILARITY_THRESHOLD}
         ORDER BY similarity DESC
         LIMIT {top_k}
     """
-
+    
     try:
+        t0 = time.time()
         result = conn.execute(sql).df()
-        return result
+        query_time = time.time() - t0
+        logger.info(f"Hybrid search completed in {query_time:.2f}s, {len(result)} results")
+        return result if not result.empty else None
     except Exception as e:
-        logger.error(f"Vector search error: {e}")
-        # Fall back to keyword search if vector search fails
-        return _fallback_keyword_search(query, conn, top_k, min_date)
+        logger.warning(f"Hybrid search error: {e}")
+        return None
+
+
+def _prefiltered_vector_search(
+    embedding_str: str,
+    conn,
+    tbl: str,
+    top_k: int,
+    date_filter: str,
+) -> Optional[pd.DataFrame]:
+    """
+    Pre-filtered vector search: narrows by article count before computing similarity.
+    Only scans events with ARTICLE_COUNT >= threshold, drastically reducing work.
+    """
+    sql = f"""
+        WITH candidates AS (
+            SELECT 
+                EVENT_ID, DATE, HEADLINE, ACTOR_COUNTRY_CODE,
+                MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK, 
+                EMBEDDING
+            FROM {tbl}
+            WHERE EMBEDDING IS NOT NULL 
+              AND HEADLINE IS NOT NULL
+              AND LENGTH(HEADLINE) > 15
+              AND ARTICLE_COUNT >= {MIN_ARTICLE_COUNT_FOR_SEARCH}
+              {date_filter}
+            ORDER BY ARTICLE_COUNT DESC
+            LIMIT {PRE_FILTER_LIMIT}
+        )
+        SELECT 
+            MAX(DATE) as DATE,
+            HEADLINE,
+            MAX(ACTOR_COUNTRY_CODE) as ACTOR_COUNTRY_CODE,
+            MAX(MAIN_ACTOR) as MAIN_ACTOR,
+            MAX(IMPACT_SCORE) as IMPACT_SCORE,
+            SUM(ARTICLE_COUNT) as ARTICLE_COUNT,
+            MAX(NEWS_LINK) as NEWS_LINK,
+            MAX(array_cosine_similarity(
+                EMBEDDING::DOUBLE[{EMBEDDING_DIMENSIONS}], 
+                {embedding_str}::DOUBLE[{EMBEDDING_DIMENSIONS}]
+            )) as similarity
+        FROM candidates
+        GROUP BY HEADLINE
+        HAVING similarity >= {SIMILARITY_THRESHOLD}
+        ORDER BY similarity DESC
+        LIMIT {top_k}
+    """
+    
+    try:
+        t0 = time.time()
+        result = conn.execute(sql).df()
+        query_time = time.time() - t0
+        logger.info(f"Pre-filtered vector search completed in {query_time:.2f}s, {len(result)} results")
+        return result if not result.empty else None
+    except Exception as e:
+        logger.warning(f"Pre-filtered vector search error: {e}")
+        return None
 
 
 def _fallback_keyword_search(
     query: str,
     conn,
     top_k: int = 10,
-    min_date: str = None
+    min_date: str = None,
+    table_name: str = None
 ) -> pd.DataFrame:
-    """Fallback keyword search when vector search fails."""
+    """
+    Fallback keyword search when vector search fails.
+    Uses relevance scoring based on keyword match count for better ranking.
+    """
+    tbl = table_name or TARGET_TABLE
     date_filter = f"AND DATE >= '{min_date}'" if min_date else ""
-    # Extract keywords from query (simple approach)
-    keywords = [w.strip() for w in query.lower().split() if len(w) > 3]
+    keywords = _extract_keywords(query)
     
     if not keywords:
         return pd.DataFrame()
     
-    # Build LIKE clauses for each keyword
-    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%{kw}%'" for kw in keywords[:5]])
+    # Build LIKE clauses for each keyword  
+    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%{kw}%'" for kw in keywords])
+    
+    # Score by how many keywords match (poor man's relevance ranking)
+    score_parts = " + ".join([
+        f"CASE WHEN LOWER(HEADLINE) LIKE '%{kw}%' THEN 1 ELSE 0 END"
+        for kw in keywords
+    ])
     
     sql = f"""
         SELECT 
@@ -197,26 +372,34 @@ def _fallback_keyword_search(
             MAIN_ACTOR,
             IMPACT_SCORE,
             ARTICLE_COUNT,
-            NEWS_LINK
-        FROM {TARGET_TABLE}
+            NEWS_LINK,
+            ({score_parts}) as keyword_score
+        FROM {tbl}
         WHERE HEADLINE IS NOT NULL
           AND LENGTH(HEADLINE) > 15
           AND ({like_clauses})
           {date_filter}
-        ORDER BY ARTICLE_COUNT DESC
+        ORDER BY keyword_score DESC, ARTICLE_COUNT DESC
         LIMIT {top_k}
     """
     
     try:
-        return conn.execute(sql).df()
+        result = conn.execute(sql).df()
+        # Drop the scoring column before returning
+        if 'keyword_score' in result.columns:
+            result = result.drop(columns=['keyword_score'])
+        return result
     except Exception as e:
         logger.error(f"Fallback search error: {e}")
         return pd.DataFrame()
 
 
-def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None) -> dict:
+def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None, table_name: str = None) -> dict:
     """Full RAG pipeline: embed query → search → synthesize answer."""
-    headlines_df = search_similar_headlines(question, conn, top_k=top_k, min_date=min_date)
+    t0 = time.time()
+    headlines_df = search_similar_headlines(question, conn, top_k=top_k, min_date=min_date, table_name=table_name)
+    search_time = time.time() - t0
+    logger.info(f"RAG search completed in {search_time:.2f}s")
 
     if headlines_df.empty:
         return {
@@ -263,5 +446,5 @@ Start directly with the numbered list, no introduction needed:"""
     return {
         "answer": answer,
         "headlines": headlines_df,
-        "sql": "Vector similarity search (RAG mode)"
+        "sql": f"Hybrid vector search ({search_time:.1f}s)"
     }

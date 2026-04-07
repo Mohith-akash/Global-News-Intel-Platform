@@ -136,7 +136,7 @@ def main():
         c1, c2 = st.columns([7, 3])
         with c1:
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
-            render_ai_chat(conn, sql_db)
+            render_ai_chat(conn, sql_db, tbl)
         with c2:
             st.markdown('''<div class="card">
                 <h4 class="title-cyan">ℹ️ HOW IT WORKS</h4>
