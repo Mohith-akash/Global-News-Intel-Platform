@@ -182,8 +182,10 @@ def clean_headline(text: str) -> Optional[str]:
     text = re.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
     text = re.sub(r'\b([A-Z])\s+([A-Z])\s+([A-Z])\b', r'\1\2\3', text)
 
-    # Remove truncated endings
+    # Remove truncated endings (prepositions + short word, or trailing modal verbs)
     text = re.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
+    # Headlines ending in modal/auxiliary verbs are truncated ("Trump Says the Military Could")
+    text = re.sub(r'\s+(could|would|should|will|shall|may|might|must|can|has|have|had|was|were|are|did|does|set)$', '', text, flags=re.I)
 
     # Remove short trailing words
     words = text.strip().split()
@@ -300,6 +302,29 @@ def score_headline_quality(headline: str, url: str) -> float:
         score -= 0.1
     if re.search(r'[A-Z]{5,}', headline):  # All caps words
         score -= 0.1
+
+    # Penalize random character sequences (e.g. "Bnzqvyw5 Xes7 Tiqkizlx")
+    word_list = headline.split()
+    garbage_words = sum(1 for w in word_list if re.search(r'[a-zA-Z]\d|\d[a-zA-Z]', w) or
+                       (len(w) > 4 and not re.search(r'[aeiouAEIOU]', w)))
+    if garbage_words >= 2:
+        score -= 0.5
+
+    # Penalize SEO keyword-stuffed URL slugs:
+    # If >60% of words are capitalized and there are 10+ words, it's a slug not a headline
+    if len(word_list) >= 10:
+        cap_ratio = sum(1 for w in word_list if w and w[0].isupper() and len(w) > 2) / len(word_list)
+        if cap_ratio > 0.6:
+            score -= 0.5
+
+    # Penalize "live updates / breaking" ticker-style non-headlines
+    lower = headline.lower()
+    if lower.startswith(('live updates', 'live blog', 'breaking:', 'watch live', 'as it happened')):
+        score -= 0.3
+
+    # Penalize headlines that are clearly two different stories concatenated (very long)
+    if len(word_list) > 18:
+        score -= 0.3
 
     return max(0.0, min(1.0, score))
 

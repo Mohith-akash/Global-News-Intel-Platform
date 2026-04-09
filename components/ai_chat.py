@@ -116,7 +116,7 @@ def render_rag_chat(c, tbl="events_dagster"):
                 try:
                     # Get date range - use last 30 days like SQL mode
                     dates = get_dates()
-                    result = rag_query(prompt, c, llm, top_k=5, min_date=dates['month_ago'], table_name=tbl)
+                    result = rag_query(prompt, c, llm, top_k=15, min_date=dates['month_ago'], table_name=tbl)
                     
                     # Display answer (escape $ to prevent LaTeX rendering)
                     st.markdown(result["answer"].replace('$', r'\$'))
@@ -127,7 +127,9 @@ def render_rag_chat(c, tbl="events_dagster"):
                         
                         # Format for display
                         if 'ACTOR_COUNTRY_CODE' in df.columns:
-                            df['COUNTRY'] = df['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
+                            df['COUNTRY'] = df['ACTOR_COUNTRY_CODE'].apply(
+                                lambda x: get_country(x) or x if x and str(x) not in ('None', 'nan', '') else '—'
+                            )
                         if 'IMPACT_SCORE' in df.columns:
                             df['SEVERITY'] = df['IMPACT_SCORE'].apply(get_impact_label)
                         if 'DATE' in df.columns:
@@ -306,26 +308,20 @@ def render_sql_chat(c, sql_db, tbl="events_dagster"):
                     
                     # 6. Default: specific events query
                     else:
-                        if qe:
-                            try:
-                                resp = qe.query(prompt)
-                                sql = resp.metadata.get('sql_query')
-                            except Exception: pass
-                        if not sql:
-                            codes = get_country_codes_from_prompt(prompt)
-                            
-                            # Require at least 10 articles for quality headlines
-                            article_threshold = 10
-                            
-                            if codes:
-                                if len(codes) == 1:
-                                    cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
-                                else:
-                                    codes_str = "', '".join(codes)
-                                    cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
+                        codes = get_country_codes_from_prompt(prompt)
+
+                        # Require at least 10 articles for quality headlines
+                        article_threshold = 10
+
+                        if codes:
+                            if len(codes) == 1:
+                                cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
                             else:
-                                sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
+                                codes_str = "', '".join(codes)
+                                cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
+                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
+                        else:
+                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
                     
                     # Enforce LIMIT on aggregate queries only (event queries need more rows for filtering)
                     if sql and (is_count_aggregate or is_country_aggregate):
@@ -349,9 +345,10 @@ Question: {prompt}
 
 Provide a brief, factual answer using ONLY this data. State the count clearly."""
 
-                                answer = str(llm.complete(ai_prompt))
+                                _resp = llm.complete(ai_prompt)
+                                answer = str(_resp) if _resp is not None else "No response from AI."
                                 st.markdown(answer.replace('$', r'\$'))
-                                
+
                                 st.markdown(f"""
                                 <div style="background:#111827;border:1px solid #1e3a5f;border-radius:12px;padding:1.5rem;text-align:center;margin:1rem 0;">
                                     <div style="font-size:0.8rem;color:#64748b;text-transform:uppercase;">Total Events {f"in {country_filter_name}" if country_filter_name else ""}</div>
@@ -366,7 +363,9 @@ Provide a brief, factual answer using ONLY this data. State the count clearly.""
                             # Handle country aggregate query differently
                             elif is_country_aggregate:
                                 # Convert country codes to names
-                                dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
+                                dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(
+                                    lambda x: get_country(x) or x if x and str(x) not in ('None', 'nan', '') else '—'
+                                )
                                 
                                 # Build summary for AI
                                 country_list = []
@@ -374,17 +373,18 @@ Provide a brief, factual answer using ONLY this data. State the count clearly.""
                                     country_list.append(f"- {row['COUNTRY']}: {row['EVENT_COUNT']:,} events")
                                 summary_text = "\n".join(country_list)
                                 
-                                ai_prompt = f"""Top {len(dd)} countries by events ({qi['period_label']}):
+                                ai_prompt = f"""You are a news analyst. Below is real data from the GDELT database showing event counts by country ({qi['period_label']}). Use ONLY this data — do not invent reasons or add facts not shown here.
 
 {summary_text}
 
 Question: {prompt}
 
-Briefly explain why these countries lead and any notable patterns. Keep response concise."""
+Based solely on the event counts above, briefly describe which countries dominate and any notable patterns in the numbers. Keep response concise and factual."""
 
-                                answer = str(llm.complete(ai_prompt))
+                                _resp = llm.complete(ai_prompt)
+                                answer = str(_resp) if _resp is not None else "No response from AI."
                                 st.markdown(answer.replace('$', r'\$'))
-                                
+
                                 st.dataframe(
                                     dd[['COUNTRY', 'EVENT_COUNT']],
                                     hide_index=True,
@@ -401,7 +401,9 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                 # Regular event query - extract headlines, show details
                                 # Convert country code to full name
                                 if 'ACTOR_COUNTRY_CODE' in dd.columns:
-                                    dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(lambda x: get_country(x) or x)
+                                    dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(
+                                        lambda x: get_country(x) or x if x and str(x) not in ('None', 'nan', '') else '—'
+                                    )
                                 
                                 if 'NEWS_LINK' in dd.columns:
                                     headlines = []
@@ -463,15 +465,16 @@ Briefly explain why these countries lead and any notable patterns. Keep response
                                     
                                     summary_text = "\n".join(summary_data)
                                     
-                                    ai_prompt = f"""Events from {qi['period_label']}:
+                                    ai_prompt = f"""You are a news analyst. Below are {len(summary_data)} events from the GDELT database ({qi['period_label']}).
 
 {summary_text}
 
 Question: {prompt}
 
-There are exactly {len(summary_data)} events. Describe EACH one with 2-3 sentences. Number 1 through {len(summary_data)}. Do NOT skip any."""
+Write a concise analytical answer (3-5 sentences) that directly answers the question. Group related events by theme or country. Then list the events as brief one-line bullet points. Do not create verbose per-event breakdowns."""
 
-                                    answer = str(llm.complete(ai_prompt))
+                                    _resp = llm.complete(ai_prompt)
+                                    answer = str(_resp) if _resp is not None else "No response from AI."
                                     st.markdown(answer.replace('$', r'\$'))
                                     
                                     display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY']

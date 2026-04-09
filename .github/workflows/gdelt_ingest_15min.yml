@@ -9,6 +9,7 @@ on:
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
     # 1. Checkout code
@@ -37,42 +38,32 @@ jobs:
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
 
-    # 5. Cache Playwright browsers (avoid 160MB download every run)
-    - name: Get Playwright version
-      id: playwright-version
-      run: |
-        PLAYWRIGHT_VERSION=$(pip show playwright 2>/dev/null | grep Version | cut -d' ' -f2 || echo "1.49.0")
-        echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
-    
-    - name: Cache Playwright browsers
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ steps.playwright-version.outputs.version }}
-    
-    # 6. Keep Streamlit app awake (Playwright browser automation)
-    - name: Keep Streamlit Alive (Playwright)
+    # 5. Keep Streamlit app awake (Playwright browser automation)
+    - name: Install Playwright + Chromium
       run: |
         pip install playwright
-        # Always install browsers to ensure correct version and path
-        echo "📥 Installing Chromium..."
         playwright install chromium --with-deps
-        echo "✅ Chromium ready"
+
+    - name: Keep Streamlit Alive (Playwright)
+      env:
+        STREAMLIT_APP_URL: ${{ vars.STREAMLIT_APP_URL || 'https://global-news-intel-platform.streamlit.app/' }}
+      run: |
         python << 'EOF'
         import asyncio
+        import os
         from playwright.async_api import async_playwright
 
         async def keep_alive():
+            app_url = os.environ.get("STREAMLIT_APP_URL", "https://global-news-intel-platform.streamlit.app/")
             print("🔄 Starting Playwright browser...")
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 page = await browser.new_page()
-                
+
                 try:
                     # Navigate to the app
-                    print("📡 Connecting to Streamlit app...")
-                    await page.goto("https://global-news-intel-platform.streamlit.app/", 
+                    print(f"📡 Connecting to Streamlit app: {app_url}")
+                    await page.goto(app_url,
                                     wait_until="domcontentloaded", timeout=60000)
                     
                     # Check if app is sleeping (look for wake button)
@@ -104,3 +95,12 @@ jobs:
         asyncio.run(keep_alive())
         EOF
 
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "::error::GDELT 15-min ingest failed — check logs above"
+        curl -s -o /dev/null -w "%{http_code}" \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          -X POST "https://api.github.com/repos/${{ github.repository }}/issues" \
+          -d "{\"title\":\"[ALERT] GDELT ingest failed $(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"body\":\"The 15-min GDELT ingestion job failed.\\n\\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"labels\":[\"bug\"]}" || true

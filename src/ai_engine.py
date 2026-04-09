@@ -25,16 +25,8 @@ try:
     logger.info("AI features initialized successfully")
 except ImportError as e:
     logger.warning(f"AI features unavailable - llama-index import failed: {e}")
-    Cerebras = None
-    SQLDatabase = None
-    Settings = None
-    NLSQLTableQueryEngine = None
 except Exception as e:
-    logger.error(f"Unexpected error loading AI dependencies: {e}")
-    Cerebras = None
-    SQLDatabase = None
-    Settings = None
-    NLSQLTableQueryEngine = None
+    logger.error(f"Unexpected error loading AI dependencies: {e}", exc_info=True)
 
 
 @st.cache_resource
@@ -52,6 +44,7 @@ def get_ai_engine(_engine):
         
         llm = Cerebras(api_key=api_key, model=CEREBRAS_MODEL, temperature=0.1)
         Settings.llm = llm
+        Settings.embed_model = None  # We use Voyage AI directly, skip default OpenAI embeddings
         
         conn = get_db()
         main_table = detect_table(conn)

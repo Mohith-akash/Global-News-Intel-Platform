@@ -473,22 +473,23 @@ def select_best_headline_per_event_polars(df: pl.DataFrame) -> pl.DataFrame:
         headlines.append(extract_headline_from_url(url))
     
     df = df.with_columns(pl.Series("HEADLINE", headlines))
-    
+
+    # Count articles per event BEFORE deduplication (one raw row = one source URL)
+    article_counts = df.group_by("EVENT_ID").len().rename({"len": "OUR_ARTICLE_COUNT"})
+
     # Group by EVENT_ID and keep row with best headline
     # Use Polars' powerful groupby + agg
     df = df.with_columns(
         pl.col("HEADLINE").is_not_null().alias("has_headline"),
         pl.col("HEADLINE").str.len_chars().fill_null(0).alias("headline_len")
     )
-    
+
     # Sort to prioritize rows with headlines, then by headline length
     df = df.sort(["EVENT_ID", "has_headline", "headline_len"], descending=[False, True, True])
-    
+
     # Keep first (best) row per EVENT_ID
     df = df.group_by("EVENT_ID", maintain_order=True).first()
-    
-    # Count articles per event (our own count from duplicate URLs)
-    article_counts = df.group_by("EVENT_ID").len().rename({"len": "OUR_ARTICLE_COUNT"})
+
     df = df.join(article_counts, on="EVENT_ID", how="left")
     
     # Use our article count if higher than GDELT's

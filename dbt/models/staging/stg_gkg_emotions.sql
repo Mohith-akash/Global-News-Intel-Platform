@@ -28,4 +28,4 @@ SELECT
     EMOTION_ANXIETY as anxiety,
     EMOTION_HOSTILITY as hostility,
     EMOTION_DEPRESSION as depression
-FROM gkg_emotions
+FROM {{ source('gdelt', 'gkg_emotions') }}

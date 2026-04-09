@@ -32,7 +32,7 @@ actor_stats AS (
         AVG(avg_tone) AS avg_tone,
         
         -- Most common sentiment
-        MODE() WITHIN GROUP (ORDER BY sentiment_category) AS typical_sentiment
+        MODE(sentiment_category) AS typical_sentiment
         
     FROM events
     GROUP BY actor_name, actor_country_code

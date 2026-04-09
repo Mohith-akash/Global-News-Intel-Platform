@@ -32,7 +32,7 @@ WITH daily_emotions AS (
 SELECT
     date_key,
     -- Convert YYYYMMDD to proper date
-    CAST(SUBSTR(date_key, 1, 4) || '-' || SUBSTR(date_key, 5, 2) || '-' || SUBSTR(date_key, 7, 2) AS DATE) as event_date,
+    STRPTIME(date_key, '%Y%m%d')::DATE as event_date,
     ROUND(avg_mood, 2) as avg_mood,
     ROUND(avg_positive, 2) as avg_positive,
     ROUND(avg_negative, 2) as avg_negative,

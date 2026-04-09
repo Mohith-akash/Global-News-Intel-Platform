@@ -154,14 +154,44 @@ def inject_css():
             padding: 0.5rem 0.9rem; 
             white-space: nowrap; 
         }
-        .stTabs [aria-selected="true"] { 
-            background: var(--card-inner); 
-            color: var(--cyan); 
-            border-radius: 6px; 
+        .stTabs [aria-selected="true"] {
+            background: var(--card-inner);
+            color: var(--cyan);
+            border-radius: 6px;
+            border-bottom: none !important;
+            box-shadow: none !important;
         }
-        .stTabs [data-baseweb="tab-highlight"], 
-        .stTabs [data-baseweb="tab-border"] { 
-            display: none; 
+        /* Kill tab highlight/underline — every known method for Streamlit */
+        [data-baseweb="tab-highlight"],
+        .stTabs [data-baseweb="tab-highlight"],
+        div[data-baseweb="tab-highlight"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            max-height: 0 !important;
+            width: 0 !important;
+            background: transparent !important;
+            background-color: #0d1320 !important;
+            border: none !important;
+            position: absolute !important;
+            pointer-events: none !important;
+            overflow: hidden !important;
+        }
+        [data-baseweb="tab-border"],
+        .stTabs [data-baseweb="tab-border"],
+        div[data-baseweb="tab-border"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            background: transparent !important;
+            background-color: #0d1320 !important;
+        }
+        /* Fallback: hide non-tab children of tab-list (catches renamed highlight divs) */
+        [data-baseweb="tab-list"] > div:not([data-baseweb="tab"]):not([role="tab"]):not(button) {
+            background: transparent !important;
+            background-color: #0d1320 !important;
+            height: 0 !important;
         }
         
         /* Data table styling */

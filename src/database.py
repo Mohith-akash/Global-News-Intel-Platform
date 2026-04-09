@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 logger = logging.getLogger("gdelt")
 
 
-@st.cache_resource
+@st.cache_resource(ttl=3600)
 def get_db():
     """Connect to MotherDuck."""
     return duckdb.connect(
@@ -21,7 +21,7 @@ def get_db():
     )
 
 
-@st.cache_resource
+@st.cache_resource(ttl=3600)
 def get_engine():
     """Create SQLAlchemy engine."""
     return create_engine(
@@ -49,5 +49,5 @@ def safe_query(conn, sql):
     try:
         return conn.execute(sql).df()
     except Exception as e:
-        logger.error(f"Query error: {e}")
+        logger.error(f"Query error: {e}", exc_info=True)
         return pd.DataFrame()

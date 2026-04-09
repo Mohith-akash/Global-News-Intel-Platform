@@ -70,7 +70,7 @@ def render_about():
                 <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">FEED</div>
                 <div style="color:#64748b;font-size:0.55rem;">Latest Events</div>
             </div>
-            <div style="text-align:center;padding:0.3rem 0.5rem;background:#1e3a5f33;border-radius:6px;">
+            <div style="text-align:center;padding:0.3rem 0.5rem;">
                 <div style="font-size:1.1rem;">🧠</div>
                 <div style="color:#e2e8f0;font-size:0.7rem;font-weight:600;">EMOTIONS</div>
                 <div style="color:#64748b;font-size:0.55rem;">GKG Analysis</div>

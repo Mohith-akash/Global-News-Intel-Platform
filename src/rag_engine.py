@@ -25,7 +25,7 @@ VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
 TARGET_TABLE = "events_dagster"  # Default, can be overridden per-call
 
 # Search tuning
-SIMILARITY_THRESHOLD = 0.25  # Skip results below this cosine similarity
+SIMILARITY_THRESHOLD = 0.20  # Skip results below this cosine similarity
 PRE_FILTER_LIMIT = 2000  # Max rows to scan for similarity (MotherDuck perf guard)
 MIN_ARTICLE_COUNT_FOR_SEARCH = 2  # Pre-filter: only search events with 2+ articles
 
@@ -190,30 +190,39 @@ def search_similar_headlines(
     embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
     date_filter = f"AND DATE >= '{min_date}'" if min_date else ""
 
-    # Step 3: Try hybrid search first (keyword pre-filter → vector rerank)
-    # This is much faster than full-table vector scan on MotherDuck
+    # Step 3: Run BOTH hybrid and vector search, merge results
+    # Hybrid is fast but misses semantic matches (e.g. "Asia" won't find "India" headlines)
+    # Vector search is slower but finds semantically related events
     keywords = _extract_keywords(query)
-    
+    all_results = []
+
     if keywords:
-        result = _hybrid_search(
-            keywords, embedding_str, conn, tbl, 
+        hybrid = _hybrid_search(
+            keywords, embedding_str, conn, tbl,
             top_k, date_filter
         )
-        if result is not None and not result.empty:
-            logger.info(f"Hybrid search returned {len(result)} results")
-            return result
-    
-    # Step 4: Fall back to pre-filtered vector scan
-    # Scan only high-article-count events with embeddings (much smaller set)
-    result = _prefiltered_vector_search(
+        if hybrid is not None and not hybrid.empty:
+            logger.info(f"Hybrid search returned {len(hybrid)} results")
+            all_results.append(hybrid)
+
+    vector = _prefiltered_vector_search(
         embedding_str, conn, tbl,
         top_k, date_filter
     )
-    if result is not None and not result.empty:
-        logger.info(f"Pre-filtered vector search returned {len(result)} results")
-        return result
-    
-    # Step 5: Last resort — keyword search without vectors
+    if vector is not None and not vector.empty:
+        logger.info(f"Vector search returned {len(vector)} results")
+        all_results.append(vector)
+
+    if all_results:
+        import pandas as pd
+        merged = pd.concat(all_results, ignore_index=True)
+        # Deduplicate by headline, keep the one with highest similarity
+        merged = merged.sort_values('similarity', ascending=False)
+        merged = merged.drop_duplicates(subset=['HEADLINE'], keep='first')
+        merged = merged.head(top_k)
+        return merged
+
+    # Last resort — keyword search without vectors
     logger.info("Vector searches returned no results, falling back to keyword search")
     return _fallback_keyword_search(query, conn, top_k, min_date, table_name=tbl)
 
@@ -234,7 +243,7 @@ def _hybrid_search(
     This avoids scanning the entire table's embeddings on MotherDuck.
     """
     # Build keyword filter — require ANY keyword to match headline
-    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%{kw}%'" for kw in keywords])
+    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
     
     sql = f"""
         WITH keyword_candidates AS (
@@ -272,7 +281,7 @@ def _hybrid_search(
     
     try:
         t0 = time.time()
-        result = conn.execute(sql).df()
+        result = conn.execute(sql, keywords).df()
         query_time = time.time() - t0
         logger.info(f"Hybrid search completed in {query_time:.2f}s, {len(result)} results")
         return result if not result.empty else None
@@ -355,13 +364,13 @@ def _fallback_keyword_search(
     if not keywords:
         return pd.DataFrame()
     
-    # Build LIKE clauses for each keyword  
-    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%{kw}%'" for kw in keywords])
-    
+    # Build parameterized LIKE clauses for each keyword
+    like_clauses = " OR ".join(["LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
+
     # Score by how many keywords match (poor man's relevance ranking)
     score_parts = " + ".join([
-        f"CASE WHEN LOWER(HEADLINE) LIKE '%{kw}%' THEN 1 ELSE 0 END"
-        for kw in keywords
+        "CASE WHEN LOWER(HEADLINE) LIKE '%' || ? || '%' THEN 1 ELSE 0 END"
+        for _ in keywords
     ])
     
     sql = f"""
@@ -384,7 +393,8 @@ def _fallback_keyword_search(
     """
     
     try:
-        result = conn.execute(sql).df()
+        # score_parts params first (SELECT position), then like_clauses params (WHERE position)
+        result = conn.execute(sql, keywords + keywords).df()
         # Drop the scoring column before returning
         if 'keyword_score' in result.columns:
             result = result.drop(columns=['keyword_score'])
@@ -408,34 +418,128 @@ def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None, t
             "sql": None
         }
 
+    # Clean headlines and drop slugs/garbage before anything else
+    from src.headline_utils import clean_headline, score_headline_quality
+    valid_rows = []
+    for idx, row in headlines_df.iterrows():
+        raw = row.get('HEADLINE', '')
+        url = row.get('NEWS_LINK', '')
+        cleaned = clean_headline(str(raw)) if raw else None
+        quality = score_headline_quality(cleaned, str(url)) if cleaned else 0
+        if cleaned and quality >= 0.3:
+            headlines_df.at[idx, 'HEADLINE'] = cleaned
+            valid_rows.append(idx)
+    headlines_df = headlines_df.loc[valid_rows].copy()
+
+    if headlines_df.empty:
+        return {
+            "answer": "I found some results but the headlines were too low quality to display. Try a more specific question.",
+            "headlines": pd.DataFrame(),
+            "sql": None
+        }
+
+    # GDELT MAIN_ACTOR codes that are entity-type labels, not real actors — skip these
+    _GDELT_NOISE_ACTORS = {
+        'army', 'government', 'police', 'military', 'industry', 'business',
+        'media', 'economist', 'official', 'minister', 'rebel', 'opposition',
+        'protester', 'civilian', 'refugee', 'journalist', 'activist',
+        'diplomat', 'court', 'parliament', 'congress', 'president',
+        'citizen', 'citizen', 'company', 'agency', 'spokesperson',
+        # Country names that appear as MAIN_ACTOR in GDELT
+        'russia', 'china', 'iran', 'israel', 'india', 'ukraine',
+        'united states', 'united kingdom', 'france', 'germany',
+    }
+
     context_parts = []
+    _seen_headlines = set()
     for _, row in headlines_df.iterrows():
-        headline = row.get('HEADLINE', 'Unknown event')
-        context_parts.append(f"• {headline}")
+        headline = row.get('HEADLINE', '')
+        headline = str(headline).strip()
+        if not headline or len(headline) < 15:
+            continue
 
+        # Skip garbage headlines with random character sequences (e.g. "Bnzqvyw5 Xes7")
+        import re
+        words = headline.split()
+        garbage_words = sum(1 for w in words if re.search(r'[a-zA-Z]\d|\d[a-zA-Z]', w) or
+                           (len(w) > 4 and not re.search(r'[aeiouAEIOU]', w)))
+        if garbage_words >= 2:
+            continue
+
+        date_raw = str(row.get('DATE', ''))
+        try:
+            import datetime
+            date_fmt = datetime.datetime.strptime(date_raw, '%Y%m%d').strftime('%b %d')
+        except Exception:
+            date_fmt = date_raw
+
+        country_code = str(row.get('ACTOR_COUNTRY_CODE', '') or '').strip()
+        try:
+            from src.utils import get_country
+            country = get_country(country_code) or ''
+        except Exception:
+            country = ''
+
+        score = row.get('IMPACT_SCORE')
+        severity = ''
+        if score is not None:
+            try:
+                s = float(score)
+                if s <= -7:
+                    severity = 'severe crisis'
+                elif s <= -4:
+                    severity = 'crisis'
+                elif s <= -2:
+                    severity = 'negative'
+                elif s >= 5:
+                    severity = 'positive'
+            except Exception:
+                pass
+
+        # Build context line — no actor field, it's almost always noise from GDELT
+        parts = [f"[{date_fmt}]", headline]
+        if country:
+            parts.append(f"— {country}")
+        if severity:
+            parts.append(f"[{severity}]")
+
+        line = ' '.join(parts)
+        # Deduplicate by headline text
+        if headline not in _seen_headlines:
+            _seen_headlines.add(headline)
+            context_parts.append(line)
+
+    if not context_parts:
+        return {
+            "answer": "I couldn't find any relevant events. Try a different question or use SQL mode.",
+            "headlines": headlines_df,
+            "sql": None
+        }
+
+    # Cap context to 8 best events for LLM (more would dilute quality)
+    context_parts = context_parts[:8]
     context = "\n".join(context_parts)
+    n = len(context_parts)
 
-    prompt = f"""Here are the top 5 news events related to the question:
+    prompt = f"""You are a geopolitical news analyst. Below are {n} recent events from the GDELT global news database that are relevant to the question.
 
 {context}
 
 Question: {question}
 
-For each event, write a 2-3 sentence summary that:
-- Explains WHY this event matters (not just repeating the headline)
-- Provides context or background that isn't obvious
-- Uses full country names
+Write a concise analytical answer (3-5 sentences) that:
+- Directly answers the question based on the events above
+- Groups related events by country or theme where relevant
+- Uses the dates and severity labels from the data to ground your points
+- Does not simply repeat each headline one by one
 
-Format your response like this:
-**1. [First Event Title]**
-[2-3 sentences of insight]
+After the paragraph, list the key events using this EXACT markdown format (one per line, with a blank line before the list):
 
-**2. [Second Event Title]**
-[2-3 sentences of insight]
+**Key events:**
+- [Date] Headline — Country [severity if any]
+- [Date] Headline — Country [severity if any]
 
-(Continue for all events)
-
-Start directly with the numbered list, no introduction needed:"""
+Start with the analytical paragraph:"""
 
     try:
         answer = str(llm.complete(prompt))

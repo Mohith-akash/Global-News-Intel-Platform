@@ -3,9 +3,15 @@ version: 2
 sources:
   - name: gdelt
     description: "Raw GDELT data ingested by Dagster pipeline"
+    freshness:
+      warn_after: {count: 1, period: hour}
+      error_after: {count: 3, period: hour}
+    loaded_at_field: DATE
     tables:
       - name: events_dagster
         description: "Raw events from GDELT API"
+      - name: gkg_emotions
+        description: "Raw GKG emotion data from GDELT (rolling 24h articles)"
         columns:
           - name: EVENT_ID
             description: "Unique event identifier"

@@ -9,6 +9,7 @@ on:
 jobs:
   generate-embeddings:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
     # 1. Checkout code
@@ -37,3 +38,13 @@ jobs:
         echo "🧠 Starting Embedding Generation..."
         python -m dagster job execute -f etl/embedding_job.py -j gdelt_embedding_job
         echo "✅ Embedding Generation Complete."
+
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "::error::GDELT 12-hr embedding job failed — check logs above"
+        curl -s -o /dev/null -w "%{http_code}" \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          -X POST "https://api.github.com/repos/${{ github.repository }}/issues" \
+          -d "{\"title\":\"[ALERT] GDELT embeddings failed $(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"body\":\"The 12-hr embedding generation job failed.\\n\\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"labels\":[\"bug\"]}" || true

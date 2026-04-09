@@ -51,14 +51,23 @@ def process_df(df):
     df['HEADLINE'] = headlines
     df['_QUALITY'] = quality_scores
     
-    # Filter out rows without valid headlines
-    df = df[df['HEADLINE'].notna()]
-    
+    # Filter out rows without valid headlines or very low quality
+    df = df[df['HEADLINE'].notna() & (df['_QUALITY'] >= 0.3)]
+
     if df.empty:
         return df
 
-    # Sort by quality score (best headlines first)
-    df = df.sort_values('_QUALITY', ascending=False)
+    # Sort by combined recency (60%) + quality (40%) so recent news surfaces first
+    try:
+        dates = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d', errors='coerce')
+        date_min = dates.min()
+        date_range = (dates.max() - date_min).days or 1
+        recency = (dates - date_min).dt.days / date_range
+        df['_SCORE'] = 0.6 * recency + 0.4 * df['_QUALITY']
+    except Exception:
+        df['_SCORE'] = df['_QUALITY']
+
+    df = df.sort_values('_SCORE', ascending=False)
 
     # Deduplicate headlines
     keep_indices = dedupe_headlines_simple(df['HEADLINE'].tolist())
@@ -90,6 +99,6 @@ def process_df(df):
     df['INTENSITY'] = df['IMPACT_SCORE'].apply(get_intensity_label)
 
     # Drop internal columns
-    df = df.drop(columns=['_QUALITY'], errors='ignore')
+    df = df.drop(columns=['_QUALITY', '_SCORE'], errors='ignore')
 
     return df

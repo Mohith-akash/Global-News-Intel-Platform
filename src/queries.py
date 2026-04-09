@@ -24,9 +24,9 @@ def get_metrics(_c, t):
         GROUP BY 1 ORDER BY 2 DESC LIMIT 1
     """)
     return {
-        'total': df.iloc[0]['total'] if not df.empty else 0,
-        'recent': df.iloc[0]['recent'] if not df.empty else 0,
-        'critical': df.iloc[0]['critical'] if not df.empty else 0,
+        'total': int(df.iloc[0]['total'] or 0) if not df.empty else 0,
+        'recent': int(df.iloc[0]['recent'] or 0) if not df.empty else 0,
+        'critical': int(df.iloc[0]['critical'] or 0) if not df.empty else 0,
         'hotspot': hs.iloc[0]['ACTOR_COUNTRY_CODE'] if not hs.empty else None
     }
 
@@ -46,9 +46,16 @@ def get_alerts(_c, t):
 def get_trending(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT 
-        FROM {t} WHERE DATE >= '{dates['week_ago']}' AND ARTICLE_COUNT > 3 AND NEWS_LINK IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
-        ORDER BY ARTICLE_COUNT DESC LIMIT 500
+        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
+        FROM {t}
+        WHERE DATE >= '{dates['week_ago']}'
+          AND ARTICLE_COUNT > 3
+          AND NEWS_LINK IS NOT NULL
+          AND ACTOR_COUNTRY_CODE IS NOT NULL
+          AND HEADLINE IS NOT NULL
+          AND LENGTH(HEADLINE) > 20
+        ORDER BY ARTICLE_COUNT DESC, DATE DESC
+        LIMIT 500
     """)
 
 
@@ -56,9 +63,15 @@ def get_trending(_c, t):
 def get_feed(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE 
-        FROM {t} WHERE DATE >= '{dates['week_ago']}' AND NEWS_LINK IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL
-        ORDER BY DATE DESC LIMIT 500
+        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
+        FROM {t}
+        WHERE DATE >= '{dates['week_ago']}'
+          AND NEWS_LINK IS NOT NULL
+          AND ACTOR_COUNTRY_CODE IS NOT NULL
+          AND HEADLINE IS NOT NULL
+          AND LENGTH(HEADLINE) > 20
+        ORDER BY DATE DESC, ARTICLE_COUNT DESC
+        LIMIT 500
     """)
 
 
