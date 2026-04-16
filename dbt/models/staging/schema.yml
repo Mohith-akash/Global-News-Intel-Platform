@@ -13,33 +13,51 @@ sources:
       - name: gkg_emotions
         description: "Raw GKG emotion data from GDELT (rolling 24h articles)"
         columns:
-          - name: EVENT_ID
-            description: "Unique event identifier"
+          - name: GKG_ID
+            description: "Unique GKG record identifier"
             tests:
               - unique
               - not_null
           - name: DATE
-            description: "Event date in YYYYMMDD format"
+            description: "Record date in YYYYMMDD format"
             tests:
               - not_null
-          - name: MAIN_ACTOR
-            description: "Primary actor in the event"
-          - name: ACTOR_COUNTRY_CODE
-            description: "3-letter country code of actor"
-          - name: EVENT_CATEGORY_CODE
-            description: "CAMEO event code"
-          - name: IMPACT_SCORE
-            description: "Goldstein scale (-10 to +10)"
-          - name: ARTICLE_COUNT
-            description: "Number of articles covering this event"
-          - name: SENTIMENT_SCORE
-            description: "Average tone of coverage"
-          - name: NEWS_LINK
-            description: "URL to source article"
-          - name: HEADLINE
-            description: "Extracted headline from URL"
-          - name: EMBEDDING
-            description: "1024-dim vector embedding for RAG"
+          - name: SOURCE
+            description: "Source publication or outlet"
+          - name: PERSONS
+            description: "Persons mentioned in the article"
+          - name: ORGS
+            description: "Organizations mentioned in the article"
+          - name: TOP_THEMES
+            description: "Top GDELT themes extracted from the article"
+          - name: AVG_TONE
+            description: "Average tone score of the article"
+          - name: POSITIVE_SCORE
+            description: "Positive sentiment score"
+          - name: NEGATIVE_SCORE
+            description: "Negative sentiment score"
+          - name: EMOTION_FEAR
+            description: "Fear emotion score"
+          - name: EMOTION_ANGER
+            description: "Anger emotion score"
+          - name: EMOTION_SADNESS
+            description: "Sadness emotion score"
+          - name: EMOTION_JOY
+            description: "Joy emotion score"
+          - name: EMOTION_DISGUST
+            description: "Disgust emotion score"
+          - name: EMOTION_SURPRISE
+            description: "Surprise emotion score"
+          - name: EMOTION_TRUST
+            description: "Trust emotion score"
+          - name: EMOTION_ANTICIPATION
+            description: "Anticipation emotion score"
+          - name: EMOTION_ANXIETY
+            description: "Anxiety emotion score"
+          - name: EMOTION_HOSTILITY
+            description: "Hostility emotion score"
+          - name: EMOTION_DEPRESSION
+            description: "Depression emotion score"
 
 models:
   - name: stg_events
@@ -59,12 +77,7 @@ models:
       - name: actor_country_code
         description: "3-letter ISO country code"
       - name: goldstein_scale
-        description: "Event impact score (-10 to +10)"
-        tests:
-          - accepted_values:
-              values: [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-              quote: false
-              severity: warn
+        description: "Event impact score (-10.0 to +10.0, FLOAT64)"
       - name: sentiment_category
         description: "Derived sentiment classification"
         tests:

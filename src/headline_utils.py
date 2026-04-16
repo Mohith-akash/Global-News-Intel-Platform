@@ -329,40 +329,6 @@ def score_headline_quality(headline: str, url: str) -> float:
     return max(0.0, min(1.0, score))
 
 
-def dedupe_headlines_semantic(headlines: list) -> list:
-    """
-    Return indices of unique headlines using similarity detection.
-    Removes near-duplicates that differ only slightly.
-    """
-    from difflib import SequenceMatcher
-
-    keep_indices = []
-    seen_normalized = []
-
-    for i, h in enumerate(headlines):
-        if not h:
-            continue
-
-        # Normalize: lowercase, remove punctuation, get key words
-        normalized = ' '.join(sorted(
-            re.sub(r'[^\w\s]', '', str(h).lower()).split()
-        ))
-
-        # Check similarity against kept headlines
-        is_dupe = False
-        for seen in seen_normalized:
-            ratio = SequenceMatcher(None, normalized, seen).ratio()
-            if ratio > 0.7:
-                is_dupe = True
-                break
-
-        if not is_dupe:
-            keep_indices.append(i)
-            seen_normalized.append(normalized)
-
-    return keep_indices
-
-
 def dedupe_headlines_simple(headlines: list) -> list:
     """
     Return indices of unique headlines using simple word-based dedup.

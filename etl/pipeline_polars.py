@@ -1,11 +1,11 @@
 """
-GDELT Pipeline v2.0 - Supercharged with Polars + Great Expectations
+GDELT Pipeline v2.0 - Polars-based ingestion with custom validation
 
 Changes from v1.0:
 - Polars instead of Pandas (10x faster processing)
-- Great Expectations for data quality validation
+- Custom DataQualityValidator for data quality validation
 - Separated ingestion (every 15 min) from embeddings (every 12 hours)
-- Cleaner, more maintainable code 
+- Cleaner, more maintainable code
 
 Author: Mohith Akash
 """
@@ -14,15 +14,15 @@ import requests
 import datetime
 import zipfile
 import io
-import re
 import polars as pl
 import duckdb
 import os
 import time
-from urllib.parse import urlparse, unquote
 from dagster import asset, Output, Definitions, ScheduleDefinition, define_asset_job, AssetExecutionContext
 from dotenv import load_dotenv
 import logging
+
+from src.headline_utils import extract_headline_from_url, clean_headline
 
 load_dotenv()
 
@@ -59,12 +59,12 @@ GDELT_SCHEMA = {
 
 
 # =============================================================================
-# DATA QUALITY VALIDATION (Great Expectations style)
+# DATA QUALITY VALIDATION
 # =============================================================================
 
 class DataQualityValidator:
     """
-    Data quality validation inspired by Great Expectations.
+    Custom schema + threshold validation for GDELT data.
     Validates GDELT data before loading to warehouse.
     """
     
@@ -232,157 +232,9 @@ def validate_gdelt_data(df: pl.DataFrame) -> dict:
 
 
 # =============================================================================
-# HEADLINE EXTRACTION (Same logic, cleaner code)
+# HEADLINE EXTRACTION
 # =============================================================================
-
-def extract_headline_from_url(url: str) -> str | None:
-    """Extract clean headline from URL at ingestion time."""
-    if not url or not isinstance(url, str):
-        return None
-    
-    try:
-        parsed = urlparse(url)
-        path = unquote(parsed.path)
-        segments = [s for s in path.split('/') if s and len(s) > 8]
-        if not segments:
-            return None
-        
-        for seg in reversed(segments):
-            headline = clean_url_segment(seg)
-            if headline and len(headline) > 20:
-                return headline
-        return None
-    except Exception:
-        return None
-
-
-def clean_url_segment(text: str) -> str | None:
-    """Clean a URL path segment into a readable headline."""
-    if not text:
-        return None
-    
-    text = str(text).strip()
-    
-    # Reject garbage patterns
-    reject_patterns = [
-        r'^[a-f0-9]{8}[-][a-f0-9]{4}',
-        r'^[a-f0-9\-]{20,}$',
-        r'^(article|post|item|id)[-_]?[a-f0-9]{6,}',
-        r'^\d{10,}$',
-        r'^\d+$',
-        r'^[A-Z]{2,5}\s*\d{5,}',
-    ]
-    
-    for pattern in reject_patterns:
-        if re.match(pattern, text.lower()):
-            return None
-    
-    # Clean up text
-    text = re.sub(r'\.(html?|php|aspx?|jsp|shtml|amp)$', '', text, flags=re.I)
-    text = re.sub(r'^\d{8}[-_]?', '', text)
-    text = re.sub(r'^\d{4}[-/]\d{2}[-/]\d{2}[-_]?', '', text)
-    text = re.sub(r'^\d{4}[-_]', '', text)
-    text = re.sub(r'^[a-f0-9]{6,8}[-_]', '', text)
-    text = re.sub(r'[-_]+', ' ', text)
-    
-    # Remove embedded timestamps (8+ digits)
-    text = re.sub(r'\d{8,}', '', text)
-    
-    # Remove trailing garbage patterns
-    text = re.sub(r'[A-Za-z]?\d{6,}[A-Za-z]*$', '', text)
-    text = re.sub(r'\d+[A-Za-z]?$', '', text)
-    text = re.sub(r'\s+\d{5,}$', '', text)
-    text = re.sub(r'\s+[a-f0-9]{8,}$', '', text, flags=re.I)
-    text = re.sub(r'\s+\d{1,8}$', '', text)
-    
-    # FIX CAMELCASE: Insert spaces before uppercase letters
-    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', text)
-    
-    # Fix common URL artifacts
-    text = re.sub(r'Apos(?=[a-z])', "'", text)
-    text = re.sub(r'\bApos\b', "'", text, flags=re.I)
-    text = re.sub(r"''", "'", text)
-    text = re.sub(r"^'", "", text)
-    
-    # Fix number spacing (6 5 -> 6.5)
-    text = re.sub(r'(\d)\s+(\d)', r'\1.\2', text)
-    
-    # Merge single letters (U S -> US)
-    text = re.sub(r'\b([A-Z])\s+([A-Z])\b', r'\1\2', text)
-    text = re.sub(r'\b([A-Z])\s+([A-Z])\s+([A-Z])\b', r'\1\2\3', text)
-    
-    # Remove truncated endings (prepositions with short words)
-    text = re.sub(r'\s+(for|on|in|to|of|with)\s+\w{1,4}$', '', text)
-    
-    # Clean whitespace and punctuation
-    text = ' '.join(text.split())
-    text = re.sub(r'^[.,;:\'\"!?\-_\s\.]+', '', text)
-    text = re.sub(r'[.,;:\'\"!?\-_\s]+$', '', text)
-    
-    # Remove trailing words that look truncated
-    words = text.split()
-    
-    # Remove short trailing words
-    while words and len(words[-1]) <= 2:
-        words.pop()
-    
-    # Remove truncated words (3 chars or less ending in consonant)
-    # Catches obvious cases like "Def", "Bui", "Mur"
-    while words:
-        last_word = words[-1]
-        # Very short words ending in consonant are likely truncated
-        if len(last_word) <= 3 and last_word[-1].lower() in 'bcdfghjklmnpqrstvwxz':
-            words.pop()
-        # Words ending in 'f' after consonant are likely truncated (e.g. "Presidentf")
-        elif last_word.endswith('f') and len(last_word) > 3 and last_word[-2].lower() not in 'aeiou':
-            words.pop()
-        # Still has internal camelCase (not properly split)
-        elif re.search(r'[a-z][A-Z]', last_word):
-            words.pop()
-        else:
-            break
-    
-    text = ' '.join(words)
-    
-    # Quality check - need enough content to be useful
-    if len(text) < 25 or ' ' not in text:  # Require 25+ chars (was 20)
-        return None
-    
-    words = text.split()
-    if len(words) < 5:  # Require 5+ words (was 4)
-        return None
-    
-    # Reject if last word has weird capitalization
-    last_word = words[-1]
-    if re.match(r'^[A-Z][a-z]*[A-Z]', last_word):  # Internal caps like "PropFortnight"
-        return None
-    if re.search(r'[a-z]{2}[A-Z]', last_word):  # Random caps at end
-        return None
-    
-    # Truncate if too long
-    if len(text) > 100:
-        text = text[:100].rsplit(' ', 1)[0]
-    
-    if len(text) < 25:
-        return None
-    
-    # Title case
-    text = text.lower()
-    words = text.split()
-    small_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
-                   'to', 'by', 'in', 'of', 'up', 'as', 'is', 'it', 'so', 'be'}
-    result = []
-    for i, word in enumerate(words):
-        if i == 0:
-            result.append(word.capitalize())
-        elif word in small_words:
-            result.append(word)
-        else:
-            result.append(word.capitalize())
-    
-    return ' '.join(result)
+# Uses src.headline_utils as single source of truth (imported above).
 
 
 # =============================================================================
@@ -533,7 +385,7 @@ def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
         df = process_gdelt_batch_polars(response.content)
         logger.info(f"📊 Loaded {len(df):,} rows with Polars")
         
-        # Data Quality Validation (Great Expectations style)
+        # Data Quality Validation
         logger.info("🔍 Running data quality validation...")
         validation_result = validate_gdelt_data(df)
         

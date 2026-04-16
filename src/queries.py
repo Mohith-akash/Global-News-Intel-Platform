@@ -1,5 +1,11 @@
 """
 Database query functions for GDELT platform.
+
+SQL safety note: f-strings here interpolate only internally-generated values
+(dates from datetime.now() via get_dates(), and a trusted table name `t`
+supplied by the caller). No user-controlled input reaches these queries, so
+f-string formatting is safe. If user input is ever added, switch to DuckDB
+parameter binding ($1, $2, ...) instead.
 """
 
 import datetime

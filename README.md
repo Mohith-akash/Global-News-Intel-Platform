@@ -81,8 +81,8 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **📊 Real-Time Dashboard** | Live metrics, trending news, sentiment analysis, geographic distribution |
 | **🧠 Emotion Analytics** | GKG-powered emotion tracking: Fear, Joy, Positive/Negative, Global Mood Index |
 | **🤖 AI Chat Interface** | Ask questions in plain English → Get SQL-powered answers |
-| **⚡ 15-Min Updates** | Near real-time refresh cycles via GitHub Actions + Dagster |
-| **🔍 Data Quality Gates** | Great Expectations-style validation prevents bad data |
+| **⚡ 15-Min Updates** | GitHub Actions (15-min cron) + Dagster job runner (CLI subprocess) |
+| **🔍 Data Quality Gates** | Custom data validation prevents bad data |
 | **🌍 Global Coverage** | Events from 200+ countries with country code mapping |
 | **📈 Trend Analysis** | 30-day time series, intensity tracking, actor monitoring |
 | **🔥 Trending Topics** | AI-extracted themes from global news (GKG) |
@@ -94,7 +94,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         SUPERCHARGED ARCHITECTURE                        │
+│                         PRODUCTION PIPELINE ARCHITECTURE                 │
 └─────────────────────────────────────────────────────────────────────────┘
 
               ┌──────────────┐          ┌──────────────┐
@@ -105,7 +105,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  INGESTION (Every 15 min)                                                │
-│  GitHub Actions → Dagster → Polars (10x faster) → Great Expectations    │
+│  GitHub Actions → Dagster → Polars (10x faster) → custom validation      │
 └─────────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -130,7 +130,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 
 ### Data Flow (ELT Pipeline)
 1. **Extract**: GDELT Events API + GKG Feed → Polars (10x faster than Pandas)
-2. **Validate**: Great Expectations-style data quality checks
+2. **Validate**: Custom schema + threshold data quality checks
 3. **Load**: Deduplicated data into MotherDuck (serverless DuckDB)
 4. **Transform**: dbt models create staging views and mart tables
 5. **Emotions**: GKG data → Extract tone, fear, joy, topics (rolling 24h)
@@ -146,7 +146,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 |------|---------|----------|
 | **Polars** | High-performance DataFrame processing (10x faster) | Pandas |
 | **dbt Core** | SQL transformations with staging/marts pattern | Raw SQL |
-| **Great Expectations** | Data quality validation & testing | Manual checks |
+| **DataQualityValidator** | Custom schema + threshold validation & testing | Manual checks |
 | **Dagster** | Pipeline orchestration with asset-based design | Apache Airflow |
 | **DuckDB/MotherDuck** | Serverless cloud OLAP warehouse | Snowflake/Redshift |
 | **GitHub Actions** | CI/CD with 15-min + 12-hr scheduled jobs | AWS Lambda |
@@ -168,7 +168,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### Skills Demonstrated
 - **Python** (Polars, Pandas, RegEx, API integration)
 - **SQL** (Complex queries, window functions, dbt models)
-- **Data Quality** (Great Expectations patterns, schema testing)
+- **Data Quality** (custom data quality validation, schema testing)
 - **ELT Pipelines** (Extract, Load, Transform with dbt)
 - **CI/CD** (GitHub Actions, cron scheduling)
 - **Vector Search** (Embeddings, cosine similarity, RAG)
@@ -296,9 +296,8 @@ gdelt_project/
 │   ├── utils.py              # Utility functions
 │   └── styles.py             # CSS styling
 ├── etl/                      # Data pipeline
-│   ├── pipeline_polars.py    # 🆕 Polars ingestion + GE validation
-│   ├── embedding_job.py      # 🆕 12-hour embedding generation
-│   └── pipeline.py           # Legacy Pandas pipeline (deprecated)
+│   ├── pipeline_polars.py    # 🆕 Polars ingestion + custom validation
+│   └── embedding_job.py      # 🆕 12-hour embedding generation
 ├── dbt/                      # 🆕 dbt transformation layer
 │   ├── dbt_project.yml       # dbt configuration
 │   ├── profiles.yml          # MotherDuck connection

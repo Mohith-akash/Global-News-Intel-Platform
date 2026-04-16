@@ -1,4 +1,4 @@
-name: 15-Min GDELT Refresh (Polars + GE)
+name: 15-Min GDELT Refresh (Polars)
 
 on:
   schedule:
@@ -34,7 +34,7 @@ jobs:
       env:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
       run: |
-        echo "🚀 Starting GDELT Ingestion (Polars + Great Expectations)..."
+        echo "🚀 Starting GDELT Ingestion (Polars + custom validation)..."
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
 
