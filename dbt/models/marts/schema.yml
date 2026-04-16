@@ -39,3 +39,19 @@ models:
         description: "Total events from this country"
         tests:
           - not_null
+
+  - name: fct_trending_themes
+    description: "Top trending themes aggregated from GKG data with mention counts and activity span"
+    columns:
+      - name: theme
+        description: "GDELT theme identifier extracted from article themes"
+        tests:
+          - not_null
+      - name: mention_count
+        description: "Total number of theme mentions across all articles"
+        tests:
+          - not_null
+      - name: days_active
+        description: "Number of distinct days this theme was mentioned"
+      - name: avg_daily_mentions
+        description: "Average mentions per active day (mention_count / days_active)"
