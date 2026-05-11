@@ -63,10 +63,19 @@ def detect_table(_conn):
     return 'events_dagster'
 
 
-def safe_query(conn, sql):
-    """Execute SQL safely."""
-    try:
+def safe_query(conn, sql, timeout=15):
+    """Execute SQL safely with a timeout (default 15s)."""
+    import concurrent.futures
+    def _run():
         return conn.execute(sql).df()
-    except Exception as e:
-        logger.error(f"Query error: {e}", exc_info=True)
-        return pd.DataFrame()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(_run)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            logger.warning(f"Query timed out after {timeout}s: {sql[:120]}...")
+            return pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Query error: {e}", exc_info=True)
+            return pd.DataFrame()

@@ -34,8 +34,8 @@ def render_header():
 def render_metrics(c, t):
     m = get_metrics(c, t)
     c1, c2, c3, c4, c5 = st.columns(5)
-    fmt = lambda n: f"{int(n or 0):,}"
-    
+    fmt = lambda n: f"{int(n):,}" if n else "—"
+
     with c1:
         st.metric("📡 TOTAL", fmt(m['total']), "All time")
         st.markdown('''
