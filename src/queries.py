@@ -17,9 +17,18 @@ from src.utils import get_dates
 
 @st.cache_data(ttl=3600)
 def _get_total_count(_c, t):
-    """Full-table COUNT — slow on 16M rows, so cached at 1hr not 5min."""
-    df = safe_query(_c, f"SELECT COUNT(*) as total FROM {t}")
-    return int(df.iloc[0]['total'] or 0) if not df.empty else 0
+    """Read row count from catalog stats — instant, no full scan."""
+    table_name = t.split('.')[-1]
+    df = safe_query(_c, f"""
+        SELECT estimated_size
+        FROM duckdb_tables()
+        WHERE table_name = '{table_name}'
+        LIMIT 1
+    """)
+    if not df.empty and df.iloc[0]['estimated_size']:
+        return int(df.iloc[0]['estimated_size'])
+    # Fallback: skip the slow COUNT(*) and return a sentinel so UI shows cached value
+    return None
 
 
 @st.cache_data(ttl=300)
