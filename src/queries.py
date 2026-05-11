@@ -15,26 +15,40 @@ from src.database import safe_query
 from src.utils import get_dates
 
 
+@st.cache_data(ttl=3600)
+def _get_total_count(_c, t):
+    """Full-table COUNT — slow on 16M rows, so cached at 1hr not 5min."""
+    df = safe_query(_c, f"SELECT COUNT(*) as total FROM {t}")
+    return int(df.iloc[0]['total'] or 0) if not df.empty else 0
+
+
 @st.cache_data(ttl=300)
-def get_metrics(_c, t):
+def _get_weekly_metrics(_c, t):
+    """Week-filtered queries only — date pushdown keeps these fast."""
     dates = get_dates()
     df = safe_query(_c, f"""
-        SELECT COUNT(*) as total,
-            SUM(CASE WHEN DATE >= '{dates['week_ago']}' THEN 1 ELSE 0 END) as recent,
-            SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 AND DATE >= '{dates['week_ago']}' THEN 1 ELSE 0 END) as critical
+        SELECT
+            COUNT(*) as recent,
+            SUM(CASE WHEN ABS(IMPACT_SCORE) > 6 THEN 1 ELSE 0 END) as critical
         FROM {t}
+        WHERE DATE >= '{dates['week_ago']}'
     """)
     hs = safe_query(_c, f"""
-        SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c FROM {t} 
-        WHERE DATE >= '{dates['week_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL 
+        SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c FROM {t}
+        WHERE DATE >= '{dates['week_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL
         GROUP BY 1 ORDER BY 2 DESC LIMIT 1
     """)
     return {
-        'total': int(df.iloc[0]['total'] or 0) if not df.empty else 0,
         'recent': int(df.iloc[0]['recent'] or 0) if not df.empty else 0,
         'critical': int(df.iloc[0]['critical'] or 0) if not df.empty else 0,
-        'hotspot': hs.iloc[0]['ACTOR_COUNTRY_CODE'] if not hs.empty else None
+        'hotspot': hs.iloc[0]['ACTOR_COUNTRY_CODE'] if not hs.empty else None,
     }
+
+
+def get_metrics(_c, t):
+    total = _get_total_count(_c, t)
+    weekly = _get_weekly_metrics(_c, t)
+    return {'total': total, **weekly}
 
 
 @st.cache_data(ttl=300)
