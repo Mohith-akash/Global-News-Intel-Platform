@@ -81,7 +81,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **📊 Real-Time Dashboard** | Live metrics, trending news, sentiment analysis, geographic distribution |
 | **🧠 Emotion Analytics** | GKG-powered emotion tracking: Fear, Joy, Positive/Negative, Global Mood Index |
 | **🤖 AI Chat Interface** | Ask questions in plain English → Get SQL-powered answers |
-| **⚡ 15-Min Updates** | GitHub Actions (15-min cron) + Dagster job runner (CLI subprocess) |
+| **⚡ 15-Min Updates** | cron-job.org (15-min external trigger) → GitHub Actions workflow_dispatch + Dagster job runner |
 | **🔍 Data Quality Gates** | Custom data validation prevents bad data |
 | **🌍 Global Coverage** | Events from 200+ countries with country code mapping |
 | **📈 Trend Analysis** | 30-day time series, intensity tracking, actor monitoring |
@@ -104,7 +104,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
                      └────────────┬────────────┘
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  INGESTION (Every 15 min)                                                │
+│  INGESTION (Every 15 min via cron-job.org → workflow_dispatch)                                                │
 │  GitHub Actions → Dagster → Polars (10x faster) → custom validation      │
 └─────────────────────────────────────────────────────────────────────────┘
                                   │
@@ -149,7 +149,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 | **DataQualityValidator** | Custom schema + threshold validation & testing | Manual checks |
 | **Dagster** | Pipeline orchestration with asset-based design | Apache Airflow |
 | **DuckDB/MotherDuck** | Serverless cloud OLAP warehouse | Snowflake/Redshift |
-| **GitHub Actions** | CI/CD with 15-min + 12-hr scheduled jobs | AWS Lambda |
+| **GitHub Actions** | CI/CD with workflow_dispatch (15-min via cron-job.org) + 12-hr scheduled jobs | AWS Lambda |
 
 ### AI/ML
 | Tool | Purpose | Replaces |
