@@ -4,6 +4,7 @@ Database connection and query utilities for GDELT platform.
 
 import os
 import logging
+import threading
 import warnings
 import concurrent.futures
 import pandas as pd
@@ -64,18 +65,18 @@ def detect_table(_conn):
 
 
 def safe_query(conn, sql, timeout=15):
-    """Execute SQL safely with a timeout (default 15s)."""
-    import concurrent.futures
-    def _run():
-        return conn.execute(sql).df()
+    """Execute SQL safely with a timeout using conn.interrupt().
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_run)
-        try:
-            return future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            logger.warning(f"Query timed out after {timeout}s: {sql[:120]}...")
-            return pd.DataFrame()
-        except Exception as e:
-            logger.error(f"Query error: {e}", exc_info=True)
-            return pd.DataFrame()
+    DuckDB connections are NOT thread-safe — never call conn.execute() from a
+    worker thread (causes NULL-ptr segfault). Instead we use conn.interrupt(),
+    which IS thread-safe and is the documented way to cancel a running query.
+    """
+    timer = threading.Timer(timeout, conn.interrupt)
+    try:
+        timer.start()
+        return conn.execute(sql).df()
+    except Exception as e:
+        logger.error(f"Query error: {e}", exc_info=True)
+        return pd.DataFrame()
+    finally:
+        timer.cancel()
