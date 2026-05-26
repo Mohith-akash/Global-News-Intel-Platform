@@ -72,10 +72,13 @@ def main():
     inject_css()
     conn = get_db()
     tbl = detect_table(conn)
-    
+
+    # Auto-refresh every 5 minutes — browser reloads the page so cached data updates.
+    st.markdown('<meta http-equiv="refresh" content="300">', unsafe_allow_html=True)
+
     # NOTE: AI engine is now lazy-loaded inside the AI tab to reduce memory usage.
     # This prevents Streamlit Cloud segfaults caused by llama-index loading on startup.
-    
+
     render_header()
     tabs = st.tabs(["📊 HOME", "📋 FEED", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
     
