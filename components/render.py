@@ -181,7 +181,7 @@ def render_actors(c, t):
         yaxis=dict(showgrid=False, tickfont=dict(color='#e2e8f0', size=11), autorange='reversed'),
         bargap=0.3
     )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='actors_chart')
+    st.plotly_chart(fig, config={'displayModeBar': False}, use_container_width=True, key='actors_chart')
 
 
 def render_distribution(c, t, chart_key='distribution'):
@@ -200,7 +200,7 @@ def render_distribution(c, t, chart_key='distribution'):
         height=200, paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=10, r=10, t=10, b=10),
         showlegend=True, legend=dict(orientation='h', y=-0.2, x=0.5, xanchor='center', font=dict(size=10, color='#94a3b8'))
     )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key=chart_key)
+    st.plotly_chart(fig, config={'displayModeBar': False}, use_container_width=True, key=chart_key)
 
 
 def render_countries(c, t):
@@ -224,7 +224,7 @@ def render_countries(c, t):
         yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', showticklabels=False),
         bargap=0.35
     )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='countries_chart')
+    st.plotly_chart(fig, config={'displayModeBar': False}, use_container_width=True, key='countries_chart')
 
 
 def render_trending(c, t):
@@ -239,7 +239,7 @@ def render_trending(c, t):
     
     st.dataframe(
         df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'ARTICLE_COUNT', 'NEWS_LINK']],
-        hide_index=True, height=400, width='stretch',
+        hide_index=True, height=400, use_container_width=True,
         column_config={
             "DATE_FMT": st.column_config.TextColumn("Date", width=60),
             "INTENSITY": st.column_config.TextColumn("Intensity", width=140),
@@ -263,7 +263,7 @@ def render_feed(c, t):
     
     st.dataframe(
         df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'NEWS_LINK']],
-        hide_index=True, height=600, width='stretch',
+        hide_index=True, height=600, use_container_width=True,
         column_config={
             "DATE_FMT": st.column_config.TextColumn("Date", width=60),
             "INTENSITY": st.column_config.TextColumn("Intensity Level", width=140),
@@ -295,4 +295,4 @@ def render_timeseries(c, t):
         yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')),
         hovermode='x unified'
     )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='timeseries_chart')
+    st.plotly_chart(fig, config={'displayModeBar': False}, use_container_width=True, key='timeseries_chart')

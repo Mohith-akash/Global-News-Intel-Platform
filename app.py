@@ -73,8 +73,8 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
 
-    # Auto-refresh every 5 minutes — browser reloads the page so cached data updates.
-    st.markdown('<meta http-equiv="refresh" content="300">', unsafe_allow_html=True)
+    # Auto-refresh every 5 minutes — JS reload works in all browsers unlike <meta> in body.
+    st.markdown('<script>setTimeout(()=>location.reload(),300000)</script>', unsafe_allow_html=True)
 
     # NOTE: AI engine is now lazy-loaded inside the AI tab to reduce memory usage.
     # This prevents Streamlit Cloud segfaults caused by llama-index loading on startup.
@@ -133,7 +133,7 @@ def main():
         # Lazy load AI engine only when this tab is opened
         try:
             sql_db = get_ai_engine(get_engine())
-        except:
+        except Exception:
             sql_db = None
         
         c1, c2 = st.columns([7, 3])
