@@ -16,11 +16,11 @@ jobs:
     steps:
     # 1. Checkout code
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
 
     # 2. Set up Python with caching
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v5.6.0
       with:
         python-version: '3.11'
         cache: 'pip'
