@@ -1,13 +1,12 @@
 name: 15-Min GDELT Refresh (Polars)
 
-# Scheduling architecture:
-#   Primary:  cron-job.org fires every 15 min → POST to workflow_dispatch API
-#   Fallback: GitHub's own hourly cron kicks in if external trigger misses a run
-#   Setup:    see scripts/trigger_ingestion.py for cron-job.org configuration
+# Scheduling: cron-job.org triggers workflow_dispatch every 15 min (reliable).
+# GitHub cron runs hourly as a fallback if the external trigger fails.
+# Setup: see scripts/trigger_ingestion.py for cron-job.org configuration.
 on:
   schedule:
-    - cron: '0 * * * *'   # Hourly fallback — primary 15-min trigger is external
-  workflow_dispatch:        # Fired by cron-job.org and manual runs
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   refresh-data:
