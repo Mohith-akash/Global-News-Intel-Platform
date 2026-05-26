@@ -8,24 +8,23 @@ import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
 from collections import Counter
+from src.database import safe_query
 
 
 def check_gkg_table_exists(conn):
     """Check if gkg_emotions table exists and has data."""
     try:
-        result = conn.execute("""
-            SELECT COUNT(*) as cnt FROM gkg_emotions LIMIT 1
-        """).df()
-        return result['cnt'].iloc[0] > 0
-    except:
+        result = safe_query(conn, "SELECT COUNT(*) as cnt FROM gkg_emotions LIMIT 1")
+        return not result.empty and result['cnt'].iloc[0] > 0
+    except Exception:
         return False
 
 
 def render_emotions_pulse(conn):
     """Render the global emotion pulse meter with a beautiful gauge."""
     try:
-        df = conn.execute("""
-            SELECT 
+        df = safe_query(conn, """
+            SELECT
                 AVG(AVG_TONE) as avg_mood,
                 AVG(EMOTION_FEAR) as avg_fear,
                 AVG(EMOTION_JOY) as avg_joy,
@@ -33,7 +32,7 @@ def render_emotions_pulse(conn):
                 AVG(EMOTION_TRUST) as avg_trust,
                 COUNT(*) as article_count
             FROM gkg_emotions
-        """).df()
+        """)
         
         if df.empty:
             st.info("📊 Emotion data is being collected...")
@@ -89,8 +88,8 @@ def render_emotions_pulse(conn):
             font=dict(color='#e2e8f0'),
         )
         
-        st.plotly_chart(fig, width='stretch')
-        
+        st.plotly_chart(fig, use_container_width=True)
+
         # Mood label badge
         st.markdown(f"""
             <div style="text-align: center; margin-top: -15px;">
@@ -110,8 +109,8 @@ def render_emotions_pulse(conn):
 def render_emotion_breakdown(conn):
     """Render emotion breakdown as a beautiful radar chart."""
     try:
-        df = conn.execute("""
-            SELECT 
+        df = safe_query(conn, """
+            SELECT
                 AVG(EMOTION_FEAR) as fear,
                 AVG(EMOTION_ANGER) as anger,
                 AVG(EMOTION_SADNESS) as sadness,
@@ -120,7 +119,7 @@ def render_emotion_breakdown(conn):
                 AVG(EMOTION_ANXIETY) as anxiety,
                 AVG(EMOTION_ANTICIPATION) as anticipation
             FROM gkg_emotions
-        """).df()
+        """)
         
         if df.empty:
             st.info("📊 Collecting emotion data...")
@@ -189,8 +188,8 @@ def render_emotion_breakdown(conn):
             paper_bgcolor='rgba(0,0,0,0)',
         )
         
-        st.plotly_chart(fig, width='stretch')
-        
+        st.plotly_chart(fig, use_container_width=True)
+
         # Show dominant emotion
         emotion_labels = ['Fear', 'Anger', 'Sadness', 'Joy', 'Trust', 'Anxiety', 'Anticipation']
         max_idx = values.index(max(values))
@@ -255,11 +254,11 @@ def render_trending_themes(conn):
     """Render trending themes from TOP_THEMES field."""
     try:
         # Get raw TOP_THEMES data
-        df = conn.execute("""
-            SELECT TOP_THEMES FROM gkg_emotions 
+        df = safe_query(conn, """
+            SELECT TOP_THEMES FROM gkg_emotions
             WHERE TOP_THEMES IS NOT NULL AND LENGTH(TOP_THEMES) > 0
             LIMIT 500
-        """).df()
+        """)
         
         if df.empty or len(df) == 0:
             st.info("📊 Theme data is being collected...")
@@ -333,8 +332,8 @@ def render_trending_themes(conn):
             bargap=0.3,
         )
         
-        st.plotly_chart(fig, width='stretch')
-            
+        st.plotly_chart(fig, use_container_width=True)
+
     except Exception as e:
         st.warning(f"📊 Theme error: {str(e)[:100]}")
 
@@ -342,15 +341,15 @@ def render_trending_themes(conn):
 def render_emotion_stats(conn):
     """Render emotion statistics cards using st.metric - consistent with HOME page."""
     try:
-        df = conn.execute("""
-            SELECT 
+        df = safe_query(conn, """
+            SELECT
                 COUNT(*) as total_articles,
                 AVG(POSITIVE_SCORE) as avg_positive,
                 AVG(NEGATIVE_SCORE) as avg_negative,
                 AVG(EMOTION_FEAR) as avg_fear,
                 AVG(EMOTION_JOY) as avg_joy
             FROM gkg_emotions
-        """).df()
+        """)
         
         if df.empty:
             return
@@ -418,15 +417,15 @@ def render_emotion_stats(conn):
 def render_emotion_insights(conn):
     """Render AI-style emotion insights."""
     try:
-        df = conn.execute("""
-            SELECT 
+        df = safe_query(conn, """
+            SELECT
                 AVG(AVG_TONE) as tone,
                 AVG(EMOTION_FEAR) as fear,
                 AVG(EMOTION_JOY) as joy,
                 AVG(EMOTION_ANGER) as anger,
                 COUNT(*) as cnt
             FROM gkg_emotions
-        """).df()
+        """)
         
         if df.empty:
             return
@@ -461,7 +460,7 @@ def render_emotion_insights(conn):
             </div>
         """, unsafe_allow_html=True)
         
-    except:
+    except Exception:
         pass
 
 
