@@ -4,7 +4,6 @@ Database connection and query utilities for GDELT platform.
 
 import os
 import logging
-import threading
 import warnings
 import concurrent.futures
 import pandas as pd
@@ -64,19 +63,16 @@ def detect_table(_conn):
     return 'events_dagster'
 
 
-def safe_query(conn, sql, timeout=15):
-    """Execute SQL safely with a timeout using conn.interrupt().
+def safe_query(conn, sql, timeout=15):  # noqa: ARG001 — timeout kept for call-site compat
+    """Execute SQL with error handling.
 
-    DuckDB connections are NOT thread-safe — never call conn.execute() from a
-    worker thread (causes NULL-ptr segfault). Instead we use conn.interrupt(),
-    which IS thread-safe and is the documented way to cancel a running query.
+    MotherDuck enforces its own server-side query timeouts, so no client-side
+    timer is needed here. The previous threading.Timer + conn.interrupt() approach
+    caused a NULL dereference when interrupt fired during .df() materialisation,
+    leaving the connection in a permanently broken state.
     """
-    timer = threading.Timer(timeout, conn.interrupt)
     try:
-        timer.start()
         return conn.execute(sql).df()
     except Exception as e:
         logger.error(f"Query error: {e}", exc_info=True)
         return pd.DataFrame()
-    finally:
-        timer.cancel()
