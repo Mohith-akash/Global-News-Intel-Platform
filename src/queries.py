@@ -15,7 +15,7 @@ from src.database import safe_query
 from src.utils import get_dates
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def _get_total_count(_c, t):
     """Read row count from catalog stats — instant, no full scan."""
     table_name = t.split('.')[-1]
@@ -31,7 +31,7 @@ def _get_total_count(_c, t):
     return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def _get_weekly_metrics(_c, t):
     """Week-filtered queries only — date pushdown keeps these fast."""
     dates = get_dates()
@@ -60,7 +60,7 @@ def get_metrics(_c, t):
     return {'total': total, **weekly}
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_alerts(_c, t):
     three_days = (datetime.datetime.now() - datetime.timedelta(days=3)).strftime('%Y%m%d')
     return safe_query(_c, f"""
@@ -71,7 +71,7 @@ def get_alerts(_c, t):
 
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_trending(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
@@ -88,7 +88,7 @@ def get_trending(_c, t):
     """)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_feed(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
@@ -104,7 +104,7 @@ def get_feed(_c, t):
     """)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_countries(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
@@ -114,7 +114,7 @@ def get_countries(_c, t):
     """)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_timeseries(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
@@ -125,7 +125,7 @@ def get_timeseries(_c, t):
     """)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_sentiment(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
@@ -137,7 +137,7 @@ def get_sentiment(_c, t):
     """)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_actors(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
@@ -147,7 +147,7 @@ def get_actors(_c, t):
     """)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def get_distribution(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
