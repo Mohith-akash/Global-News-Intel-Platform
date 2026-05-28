@@ -88,7 +88,7 @@ def render_emotions_pulse(conn):
             font=dict(color='#e2e8f0'),
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         # Mood label badge
         st.markdown(f"""
@@ -188,7 +188,7 @@ def render_emotion_breakdown(conn):
             paper_bgcolor='rgba(0,0,0,0)',
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         # Show dominant emotion
         emotion_labels = ['Fear', 'Anger', 'Sadness', 'Joy', 'Trust', 'Anxiety', 'Anticipation']
@@ -332,7 +332,7 @@ def render_trending_themes(conn):
             bargap=0.3,
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     except Exception as e:
         st.warning(f"📊 Theme error: {str(e)[:100]}")
