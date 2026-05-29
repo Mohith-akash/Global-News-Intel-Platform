@@ -127,7 +127,7 @@ def render_about():
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>OpenAI GPT-4 API</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>Cerebras</b></td>
-                <td style="padding:0.4rem;color:#64748b;">Llama 3.1 8B free tier — Text-to-SQL + RAG</td>
+                <td style="padding:0.4rem;color:#64748b;">GPT-OSS 120B free tier — Text-to-SQL + RAG</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>dbt Cloud</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>

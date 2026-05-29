@@ -154,7 +154,7 @@ The [GDELT Project](https://www.gdeltproject.org/) monitors the world's news med
 ### AI/ML
 | Tool | Purpose | Replaces |
 |------|---------|----------|
-| **Cerebras** | LLM inference (Llama 3.1 8B) | OpenAI GPT-4 |
+| **Cerebras** | LLM inference (GPT-OSS 120B) | OpenAI GPT-4 |
 | **LlamaIndex** | Text-to-SQL query engine | Custom NLP |
 | **Voyage AI** | Vector embeddings for RAG | OpenAI Embeddings |
 | **MotherDuck Vectors** | Native vector similarity search | Pinecone / Weaviate |
@@ -263,11 +263,12 @@ This project evolved through multiple iterations to optimize for cost and perfor
 
 ### AI/LLM Provider
 ```
-✨ Gemini 2.0/2.5 Flash → ⚡ Groq (Llama 3.3 70B) → 🧠 Cerebras (Llama 3.1 8B)
+✨ Gemini 2.0/2.5 Flash → ⚡ Groq (Llama 3.3 70B) → 🧠 Cerebras (Llama 3.1 8B → GPT-OSS 120B)
 ```
 - Tested Gemini models for natural language queries
 - Tried Groq's fast inference with larger Llama models
 - Settled on Cerebras for reliable free tier and good performance
+- Moved to GPT-OSS 120B after Cerebras archived the Llama 3.1 models
 
 ### RAG Embeddings
 ```
