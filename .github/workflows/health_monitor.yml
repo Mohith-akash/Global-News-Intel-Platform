@@ -72,31 +72,15 @@ jobs:
             echo "subject=🚨 GDELT App Still Down — Action Required" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send email notification
+      - name: Send push notification via ntfy
         if: steps.check1.outputs.status != '200'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 587
-          secure: false
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_APP_PASSWORD }}
-          to: mohithakash013@gmail.com
-          from: GDELT Monitor <${{ secrets.EMAIL_USERNAME }}>
-          subject: ${{ steps.outcome.outputs.subject }}
-          body: |
-            GDELT News Intelligence Platform — Health Alert
-            ───────────────────────────────────────────────
+        run: |
+          curl -s \
+            -H "Title: ${{ steps.outcome.outputs.subject }}" \
+            -H "Priority: ${{ steps.check3.outputs.status == '200' && 'default' || 'urgent' }}" \
+            -H "Tags: ${{ steps.check3.outputs.status == '200' && 'white_check_mark' || 'rotating_light' }}" \
+            -d "${{ steps.outcome.outputs.msg }}
 
-            ${{ steps.outcome.outputs.msg }}
-
-            Timeline:
-              First check  : HTTP ${{ steps.check1.outputs.status }}
-              After 3 min  : HTTP ${{ steps.check2.outputs.status }}
-              After 6 min  : HTTP ${{ steps.check3.outputs.status || 'N/A (recovered earlier)' }}
-
-            App URL : ${{ secrets.APP_URL }}
-            Workflow: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-            If the app is still down, log in to Streamlit Community Cloud and
-            hit "Reboot app" manually.
+          Checks: ${{ steps.check1.outputs.status }} → ${{ steps.check2.outputs.status }} → ${{ steps.check3.outputs.status || 'n/a' }}
+          Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
