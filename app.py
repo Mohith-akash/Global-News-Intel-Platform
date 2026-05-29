@@ -10,8 +10,7 @@ import logging
 
 from src.config import REQUIRED_ENVS
 from src.styles import inject_css
-from src.database import get_db, get_engine, detect_table
-from src.ai_engine import get_ai_engine, AI_AVAILABLE
+from src.database import get_db, detect_table
 from components import (
     render_header,
     render_metrics,
@@ -76,8 +75,8 @@ def main():
     # Auto-refresh every 5 minutes — JS reload works in all browsers unlike <meta> in body.
     st.markdown('<script>setTimeout(()=>location.reload(),300000)</script>', unsafe_allow_html=True)
 
-    # NOTE: AI engine is now lazy-loaded inside the AI tab to reduce memory usage.
-    # This prevents Streamlit Cloud segfaults caused by llama-index loading on startup.
+    # The Cerebras LLM is loaded lazily inside the AI tab (via get_cerebras_llm)
+    # to keep it off the startup path and reduce Streamlit Cloud memory pressure.
 
     render_header()
     tabs = st.tabs(["📊 HOME", "📋 FEED", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
@@ -130,16 +129,10 @@ def main():
         render_emotions_tab(conn)
     
     with tabs[3]:
-        # Lazy load AI engine only when this tab is opened
-        try:
-            sql_db = get_ai_engine(get_engine())
-        except Exception:
-            sql_db = None
-        
         c1, c2 = st.columns([7, 3])
         with c1:
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
-            render_ai_chat(conn, sql_db, tbl)
+            render_ai_chat(conn, tbl)
         with c2:
             st.markdown('''<div class="card">
                 <h4 class="title-cyan">ℹ️ HOW IT WORKS</h4>

@@ -3,8 +3,8 @@ Core modules for GDELT platform.
 """
 
 from src.config import REQUIRED_ENVS, CEREBRAS_MODEL, COUNTRY_ALIASES, VOYAGE_MODEL, EMBEDDING_DIMENSIONS, RAG_TOP_K
-from src.database import get_db, get_engine, detect_table, safe_query
-from src.ai_engine import get_ai_engine, get_query_engine, get_cerebras_llm
+from src.database import get_db, detect_table, safe_query
+from src.ai_engine import get_cerebras_llm
 from src.styles import inject_css
 from src.utils import (
     get_country_code, get_dates, detect_query_type, 

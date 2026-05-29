@@ -8,14 +8,14 @@ import pandas as pd
 import streamlit as st
 
 from src.database import safe_query
-from src.ai_engine import get_query_engine, get_cerebras_llm, AI_AVAILABLE
+from src.ai_engine import get_cerebras_llm, AI_AVAILABLE
 from src.data_processing import extract_headline
 from src.headline_utils import clean_headline
 from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
 from src.rag_engine import rag_query, get_voyage_api_key
 
 
-def render_ai_chat(c, sql_db, tbl="events_dagster"):
+def render_ai_chat(c, tbl="events_dagster"):
     """Main AI Chat component with SQL and RAG modes."""
     # Check if AI features are available
     if not AI_AVAILABLE:
@@ -80,7 +80,7 @@ def render_ai_chat(c, sql_db, tbl="events_dagster"):
             <div class="ai-example-label">💡 SQL MODE - Precise Queries:</div>
             <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East"<br>• "Top 5 countries by events"<br>• "How many events in October?"</div>
         </div>''', unsafe_allow_html=True)
-        render_sql_chat(c, sql_db, tbl)
+        render_sql_chat(c, tbl)
     else:
         if not rag_available:
             st.warning("⚠️ RAG Mode requires VOYAGE_API_KEY. Add it to your environment or Streamlit secrets.")
@@ -166,14 +166,13 @@ def render_rag_chat(c, tbl="events_dagster"):
                     st.error(f"❌ Error: {str(e)[:100]}")
 
 
-def render_sql_chat(c, sql_db, tbl="events_dagster"):
+def render_sql_chat(c, tbl="events_dagster"):
     """SQL-based precise query chat (original implementation)."""
     prompt = st.chat_input("Ask about global events (SQL)...", key="sql_chat")
     if prompt:
         with st.chat_message("user"):
             st.markdown(prompt)
         with st.chat_message("assistant"):
-            qe = get_query_engine(sql_db) if sql_db else None
             llm = get_cerebras_llm()
             if not llm:
                 st.error("❌ Cerebras AI not available")
