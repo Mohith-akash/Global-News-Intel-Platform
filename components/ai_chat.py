@@ -98,10 +98,6 @@ def render_ai_chat(c, sql_db, tbl="events_dagster"):
 
 def render_rag_chat(c, tbl="events_dagster"):
     """RAG-based semantic search chat."""
-    from src.ai_engine import get_cerebras_llm
-    from src.rag_engine import rag_query
-    from src.utils import get_country, get_impact_label, get_dates
-    
     prompt = st.chat_input("Ask about events semantically...", key="rag_chat")
     if prompt:
         with st.chat_message("user"):
@@ -135,7 +131,7 @@ def render_rag_chat(c, tbl="events_dagster"):
                         if 'DATE' in df.columns:
                             try:
                                 df['DATE'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d').dt.strftime('%b %d')
-                            except:
+                            except Exception:
                                 pass
                         if 'similarity' in df.columns:
                             df['RELEVANCE'] = (df['similarity'] * 100).round(1).astype(str) + '%'

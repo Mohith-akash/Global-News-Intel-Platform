@@ -114,7 +114,7 @@ def render_emotions_pulse(conn):
             </div>
         """, unsafe_allow_html=True)
                     
-    except Exception as e:
+    except Exception:
         st.info("📊 Emotion data loading...")
 
 
@@ -216,7 +216,7 @@ def render_emotion_breakdown(conn):
             </div>
         """, unsafe_allow_html=True)
         
-    except Exception as e:
+    except Exception:
         st.info("📊 Emotion breakdown loading...")
 
 
@@ -372,7 +372,7 @@ def render_emotion_stats(conn):
         fear = row['avg_fear'] if row['avg_fear'] else 0
         joy = row['avg_joy'] if row['avg_joy'] else 0
         articles = int(row['total_articles'])
-        
+
         # Use st.metric like HOME page for consistency
         c1, c2, c3, c4, c5 = st.columns(5)
         
@@ -421,8 +421,8 @@ def render_emotion_stats(conn):
                     </span>
                 </div>
             ''', unsafe_allow_html=True)
-                
-    except Exception as e:
+
+    except Exception:
         pass
 
 
