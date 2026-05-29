@@ -4,6 +4,7 @@ Database connection and query utilities for GDELT platform.
 
 import os
 import logging
+import threading
 import warnings
 import concurrent.futures
 import pandas as pd
@@ -12,6 +13,11 @@ import streamlit as st
 from sqlalchemy import create_engine
 
 logger = logging.getLogger("gdelt")
+
+# DuckDB connections are NOT thread-safe — concurrent conn.execute() calls from
+# multiple Streamlit sessions sharing the same @st.cache_resource connection
+# cause a NULL dereference and segfault. Serialise all queries through this lock.
+_query_lock = threading.Lock()
 
 # duckdb-engine doesn't support DOUBLE[] (list) column types during schema
 # reflection — suppress the harmless warning it emits on every connection.
@@ -51,28 +57,26 @@ def get_engine():
 @st.cache_data(ttl=3600)
 def detect_table(_conn):
     """Find the main events table."""
-    try:
-        result = _conn.execute("SHOW TABLES").df()
-        if not result.empty:
-            for name in result.iloc[:, 0].tolist():
-                if 'event' in name.lower():
-                    return name
-            return result.iloc[0, 0]
-    except Exception:
-        pass
+    df = safe_query(_conn, "SHOW TABLES")
+    if not df.empty:
+        for name in df.iloc[:, 0].tolist():
+            if 'event' in name.lower():
+                return name
+        return df.iloc[0, 0]
     return 'events_dagster'
 
 
 def safe_query(conn, sql, timeout=15):  # noqa: ARG001 — timeout kept for call-site compat
-    """Execute SQL with error handling.
+    """Execute SQL safely.
 
-    MotherDuck enforces its own server-side query timeouts, so no client-side
-    timer is needed here. The previous threading.Timer + conn.interrupt() approach
-    caused a NULL dereference when interrupt fired during .df() materialisation,
-    leaving the connection in a permanently broken state.
+    Acquires a module-level lock before every execute() call because DuckDB
+    connections are not thread-safe. Multiple Streamlit sessions share the same
+    @st.cache_resource connection, so without this lock concurrent requests race
+    on conn.execute(), corrupt internal state, and segfault the whole app.
     """
-    try:
-        return conn.execute(sql).df()
-    except Exception as e:
-        logger.error(f"Query error: {e}", exc_info=True)
-        return pd.DataFrame()
+    with _query_lock:
+        try:
+            return conn.execute(sql).df()
+        except Exception as e:
+            logger.error(f"Query error: {e}", exc_info=True)
+            return pd.DataFrame()
