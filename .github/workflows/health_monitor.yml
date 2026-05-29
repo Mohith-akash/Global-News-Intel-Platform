@@ -1,0 +1,102 @@
+name: App Health Monitor
+
+on:
+  workflow_dispatch:        # triggered by cron-job.org every 10 min
+  schedule:
+    - cron: '*/30 * * * *' # fallback: GitHub's own cron every 30 min
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check app health
+        id: check1
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            "${{ secrets.APP_URL }}/_stcore/health" || echo "000")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "First check: HTTP $STATUS"
+
+      - name: App is healthy — done
+        if: steps.check1.outputs.status == '200'
+        run: echo "✅ App is healthy, nothing to do."
+
+      # --- App appears down — wait for Streamlit's auto-restart ---
+
+      - name: Wait 3 min for auto-restart
+        if: steps.check1.outputs.status != '200'
+        run: |
+          echo "⚠️ App returned ${{ steps.check1.outputs.status }}. Waiting 3 min for auto-restart..."
+          sleep 180
+
+      - name: Recheck after first wait
+        if: steps.check1.outputs.status != '200'
+        id: check2
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            "${{ secrets.APP_URL }}/_stcore/health" || echo "000")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "Second check: HTTP $STATUS"
+
+      - name: Wait 3 more min if still down
+        if: steps.check1.outputs.status != '200' && steps.check2.outputs.status != '200'
+        run: |
+          echo "Still down. Waiting another 3 min..."
+          sleep 180
+
+      - name: Final recheck
+        if: steps.check1.outputs.status != '200' && steps.check2.outputs.status != '200'
+        id: check3
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            "${{ secrets.APP_URL }}/_stcore/health" || echo "000")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "Third check: HTTP $STATUS"
+
+      # --- Send email only if the first check failed ---
+
+      - name: Determine recovery status
+        if: steps.check1.outputs.status != '200'
+        id: outcome
+        run: |
+          C2="${{ steps.check2.outputs.status }}"
+          C3="${{ steps.check3.outputs.status }}"
+          if [ "$C2" = "200" ]; then
+            echo "msg=✅ Recovered after 3 min (auto-restart worked)" >> $GITHUB_OUTPUT
+            echo "subject=GDELT App Recovered (was down, now OK)" >> $GITHUB_OUTPUT
+          elif [ "$C3" = "200" ]; then
+            echo "msg=✅ Recovered after 6 min (took 2 auto-restart cycles)" >> $GITHUB_OUTPUT
+            echo "subject=GDELT App Recovered (took 6 min)" >> $GITHUB_OUTPUT
+          else
+            echo "msg=❌ Still down after 6 min — manual intervention needed" >> $GITHUB_OUTPUT
+            echo "subject=🚨 GDELT App Still Down — Action Required" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send email notification
+        if: steps.check1.outputs.status != '200'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          secure: false
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_APP_PASSWORD }}
+          to: mohithakash013@gmail.com
+          from: GDELT Monitor <${{ secrets.EMAIL_USERNAME }}>
+          subject: ${{ steps.outcome.outputs.subject }}
+          body: |
+            GDELT News Intelligence Platform — Health Alert
+            ───────────────────────────────────────────────
+
+            ${{ steps.outcome.outputs.msg }}
+
+            Timeline:
+              First check  : HTTP ${{ steps.check1.outputs.status }}
+              After 3 min  : HTTP ${{ steps.check2.outputs.status }}
+              After 6 min  : HTTP ${{ steps.check3.outputs.status || 'N/A (recovered earlier)' }}
+
+            App URL : ${{ secrets.APP_URL }}
+            Workflow: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            If the app is still down, log in to Streamlit Community Cloud and
+            hit "Reboot app" manually.
