@@ -19,6 +19,7 @@ import pandas as pd
 logger = logging.getLogger("gdelt.rag")
 
 from src.config import VOYAGE_MODEL, EMBEDDING_DIMENSIONS
+from src.database import safe_query
 
 # Configuration
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
@@ -279,15 +280,11 @@ def _hybrid_search(
         LIMIT {top_k}
     """
     
-    try:
-        t0 = time.time()
-        result = conn.execute(sql, keywords).df()
-        query_time = time.time() - t0
-        logger.info(f"Hybrid search completed in {query_time:.2f}s, {len(result)} results")
-        return result if not result.empty else None
-    except Exception as e:
-        logger.warning(f"Hybrid search error: {e}")
-        return None
+    t0 = time.time()
+    result = safe_query(conn, sql, keywords)
+    query_time = time.time() - t0
+    logger.info(f"Hybrid search completed in {query_time:.2f}s, {len(result)} results")
+    return result if not result.empty else None
 
 
 def _prefiltered_vector_search(
@@ -335,15 +332,11 @@ def _prefiltered_vector_search(
         LIMIT {top_k}
     """
     
-    try:
-        t0 = time.time()
-        result = conn.execute(sql).df()
-        query_time = time.time() - t0
-        logger.info(f"Pre-filtered vector search completed in {query_time:.2f}s, {len(result)} results")
-        return result if not result.empty else None
-    except Exception as e:
-        logger.warning(f"Pre-filtered vector search error: {e}")
-        return None
+    t0 = time.time()
+    result = safe_query(conn, sql)
+    query_time = time.time() - t0
+    logger.info(f"Pre-filtered vector search completed in {query_time:.2f}s, {len(result)} results")
+    return result if not result.empty else None
 
 
 def _fallback_keyword_search(
@@ -392,16 +385,12 @@ def _fallback_keyword_search(
         LIMIT {top_k}
     """
     
-    try:
-        # score_parts params first (SELECT position), then like_clauses params (WHERE position)
-        result = conn.execute(sql, keywords + keywords).df()
-        # Drop the scoring column before returning
-        if 'keyword_score' in result.columns:
-            result = result.drop(columns=['keyword_score'])
-        return result
-    except Exception as e:
-        logger.error(f"Fallback search error: {e}")
-        return pd.DataFrame()
+    # score_parts params first (SELECT position), then like_clauses params (WHERE position)
+    result = safe_query(conn, sql, keywords + keywords)
+    # Drop the scoring column before returning
+    if 'keyword_score' in result.columns:
+        result = result.drop(columns=['keyword_score'])
+    return result
 
 
 def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None, table_name: str = None) -> dict:

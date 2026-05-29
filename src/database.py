@@ -68,7 +68,7 @@ def detect_table(_conn):
     return 'events_dagster'
 
 
-def safe_query(conn, sql, timeout=15):  # noqa: ARG001 — conn/timeout kept for call-site compat
+def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-site compat
     """Execute SQL on a fresh connection.
 
     Each call opens its own MotherDuck connection, runs the query, then closes it.
@@ -79,12 +79,19 @@ def safe_query(conn, sql, timeout=15):  # noqa: ARG001 — conn/timeout kept for
 
     With @st.cache_data TTL=4hr, this function only fires ~6 times per day in
     practice, so the per-call connection overhead is negligible.
+
+    Pass `params` (a list) for parameterized queries — the RAG keyword filters
+    use this to bind values safely instead of string interpolation.
     """
+    c = None
     try:
-        conn = _new_conn()
-        result = conn.execute(sql).df()
-        conn.close()
-        return result
+        c = _new_conn()
+        if params is not None:
+            return c.execute(sql, params).df()
+        return c.execute(sql).df()
     except Exception as e:
         logger.error(f"Query error: {e}", exc_info=True)
         return pd.DataFrame()
+    finally:
+        if c is not None:
+            c.close()
