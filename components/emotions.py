@@ -6,15 +6,27 @@ Premium design with modern UI.
 
 import streamlit as st
 import plotly.graph_objects as go
-from datetime import datetime
 from collections import Counter
 from src.database import safe_query
+
+
+@st.cache_data(ttl=14400, show_spinner=False)
+def _emotion_query(_conn, sql):
+    """Cached wrapper for emotion queries.
+
+    st.tabs renders every tab on each rerun, so without caching these
+    full-table gkg_emotions scans would hit MotherDuck on every page load
+    and every 5-min auto-reload. Cache keyed on the SQL string (the
+    connection is excluded via the underscore prefix). 4hr TTL matches the
+    rest of the dashboard.
+    """
+    return safe_query(_conn, sql)
 
 
 def check_gkg_table_exists(conn):
     """Check if gkg_emotions table exists and has data."""
     try:
-        result = safe_query(conn, "SELECT COUNT(*) as cnt FROM gkg_emotions LIMIT 1")
+        result = _emotion_query(conn, "SELECT COUNT(*) as cnt FROM gkg_emotions LIMIT 1")
         return not result.empty and result['cnt'].iloc[0] > 0
     except Exception:
         return False
@@ -23,7 +35,7 @@ def check_gkg_table_exists(conn):
 def render_emotions_pulse(conn):
     """Render the global emotion pulse meter with a beautiful gauge."""
     try:
-        df = safe_query(conn, """
+        df = _emotion_query(conn, """
             SELECT
                 AVG(AVG_TONE) as avg_mood,
                 AVG(EMOTION_FEAR) as avg_fear,
@@ -109,7 +121,7 @@ def render_emotions_pulse(conn):
 def render_emotion_breakdown(conn):
     """Render emotion breakdown as a beautiful radar chart."""
     try:
-        df = safe_query(conn, """
+        df = _emotion_query(conn, """
             SELECT
                 AVG(EMOTION_FEAR) as fear,
                 AVG(EMOTION_ANGER) as anger,
@@ -254,7 +266,7 @@ def render_trending_themes(conn):
     """Render trending themes from TOP_THEMES field."""
     try:
         # Get raw TOP_THEMES data
-        df = safe_query(conn, """
+        df = _emotion_query(conn, """
             SELECT TOP_THEMES FROM gkg_emotions
             WHERE TOP_THEMES IS NOT NULL AND LENGTH(TOP_THEMES) > 0
             LIMIT 500
@@ -341,7 +353,7 @@ def render_trending_themes(conn):
 def render_emotion_stats(conn):
     """Render emotion statistics cards using st.metric - consistent with HOME page."""
     try:
-        df = safe_query(conn, """
+        df = _emotion_query(conn, """
             SELECT
                 COUNT(*) as total_articles,
                 AVG(POSITIVE_SCORE) as avg_positive,
@@ -417,7 +429,7 @@ def render_emotion_stats(conn):
 def render_emotion_insights(conn):
     """Render AI-style emotion insights."""
     try:
-        df = safe_query(conn, """
+        df = _emotion_query(conn, """
             SELECT
                 AVG(AVG_TONE) as tone,
                 AVG(EMOTION_FEAR) as fear,
