@@ -4,22 +4,12 @@ Database connection and query utilities for GDELT platform.
 
 import os
 import logging
-import warnings
 import concurrent.futures
 import pandas as pd
 import duckdb
 import streamlit as st
-from sqlalchemy import create_engine
 
 logger = logging.getLogger("gdelt")
-
-# duckdb-engine doesn't support DOUBLE[] (list) column types during schema
-# reflection — suppress the harmless warning it emits on every connection.
-warnings.filterwarnings(
-    "ignore",
-    message="Did not recognize type",
-    module="duckdb_engine",
-)
 
 _MOTHERDUCK_URL = "md:gdelt_db"
 
@@ -46,14 +36,6 @@ def get_db():
         except concurrent.futures.TimeoutError:
             st.error("⚠️ Database connection timed out — please refresh the page.")
             st.stop()
-
-
-@st.cache_resource(ttl=3600)
-def get_engine():
-    """Create SQLAlchemy engine."""
-    return create_engine(
-        f"duckdb:///{_MOTHERDUCK_URL}?motherduck_token={os.getenv('MOTHERDUCK_TOKEN')}"
-    )
 
 
 @st.cache_data(ttl=3600)
