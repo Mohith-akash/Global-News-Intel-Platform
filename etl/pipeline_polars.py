@@ -433,7 +433,7 @@ def gdelt_motherduck_table_polars(context: AssetExecutionContext, gdelt_raw_data
                 # Check if EMBEDDING column exists
                 try:
                     con.execute(f"SELECT EMBEDDING FROM {TARGET_TABLE} LIMIT 1")
-                except:
+                except Exception:
                     logger.info("Adding EMBEDDING column to table...")
                     con.execute(f"ALTER TABLE {TARGET_TABLE} ADD COLUMN EMBEDDING DOUBLE[]")
                 
@@ -600,7 +600,7 @@ def process_gkg_batch_polars(content: bytes) -> pl.DataFrame:
             positive = float(parts[1]) if len(parts) > 1 else 0.0
             negative = float(parts[2]) if len(parts) > 2 else 0.0
             return (avg_tone, positive, negative)
-        except:
+        except Exception:
             return (0.0, 0.0, 0.0)
     
     # Extract tone components

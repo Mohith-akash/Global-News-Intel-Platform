@@ -51,7 +51,7 @@ def get_secret(key):
         return val
     try:
         return st.secrets.get(key)
-    except:
+    except Exception:
         return None
 
 missing = [k for k in REQUIRED_ENVS if not get_secret(k)]
