@@ -2,7 +2,7 @@
 Configuration for GDELT platform.
 """
 
-CEREBRAS_MODEL = "llama3.1-8b"
+CEREBRAS_MODEL = "gpt-oss-120b"  # llama3.1-8b archived; only production model on Cerebras as of May 2025
 
 # RAG Configuration (Voyage AI)
 VOYAGE_MODEL = "voyage-3.5-lite"  # 200M free tokens
