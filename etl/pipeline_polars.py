@@ -487,6 +487,7 @@ def gdelt_motherduck_table_polars(context: AssetExecutionContext, gdelt_raw_data
 # =============================================================================
 
 GKG_TABLE = "gkg_emotions"
+GKG_RETENTION_DAYS = 30  # dashboard uses 24h, dbt daily models up to 30d
 
 # Key GCAM emotion codes we want to extract
 # Format: c{dictionary_id}.{dimension_id}
@@ -691,9 +692,17 @@ def gdelt_gkg_motherduck(context: AssetExecutionContext, gdelt_gkg_data: pl.Data
                 
                 con.register('gkg_data', pdf)
                 con.execute(f"INSERT INTO {GKG_TABLE} SELECT * FROM gkg_data")
-                
+
+                # Retention: the dashboard only reads the last 24h of GKG data
+                # (dbt daily models use up to 30 days), so anything older is
+                # dead weight — without this the table grows ~3M rows/month.
+                # GKG DATE is a 14-digit numeric timestamp (YYYYMMDDHHMMSS).
+                cutoff = int((datetime.datetime.now(datetime.timezone.utc)
+                              - datetime.timedelta(days=GKG_RETENTION_DAYS)).strftime('%Y%m%d000000'))
+                con.execute(f"DELETE FROM {GKG_TABLE} WHERE DATE < {cutoff}")
+
                 total = con.execute(f"SELECT COUNT(*) FROM {GKG_TABLE}").fetchone()[0]
-                context.log.info(f"✅ Inserted {len(pdf):,} GKG rows. Total: {total:,}")
+                context.log.info(f"✅ Inserted {len(pdf):,} GKG rows. Total after retention: {total:,}")
                 return Output(f"Inserted {len(pdf):,}", metadata={"rows": len(pdf), "total": total})
                 
             except Exception as e:
