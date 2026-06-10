@@ -504,7 +504,7 @@ def render_emotions_tab(conn):
                 <div style="font-size: 4rem;">🧠</div>
                 <h2 style="color: #00d4ff; margin: 1rem 0;">Emotions & Themes Coming Soon!</h2>
                 <p style="color: #94a3b8; max-width: 500px; margin: 0 auto;">
-                    This feature analyzes 2,200+ emotional dimensions from global news.
+                    This feature tracks 11 emotional dimensions (GCAM) across global news.
                     <br><br>
                     <b>Status:</b> Waiting for GKG data collection.<br>
                     The pipeline runs every 15 minutes. Check back soon!
