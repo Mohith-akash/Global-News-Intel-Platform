@@ -81,7 +81,7 @@ def render_metrics(c, t):
         st.markdown('''
             <div style="text-align:center;margin-top:-0.5rem;">
                 <span style="font-size:0.7rem;color:#64748b;">
-                    💡 UTC timezone • Refreshes every 5 min
+                    💡 UTC timezone • Data cached up to 4 hrs
                 </span>
             </div>
         ''', unsafe_allow_html=True)
