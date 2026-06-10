@@ -26,7 +26,7 @@ Step 3 — Create a cron-job.org account
 
 Step 4 — Create a new cron job with these exact settings:
   Title:    GDELT 15-min trigger
-  URL:      https://api.github.com/repos/Mohith-akash/Global-News-Intel-Platform/actions/workflows/gdelt_ingest_15min.yml/dispatches
+  URL:      https://api.github.com/repos/Mohith-akash/Global-News-Intel-Platform/actions/workflows/gdelt_ingest.yml/dispatches
   Interval: Every 15 minutes
   Method:   POST
   Headers:
@@ -74,7 +74,7 @@ import urllib.error
 import json
 
 REPO = "Mohith-akash/Global-News-Intel-Platform"
-WORKFLOW = "gdelt_ingest_15min.yml"
+WORKFLOW = "gdelt_ingest.yml"
 REF = "master"
 
 

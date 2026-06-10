@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/DuckDB-Motherduck-FDD023?style=for-the-badge&logo=duckdb&logoColor=black" alt="DuckDB">
   <img src="https://img.shields.io/badge/Dagster-Orchestration-4F43DD?style=for-the-badge&logo=dagster&logoColor=white" alt="Dagster">
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
-  <a href="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions"><img src="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions/workflows/gdelt_ingest_15min.yml/badge.svg" alt="Pipeline"></a>
+  <a href="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions"><img src="https://github.com/Mohith-akash/Global-News-Intel-Platform/actions/workflows/gdelt_ingest.yml/badge.svg" alt="Pipeline"></a>
 </p>
 
 
@@ -39,9 +39,9 @@ A full-stack data engineering project that ingests, processes, and visualizes **
 ### 📊 By the Numbers
 | Metric | Value |
 |--------|-------|
-| **Cumulative Events** | 16M+ processed |
+| **Cumulative Events** | 20M+ processed |
 | **Daily Ingestion** | 100K+ events/day |
-| **Data History** | 3.5+ months live data |
+| **Data History** | 8+ months live data |
 | **Languages** | 100+ monitored |
 | **Countries** | 200+ covered |
 | **Query Speed** | <1 second |
@@ -308,12 +308,14 @@ gdelt_project/
 ├── components/               # UI components
 │   ├── render.py             # Dashboard rendering
 │   ├── ai_chat.py            # AI chat interface
+│   ├── emotions.py           # GKG emotions tab
 │   └── about.py              # About page
 ├── requirements.txt          # Python dependencies
 ├── .env                      # Environment variables (not in repo)
 └── .github/workflows/
-    ├── gdelt_ingest_15min.yml    # 🆕 15-min Polars ingestion
-    └── gdelt_embeddings_12hr.yml # 🆕 12-hour embedding job
+    ├── gdelt_ingest.yml          # 15-min Polars ingestion
+    ├── gdelt_embeddings_12hr.yml # 12-hour embedding job
+    └── health_monitor.yml        # uptime checks + ntfy alerts
 ```
 
 ---
