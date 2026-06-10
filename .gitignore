@@ -6,10 +6,18 @@ env/
 # Ignore Secrets (CRITICAL)
 .env
 .env.local
+.streamlit/secrets.toml
 
 # Ignore Python cache files
 __pycache__/
 *.pyc
+
+# Ignore local databases and dbt artifacts
+*.duckdb
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+logs/
 
 # Ignore OS files
 .DS_Store
