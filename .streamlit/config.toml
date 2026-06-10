@@ -1,6 +1,5 @@
 [server]
 maxUploadSize = 50
-enableCORS = false
 enableXsrfProtection = true
 fileWatcherType = "poll"
 
@@ -9,7 +8,8 @@ magicEnabled = false
 fastReruns = true
 
 [client]
-showErrorDetails = true
+# Don't expose stack traces / file paths to visitors on the public app
+showErrorDetails = "none"
 
 [logger]
 level = "info"
