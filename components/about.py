@@ -102,7 +102,7 @@ def render_about():
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>Databricks/Spark</b> <span style="color:#ef4444;font-size:0.7rem;">~$500/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>DuckDB</b></td>
-                <td style="padding:0.4rem;color:#64748b;">Columnar OLAP for 100K+ events — runs in-process</td>
+                <td style="padding:0.4rem;color:#64748b;">Columnar OLAP for 20M+ events — runs in-process</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>Snowflake/BigQuery</b> <span style="color:#ef4444;font-size:0.7rem;">~$300/mo</span></td>
@@ -175,7 +175,7 @@ def render_about():
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;margin-bottom:0.5rem;">
                 <div><span style="color:#8b5cf6;font-size:0.7rem;">ANALYTICS</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">📊 Events → 🧠 <b>GKG Emotions</b></span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">2.2K+ emotion dimensions analyzed</div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Fear, joy, anger, trust + 7 more GCAM dimensions</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;">
                 <div><span style="color:#ef4444;font-size:0.7rem;">SCHEDULE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⏱️ 30min → ⚡ <b>15min</b> updates</span></div>
@@ -207,7 +207,7 @@ def render_about():
             </div>
             <div style="display:flex;justify-content:space-around;padding-top:0.75rem;border-top:1px solid #1e3a5f;">
                 <div style="text-align:center;">
-                    <div style="font-size:1.25rem;font-weight:700;color:#06b6d4;">12M+</div>
+                    <div style="font-size:1.25rem;font-weight:700;color:#06b6d4;">20M+</div>
                     <div style="font-size:0.65rem;color:#64748b;">Events</div>
                 </div>
                 <div style="text-align:center;">
@@ -219,8 +219,8 @@ def render_about():
                     <div style="font-size:0.65rem;color:#64748b;">Query</div>
                 </div>
                 <div style="text-align:center;">
-                    <div style="font-size:1.25rem;font-weight:700;color:#8b5cf6;">2.2K+</div>
-                    <div style="font-size:0.65rem;color:#64748b;">Emotions</div>
+                    <div style="font-size:1.25rem;font-weight:700;color:#8b5cf6;">100K+</div>
+                    <div style="font-size:0.65rem;color:#64748b;">Articles/day</div>
                 </div>
             </div>
         </div>
