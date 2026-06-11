@@ -9,9 +9,10 @@ import datetime
 import streamlit as st
 import plotly.graph_objects as go
 from collections import Counter
-from src.database import safe_query
+from src.database import safe_query, retry_cache_race
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400, show_spinner=False)
 def _emotion_query(_conn, sql):
     """Cached wrapper for emotion queries.
