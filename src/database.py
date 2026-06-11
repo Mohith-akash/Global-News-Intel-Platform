@@ -4,12 +4,32 @@ Database connection and query utilities for GDELT platform.
 
 import os
 import logging
+import functools
 import concurrent.futures
 import pandas as pd
 import duckdb
 import streamlit as st
 
 logger = logging.getLogger("gdelt")
+
+
+def retry_cache_race(fn):
+    """Work around a Streamlit @st.cache_data race at TTL expiry.
+
+    The in-memory cache storage checks `key in cache` then reads `cache[key]`;
+    if the entry expires between the two (concurrent sessions), cachetools
+    raises a bare KeyError that crashes the whole page. Retrying once hits a
+    clean cache miss and recomputes. Apply as the OUTERMOST decorator, above
+    @st.cache_data.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except KeyError:
+            logger.warning("st.cache_data TTL-expiry race hit, retrying once")
+            return fn(*args, **kwargs)
+    return wrapper
 
 _MOTHERDUCK_URL = "md:gdelt_db"
 
@@ -38,6 +58,7 @@ def get_db():
             st.stop()
 
 
+@retry_cache_race
 @st.cache_data(ttl=3600)
 def detect_table(_conn):
     """Find the main events table."""

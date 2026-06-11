@@ -11,10 +11,11 @@ parameter binding ($1, $2, ...) instead.
 import datetime
 import streamlit as st
 
-from src.database import safe_query
+from src.database import safe_query, retry_cache_race
 from src.utils import get_dates
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def _get_total_count(_c, t):
     """Read row count from catalog stats — instant, no full scan."""
@@ -31,6 +32,7 @@ def _get_total_count(_c, t):
     return None
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def _get_weekly_metrics(_c, t):
     """Week-filtered queries only — date pushdown keeps these fast."""
@@ -60,6 +62,7 @@ def get_metrics(_c, t):
     return {'total': total, **weekly}
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_alerts(_c, t):
     three_days = (datetime.datetime.now() - datetime.timedelta(days=3)).strftime('%Y%m%d')
@@ -71,6 +74,7 @@ def get_alerts(_c, t):
 
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_trending(_c, t):
     dates = get_dates()
@@ -88,6 +92,7 @@ def get_trending(_c, t):
     """)
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_feed(_c, t):
     dates = get_dates()
@@ -104,6 +109,7 @@ def get_feed(_c, t):
     """)
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_countries(_c, t):
     dates = get_dates()
@@ -114,6 +120,7 @@ def get_countries(_c, t):
     """)
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_timeseries(_c, t):
     dates = get_dates()
@@ -125,6 +132,7 @@ def get_timeseries(_c, t):
     """)
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_sentiment(_c, t):
     dates = get_dates()
@@ -137,6 +145,7 @@ def get_sentiment(_c, t):
     """)
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_actors(_c, t):
     dates = get_dates()
@@ -147,6 +156,7 @@ def get_actors(_c, t):
     """)
 
 
+@retry_cache_race
 @st.cache_data(ttl=14400)
 def get_distribution(_c, t):
     dates = get_dates()
