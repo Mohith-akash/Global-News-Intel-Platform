@@ -83,3 +83,26 @@ models:
         tests:
           - accepted_values:
               values: ['Very Negative', 'Negative', 'Neutral', 'Positive', 'Very Positive']
+
+  - name: stg_gkg_emotions
+    description: "Cleaned GKG emotion records with derived sentiment and dominant emotion"
+    columns:
+      - name: gkg_id
+        description: "Unique GKG record identifier"
+        tests:
+          - unique
+          - not_null
+      - name: date_str
+        description: "Record date string (YYYYMMDDHHMMSS)"
+        tests:
+          - not_null
+      - name: sentiment_category
+        description: "Tone bucketed into negative / neutral / positive"
+        tests:
+          - accepted_values:
+              values: ["negative", "neutral", "positive"]
+      - name: dominant_emotion
+        description: "Strongest Plutchik emotion for the article"
+        tests:
+          - accepted_values:
+              values: ["fear", "anger", "sadness", "joy", "disgust", "surprise", "trust", "anticipation"]
