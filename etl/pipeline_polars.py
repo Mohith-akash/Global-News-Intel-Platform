@@ -1,13 +1,9 @@
 """
-GDELT Pipeline v2.0 - Polars-based ingestion with custom validation
+GDELT ingestion pipeline: Polars-based extraction with schema/threshold
+validation, loading into MotherDuck via Dagster assets.
 
-Changes from v1.0:
-- Polars instead of Pandas (10x faster processing)
-- Custom DataQualityValidator for data quality validation
-- Separated ingestion (every 15 min) from embeddings (every 12 hours)
-- Cleaner, more maintainable code
-
-Author: Mohith Akash
+Runs every 15 minutes via GitHub Actions; embeddings run separately
+(see embedding_job.py, every 12 hours).
 """
 
 import requests
