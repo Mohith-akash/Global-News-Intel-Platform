@@ -1,14 +1,21 @@
 """Unit tests for src.headline_utils — URL headline extraction and cleaning."""
 
-import pytest
+import importlib.util
+from pathlib import Path
 
-from src.headline_utils import (
-    clean_headline,
-    dedupe_headlines_simple,
-    extract_headline_from_url,
-    get_best_headline,
-    score_headline_quality,
+# Load the module file directly: headline_utils is stdlib-only, but importing
+# it through the src package would pull in pandas/duckdb via src/__init__.py.
+_spec = importlib.util.spec_from_file_location(
+    "headline_utils", Path(__file__).resolve().parent.parent / "src" / "headline_utils.py"
 )
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+clean_headline = _mod.clean_headline
+dedupe_headlines_simple = _mod.dedupe_headlines_simple
+extract_headline_from_url = _mod.extract_headline_from_url
+get_best_headline = _mod.get_best_headline
+score_headline_quality = _mod.score_headline_quality
 
 
 class TestExtractHeadlineFromUrl:
