@@ -55,3 +55,20 @@ models:
         description: "Number of distinct days this theme was mentioned"
       - name: avg_daily_mentions
         description: "Average mentions per active day (mention_count / days_active)"
+
+  - name: fct_daily_emotions
+    description: "Daily averaged emotion scores from GKG articles"
+    columns:
+      - name: date_key
+        description: "Date in YYYYMMDD format"
+        tests:
+          - unique
+          - not_null
+      - name: event_date
+        description: "Parsed calendar date"
+        tests:
+          - not_null
+      - name: article_count
+        description: "Number of articles aggregated into this day"
+        tests:
+          - not_null
