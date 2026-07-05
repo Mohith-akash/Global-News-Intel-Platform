@@ -21,3 +21,5 @@ logs/
 
 # Ignore OS files
 .DS_Store
+# dbt local user cookie
+dbt/.user.yml
