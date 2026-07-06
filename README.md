@@ -53,19 +53,19 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 
 ### Data flow
 
-1. **Extract** — GDELT Events API + GKG feed, parsed with Polars
-2. **Validate** — schema and threshold checks before anything is written
-3. **Load** — deduplicated inserts into MotherDuck (serverless DuckDB)
-4. **Transform** — dbt models build staging views and mart tables
-5. **Emotions** — GKG tone/fear/joy/topics extracted on a rolling 24h window
-6. **Embed** — Voyage AI generates 1024-dim vectors every 12 hours
-7. **Serve** — Streamlit dashboard with dual-mode AI chat (SQL + RAG)
+1. **Extract:** GDELT Events API + GKG feed, parsed with Polars
+2. **Validate:** schema and threshold checks before anything is written
+3. **Load:** deduplicated inserts into MotherDuck (serverless DuckDB)
+4. **Transform:** dbt models build staging views and mart tables
+5. **Emotions:** GKG tone/fear/joy/topics extracted on a rolling 24h window
+6. **Embed:** Voyage AI generates 1024-dim vectors every 12 hours
+7. **Serve:** Streamlit dashboard with dual-mode AI chat (SQL + RAG)
 
 ### Cost engineering
 
-The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (~10x faster), bringing the total monthly cost to $0 on free tiers — without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
+The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (~10x faster), bringing the total monthly cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
 
-Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1). The takeaway that shaped this project: the best tool is the one that solves the problem within constraints, not the most expensive one.
+Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1).
 
 ## Features
 
@@ -81,19 +81,19 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 
 ## Screenshots
 
-**Home — KPIs and trending news**
+**Home: KPIs and trending news**
 
 ![Dashboard Home](docs/images/dashboard_home.png)
 
-**Emotions — GKG mood analysis**
+**Emotions: GKG mood analysis**
 
 ![Emotions Tab](docs/images/emotions_tab.png)
 
-**AI chat — natural-language queries**
+**AI chat: natural-language queries**
 
 ![AI Chat](docs/images/ai_chat.png)
 
-**RAG chat — semantic analysis of world events**
+**RAG chat: semantic analysis of world events**
 
 ![RAG Chat](docs/images/rag_chat.png)
 
@@ -184,6 +184,6 @@ gdelt_project/
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT license, see [LICENSE](LICENSE).
 
 Data sourced from the [GDELT Project](https://www.gdeltproject.org/). Built by [Mohith Akash](https://github.com/Mohith-akash) · [LinkedIn](https://www.linkedin.com/in/mohith-akash/)
