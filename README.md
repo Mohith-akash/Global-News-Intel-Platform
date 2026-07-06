@@ -74,6 +74,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | Real-time dashboard | Live metrics, trending news, sentiment, geographic distribution |
 | Emotion analytics | GKG-powered tracking: fear, joy, positive/negative, global mood index |
 | AI chat | Plain-English questions answered via generated SQL or RAG |
+| LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
 | 15-minute updates | External cron trigger → GitHub Actions → Dagster job |
 | Data quality gates | Custom schema + threshold validation before load |
 | Trend analysis | 30-day time series, intensity tracking, actor monitoring |
@@ -166,7 +167,8 @@ gdelt_project/
 │   └── styles.py             # CSS styling
 ├── etl/
 │   ├── pipeline_polars.py    # Polars ingestion + validation (Dagster)
-│   └── embedding_job.py      # 12-hour embedding generation
+│   ├── embedding_job.py      # 12-hour embedding generation
+│   └── headline_polish_job.py# 12-hour LLM headline repair (Cerebras)
 ├── dbt/
 │   ├── dbt_project.yml
 │   ├── profiles.yml          # MotherDuck connection
