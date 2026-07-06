@@ -79,7 +79,7 @@ def get_alerts(_c, t):
 def get_trending(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
+        SELECT DATE, NEWS_LINK, HEADLINE, HEADLINE_AI, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
         FROM {t}
         WHERE DATE >= '{dates['week_ago']}'
           AND ARTICLE_COUNT > 3
@@ -97,7 +97,7 @@ def get_trending(_c, t):
 def get_feed(_c, t):
     dates = get_dates()
     return safe_query(_c, f"""
-        SELECT DATE, NEWS_LINK, HEADLINE, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
+        SELECT DATE, NEWS_LINK, HEADLINE, HEADLINE_AI, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
         FROM {t}
         WHERE DATE >= '{dates['week_ago']}'
           AND NEWS_LINK IS NOT NULL

@@ -23,3 +23,4 @@ logs/
 .DS_Store
 # dbt local user cookie
 dbt/.user.yml
+.tmp_dagster_home_*/

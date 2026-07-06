@@ -39,6 +39,17 @@ jobs:
         python -m dagster job execute -f etl/embedding_job.py -j gdelt_embedding_job
         echo "✅ Embedding Generation Complete."
 
+    # 5. Run Headline Polish Job (runs even if embeddings failed)
+    - name: Polish Headlines (Cerebras)
+      if: always()
+      env:
+        MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+        CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+      run: |
+        echo "📰 Starting Headline Polish..."
+        python -m dagster job execute -f etl/headline_polish_job.py -j gdelt_headline_polish_job
+        echo "✅ Headline Polish Complete."
+
     - name: Notify on failure
       if: failure()
       run: |

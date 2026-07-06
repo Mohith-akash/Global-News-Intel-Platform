@@ -43,10 +43,20 @@ def process_df(df):
         db_headline = row.get('HEADLINE')
         url = row.get('NEWS_LINK', '')
         impact = row.get('IMPACT_SCORE')
-        
-        headline = get_best_headline(db_headline, url, impact)
+
+        # Prefer the LLM-polished headline (already display-ready); the regex
+        # path would re-mangle its acronym casing via _title_case.
+        ai_headline = row.get('HEADLINE_AI')
+        if ai_headline and isinstance(ai_headline, str) and len(ai_headline.strip()) >= 15:
+            headline = ai_headline.strip()
+            # Floor the score: polished headlines already passed validation, and
+            # the scorer's capitalization penalty misfires on title case.
+            quality = max(0.6, score_headline_quality(headline, url))
+        else:
+            headline = get_best_headline(db_headline, url, impact)
+            quality = score_headline_quality(headline, url) if headline else 0
         headlines.append(headline)
-        quality_scores.append(score_headline_quality(headline, url) if headline else 0)
+        quality_scores.append(quality)
 
     df['HEADLINE'] = headlines
     df['_QUALITY'] = quality_scores
