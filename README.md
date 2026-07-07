@@ -11,6 +11,7 @@ Serverless ELT pipeline that ingests, processes, and visualizes 100,000+ global 
 | Cumulative events processed | 20M+ |
 | Daily ingestion | 100K+ events |
 | Live operation | 8+ months, continuous scheduled runs |
+| Unique visitors | 6,000+ in the first few months, 100+ new daily, no promotion |
 | Coverage | 200+ countries, 100+ languages |
 | Typical query latency | < 1 second |
 | Monthly infrastructure cost | $0 |
