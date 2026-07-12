@@ -3,6 +3,7 @@ Database connection and query utilities for GDELT platform.
 """
 
 import os
+import time
 import logging
 import functools
 import concurrent.futures
@@ -11,6 +12,38 @@ import duckdb
 import streamlit as st
 
 logger = logging.getLogger("gdelt")
+
+
+class WarehouseUnavailable(RuntimeError):
+    """MotherDuck is unreachable or out of free-tier quota."""
+
+
+# After a hung connection, skip MotherDuck entirely for this long. Retrying a
+# quota-blocked warehouse every page load just piles up abandoned threads.
+_BREAKER_COOLDOWN = 600
+_breaker_until = 0.0
+
+
+def _run_with_timeout(fn, timeout):
+    """Run fn in a worker thread with a hard timeout.
+
+    Deliberately avoids `with ThreadPoolExecutor(...)`: the context manager
+    calls shutdown(wait=True) on exit, which blocks on the hung thread and
+    freezes the main thread anyway - that was the crash mode where the app
+    stopped answering health checks and got killed. shutdown(wait=False)
+    abandons the stuck thread and lets the app keep serving.
+    """
+    global _breaker_until
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = ex.submit(fn)
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        _breaker_until = time.time() + _BREAKER_COOLDOWN
+        logger.error("MotherDuck call hung >%ss - opening circuit breaker", timeout)
+        raise WarehouseUnavailable("warehouse connection timed out") from None
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
 
 def retry_cache_race(fn):
@@ -49,13 +82,9 @@ def get_db():
     Most query paths go through safe_query() which opens its own fresh connection,
     so this shared handle is only used for one-off metadata calls.
     """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_new_conn)
-        try:
-            return future.result(timeout=30)
-        except concurrent.futures.TimeoutError:
-            st.error("⚠️ Database connection timed out — please refresh the page.")
-            st.stop()
+    if time.time() < _breaker_until:
+        raise WarehouseUnavailable("warehouse circuit breaker open")
+    return _run_with_timeout(_new_conn, 30)
 
 
 @retry_cache_race
@@ -86,15 +115,24 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
     Pass `params` (a list) for parameterized queries — the RAG keyword filters
     use this to bind values safely instead of string interpolation.
     """
-    c = None
+    if time.time() < _breaker_until:
+        raise WarehouseUnavailable("warehouse circuit breaker open")
+
+    def _run():
+        c = None
+        try:
+            c = _new_conn()
+            if params is not None:
+                return c.execute(sql, params).df()
+            return c.execute(sql).df()
+        finally:
+            if c is not None:
+                c.close()
+
     try:
-        c = _new_conn()
-        if params is not None:
-            return c.execute(sql, params).df()
-        return c.execute(sql).df()
+        return _run_with_timeout(_run, 25)
+    except WarehouseUnavailable:
+        raise
     except Exception as e:
         logger.error(f"Query error: {e}", exc_info=True)
         return pd.DataFrame()
-    finally:
-        if c is not None:
-            c.close()
