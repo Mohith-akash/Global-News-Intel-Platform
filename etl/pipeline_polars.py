@@ -237,13 +237,25 @@ def validate_gdelt_data(df: pl.DataFrame) -> dict:
 # POLARS-BASED DATA PROCESSING
 # =============================================================================
 
-def get_gdelt_url() -> str:
-    """Get the URL for the latest GDELT export file."""
+def _latest_batch_times(n: int = 4) -> list:
+    """Timestamps of the last n GDELT 15-minute batches, newest first.
+    GDELT publishes roughly 15 minutes behind the wall clock, hence the
+    20-minute offset before rounding down."""
     now = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=20)
     rounded_minute = (now.minute // 15) * 15
     rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
-    timestamp = rounded_time.strftime("%Y%m%d%H%M00")
-    return f"http://data.gdeltproject.org/gdeltv2/{timestamp}.export.CSV.zip"
+    return [rounded_time - datetime.timedelta(minutes=15 * i) for i in range(n)]
+
+
+def get_gdelt_urls(n: int = 4) -> list:
+    """URLs for the last n GDELT export batches. The job runs hourly, so the
+    default n=4 covers every 15-minute file published in the past hour.
+    (The old single-file version silently dropped 3 of 4 batches once the
+    schedule moved from 15 minutes to hourly.)"""
+    return [
+        f"http://data.gdeltproject.org/gdeltv2/{t.strftime('%Y%m%d%H%M00')}.export.CSV.zip"
+        for t in _latest_batch_times(n)
+    ]
 
 
 def download_with_retry(url: str, max_retries: int = MAX_RETRIES, timeout: int = 30):
@@ -365,21 +377,29 @@ def select_best_headline_per_event_polars(df: pl.DataFrame) -> pl.DataFrame:
 def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
     """
     Extract raw GDELT data with Polars.
-    This job runs every 15 minutes and does NOT compute embeddings.
+    Runs hourly and pulls all four 15-minute batches from the past hour.
     Embeddings are computed by a separate job every 12 hours.
     """
     logger.info("🚀 Starting GDELT extraction (Polars-powered)")
-    url = get_gdelt_url()
-    
-    response = download_with_retry(url)
-    if not response:
-        context.log.warning("Download failed, returning empty DataFrame")
+
+    parts = []
+    for url in get_gdelt_urls():
+        response = download_with_retry(url)
+        if not response:
+            context.log.warning(f"Batch download failed, skipping: {url}")
+            continue
+        batch = process_gdelt_batch_polars(response.content)
+        if not batch.is_empty():
+            parts.append(batch)
+
+    if not parts:
+        context.log.warning("All batch downloads failed, returning empty DataFrame")
         return pl.DataFrame()
-    
+
     try:
         # Process with Polars (10x faster than Pandas)
-        df = process_gdelt_batch_polars(response.content)
-        logger.info(f"📊 Loaded {len(df):,} rows with Polars")
+        df = pl.concat(parts, how="vertical_relaxed")
+        logger.info(f"📊 Loaded {len(df):,} rows from {len(parts)} batches with Polars")
         
         # Data Quality Validation
         logger.info("🔍 Running data quality validation...")
@@ -502,13 +522,13 @@ GCAM_EMOTIONS = {
 }
 
 
-def get_gdelt_gkg_url() -> str:
-    """Get the URL for the latest GDELT GKG file."""
-    now = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=20)
-    rounded_minute = (now.minute // 15) * 15
-    rounded_time = now.replace(minute=rounded_minute, second=0, microsecond=0)
-    timestamp = rounded_time.strftime("%Y%m%d%H%M00")
-    return f"http://data.gdeltproject.org/gdeltv2/{timestamp}.gkg.csv.zip"
+def get_gdelt_gkg_urls(n: int = 4) -> list:
+    """URLs for the last n GDELT GKG batches - same hourly coverage as the
+    event export files."""
+    return [
+        f"http://data.gdeltproject.org/gdeltv2/{t.strftime('%Y%m%d%H%M00')}.gkg.csv.zip"
+        for t in _latest_batch_times(n)
+    ]
 
 
 def parse_gcam_field(gcam_str: str) -> dict:
@@ -634,29 +654,31 @@ def process_gkg_batch_polars(content: bytes) -> pl.DataFrame:
 def gdelt_gkg_data(context: AssetExecutionContext) -> pl.DataFrame:
     """
     Extract GKG data with emotions and themes.
-    Runs alongside event ingestion every 15 minutes.
+    Runs alongside event ingestion, hourly, covering the past hour of batches.
     """
     logger.info("🧠 Starting GDELT GKG extraction (emotions & themes)")
-    url = get_gdelt_gkg_url()
-    
-    response = download_with_retry(url)
-    if not response:
-        context.log.warning("GKG download failed, returning empty DataFrame")
+
+    parts = []
+    for url in get_gdelt_gkg_urls():
+        response = download_with_retry(url)
+        if not response:
+            context.log.warning(f"GKG batch download failed, skipping: {url}")
+            continue
+        try:
+            batch = process_gkg_batch_polars(response.content)
+        except Exception as e:
+            context.log.warning(f"GKG batch processing failed, skipping: {e}")
+            continue
+        if not batch.is_empty():
+            parts.append(batch)
+
+    if not parts:
+        context.log.warning("No GKG data processed")
         return pl.DataFrame()
-    
-    try:
-        df = process_gkg_batch_polars(response.content)
-        if df.is_empty():
-            context.log.warning("No GKG data processed")
-            return df
-        
-        logger.info(f"✅ Extracted {len(df):,} GKG records with emotions")
-        return df
-        
-    except Exception as e:
-        logger.error(f"❌ Error processing GKG data: {e}")
-        context.log.error(f"GKG processing error: {e}")
-        return pl.DataFrame()
+
+    df = pl.concat(parts, how="vertical_relaxed")
+    logger.info(f"✅ Extracted {len(df):,} GKG records with emotions from {len(parts)} batches")
+    return df
 
 
 @asset(description="Load GKG emotions data into MotherDuck")
