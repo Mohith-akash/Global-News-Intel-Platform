@@ -10,7 +10,7 @@ import logging
 
 from src.config import REQUIRED_ENVS
 from src.styles import inject_css
-from src.database import get_db, detect_table
+from src.database import get_db, detect_table, WarehouseUnavailable
 from components import (
     render_header,
     render_metrics,
@@ -72,8 +72,10 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
 
-    # Auto-refresh every 5 minutes — JS reload works in all browsers unlike <meta> in body.
-    st.markdown('<script>setTimeout(()=>location.reload(),300000)</script>', unsafe_allow_html=True)
+    # Auto-refresh hourly to match the ingest cadence — JS reload works in all
+    # browsers unlike <meta> in body. Was 5 minutes, which re-ran every session
+    # 12x/hour for data that only changes once an hour.
+    st.markdown('<script>setTimeout(()=>location.reload(),3600000)</script>', unsafe_allow_html=True)
 
     # The Cerebras LLM is loaded lazily inside the AI tab (via get_cerebras_llm)
     # to keep it off the startup path and reduce Streamlit Cloud memory pressure.
@@ -151,4 +153,12 @@ def main():
     </div>''', unsafe_allow_html=True)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except WarehouseUnavailable:
+        st.warning(
+            "The data warehouse is at its free-tier usage limit right now. "
+            "Dashboards come back automatically when the quota resets - "
+            "ingestion keeps running in the background."
+        )
+        st.stop()
