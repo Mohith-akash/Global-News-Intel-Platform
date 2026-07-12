@@ -18,6 +18,8 @@ import concurrent.futures
 import pandas as pd
 import streamlit as st
 
+import md_worker
+
 logger = logging.getLogger("gdelt")
 
 
@@ -51,24 +53,6 @@ def retry_cache_race(fn):
     return wrapper
 
 
-def _query_worker(sql, params):
-    """Executed in a child process. Opens its own MotherDuck connection,
-    runs one query, returns the DataFrame. Module-level so spawn can pickle it.
-    """
-    import os
-    import duckdb
-    c = duckdb.connect(
-        f'md:gdelt_db?motherduck_token={os.getenv("MOTHERDUCK_TOKEN")}',
-        read_only=True,
-    )
-    try:
-        if params is not None:
-            return c.execute(sql, params).df()
-        return c.execute(sql).df()
-    finally:
-        c.close()
-
-
 def _open_breaker(reason):
     global _breaker_until
     _breaker_until = time.time() + _BREAKER_COOLDOWN
@@ -96,7 +80,7 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
     ctx = multiprocessing.get_context("spawn")
     ex = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=ctx)
     try:
-        future = ex.submit(_query_worker, sql, params)
+        future = ex.submit(md_worker.run_query, sql, params)
         return future.result(timeout=45)
     except concurrent.futures.TimeoutError:
         _open_breaker("query hung >45s")
