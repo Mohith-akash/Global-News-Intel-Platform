@@ -76,7 +76,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | Emotion analytics | GKG-powered tracking: fear, joy, positive/negative, global mood index |
 | AI chat | Plain-English questions answered via generated SQL or RAG |
 | LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
-| 15-minute updates | External cron trigger → GitHub Actions → Dagster job |
+| Hourly updates | External cron trigger → GitHub Actions → Dagster job |
 | Data quality gates | Custom schema + threshold validation before load |
 | Trend analysis | 30-day time series, intensity tracking, actor monitoring |
 
@@ -106,7 +106,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | Transformation | dbt Core | Staging/marts models, schema tests |
 | Validation | Custom validator | Schema + threshold checks at ingestion |
 | Orchestration | Dagster | Asset-based pipeline definitions |
-| Scheduling | GitHub Actions | 15-min ingestion, 12-hour embeddings, health monitor |
+| Scheduling | GitHub Actions | hourly ingestion, 12-hour embeddings, health monitor |
 | Warehouse | MotherDuck (DuckDB) | Serverless OLAP storage + native vector search |
 | LLM | Cerebras (GPT-OSS 120B) | Text-to-SQL and RAG answers via LlamaIndex |
 | Embeddings | Voyage AI | 1024-dim vectors for semantic search |
@@ -178,7 +178,7 @@ gdelt_project/
 │       └── marts/            # fct_daily_events, dim_actors, dim_countries, ...
 ├── components/               # Streamlit UI components
 └── .github/workflows/
-    ├── gdelt_ingest.yml          # 15-min ingestion
+    ├── gdelt_ingest.yml          # hourly ingestion
     ├── gdelt_embeddings_12hr.yml # 12-hour embedding job
     └── health_monitor.yml        # Uptime checks + ntfy alerts
 ```

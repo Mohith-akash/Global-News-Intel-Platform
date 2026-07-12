@@ -59,7 +59,7 @@ def get_db():
 
 
 @retry_cache_race
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def detect_table(_conn):
     """Find the main events table."""
     df = safe_query(_conn, "SHOW TABLES")
@@ -80,7 +80,7 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
       2. Stale/dropped connection cached in @st.cache_resource → segfault on every
          query after idle, causing a restart loop
 
-    With @st.cache_data TTL=4hr, this function only fires ~6 times per day in
+    With @st.cache_data TTL=24h, this function only fires a handful of times per day in
     practice, so the per-call connection overhead is negligible.
 
     Pass `params` (a list) for parameterized queries — the RAG keyword filters
