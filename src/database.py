@@ -14,12 +14,12 @@ A bare subprocess imports only duckdb and pandas, and subprocess.run kills
 it automatically on timeout.
 """
 
-import io
 import os
 import sys
 import json
 import time
 import logging
+import tempfile
 import functools
 import subprocess
 import pandas as pd
@@ -87,33 +87,41 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
         raise WarehouseUnavailable("warehouse circuit breaker open")
 
     payload = json.dumps({"sql": sql, "params": params})
+    fd, out_path = tempfile.mkstemp(suffix=".parquet")
+    os.close(fd)
     try:
-        proc = subprocess.run(
-            [sys.executable, _WORKER],
-            input=payload.encode(),
-            capture_output=True,
-            timeout=45,
-        )
-    except subprocess.TimeoutExpired:
-        _open_breaker("query hung >45s")
-        raise WarehouseUnavailable("warehouse connection timed out") from None
-
-    if proc.returncode == 0:
         try:
-            return pd.read_parquet(io.BytesIO(proc.stdout))
-        except Exception as e:
-            logger.error("Worker returned unreadable result: %s", e)
+            proc = subprocess.run(
+                [sys.executable, _WORKER, out_path],
+                input=payload.encode(),
+                capture_output=True,
+                timeout=45,
+            )
+        except subprocess.TimeoutExpired:
+            _open_breaker("query hung >45s")
+            raise WarehouseUnavailable("warehouse connection timed out") from None
+
+        if proc.returncode == 0:
+            try:
+                return pd.read_parquet(out_path)
+            except Exception as e:
+                logger.error("Worker returned unreadable result: %s", e)
+                return pd.DataFrame()
+
+        stderr = proc.stderr.decode(errors="replace").strip()
+        if proc.returncode == 2:
+            # clean query error reported by the worker (bad SQL, missing table...)
+            logger.error("Query error: %s", stderr)
             return pd.DataFrame()
 
-    stderr = proc.stderr.decode(errors="replace").strip()
-    if proc.returncode == 2:
-        # clean query error reported by the worker (bad SQL, missing table...)
-        logger.error("Query error: %s", stderr)
-        return pd.DataFrame()
-
-    # any other exit means the native client died (segfault = -11)
-    _open_breaker(f"worker died with code {proc.returncode}: {stderr[-200:]}")
-    raise WarehouseUnavailable("warehouse client crashed") from None
+        # any other exit means the native client died (segfault = -11)
+        _open_breaker(f"worker died with code {proc.returncode}: {stderr[-200:]}")
+        raise WarehouseUnavailable("warehouse client crashed") from None
+    finally:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
 
 
 def get_db():
