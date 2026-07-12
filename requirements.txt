@@ -6,6 +6,11 @@ python-dotenv==1.0.1
 # Data Processing
 pandas==2.2.3
 polars==1.28.0
+# transitive natives, pinned on purpose: unpinned pyarrow floated to 25.0.0
+# on rebuild and segfaults in pandas_compat.convert_column when streamlit
+# serializes dataframes (pandas 2.2.x era code vs 2026 pyarrow)
+pyarrow==18.1.0
+numpy==2.2.6
 
 # Database
 duckdb==1.5.1
