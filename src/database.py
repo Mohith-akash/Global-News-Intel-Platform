@@ -1,26 +1,33 @@
 """
 Database connection and query utilities for GDELT platform.
 
-MotherDuck calls run in a child process, not in the streamlit process.
-Reason: when the warehouse is quota-blocked, the duckdb native client can
+MotherDuck calls run in a bare subprocess (python md_worker.py), not in the
+streamlit process and not via multiprocessing.
+Reason 1: when the warehouse is quota-blocked, the duckdb native client can
 hang while holding the GIL (freezing every thread, so in-process timeouts
 never fire) or segfault outright (killing whatever process it runs in).
-Both took the whole app down repeatedly. In a child process, a hang gets
-killed by the timeout and a segfault only breaks the child - the app keeps
-serving and shows a quota banner instead of dying.
+Reason 2: multiprocessing spawn re-imports the app's __main__ module in the
+child, which drags in the entire app stack (llama-index, transformers) -
+hundreds of MB per query child. That memory pressure evicted streamlit
+caches and eventually crashed the parent with a native allocation failure.
+A bare subprocess imports only duckdb and pandas, and subprocess.run kills
+it automatically on timeout.
 """
 
+import io
+import os
+import sys
+import json
 import time
 import logging
 import functools
-import multiprocessing
-import concurrent.futures
+import subprocess
 import pandas as pd
 import streamlit as st
 
-import md_worker
-
 logger = logging.getLogger("gdelt")
+
+_WORKER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "md_worker.py")
 
 
 class WarehouseUnavailable(RuntimeError):
@@ -60,16 +67,18 @@ def _open_breaker(reason):
 
 
 def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-site compat
-    """Execute SQL against MotherDuck inside an isolated child process.
+    """Execute SQL against MotherDuck in an isolated subprocess.
 
     Crash modes this survives (all observed in production):
-      1. Child hangs on a quota-blocked connection -> timeout fires, child is
-         terminated, breaker opens.
-      2. Child segfaults in the native client -> BrokenProcessPool raised in
-         the parent, breaker opens. The app itself never dies.
+      1. Child hangs on a quota-blocked connection -> subprocess.run kills it
+         at the timeout, breaker opens.
+      2. Child segfaults in the native client -> nonzero returncode in the
+         parent, breaker opens. The app itself never dies.
 
-    With @st.cache_data TTL=24h on the callers, the ~1s process-spawn
-    overhead is paid a handful of times per day.
+    The child runs md_worker.py directly, so it imports only duckdb and
+    pandas - no multiprocessing bootstrapping, no app-stack re-import.
+    With @st.cache_data TTL=24h on the callers, the ~1s subprocess overhead
+    is paid a handful of times per day.
 
     Pass `params` (a list) for parameterized queries — the RAG keyword filters
     use this to bind values safely instead of string interpolation.
@@ -77,27 +86,34 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
     if time.time() < _breaker_until:
         raise WarehouseUnavailable("warehouse circuit breaker open")
 
-    ctx = multiprocessing.get_context("spawn")
-    ex = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=ctx)
+    payload = json.dumps({"sql": sql, "params": params})
     try:
-        future = ex.submit(md_worker.run_query, sql, params)
-        return future.result(timeout=45)
-    except concurrent.futures.TimeoutError:
+        proc = subprocess.run(
+            [sys.executable, _WORKER],
+            input=payload.encode(),
+            capture_output=True,
+            timeout=45,
+        )
+    except subprocess.TimeoutExpired:
         _open_breaker("query hung >45s")
-        for p in getattr(ex, "_processes", {}).values():
-            try:
-                p.terminate()
-            except Exception:
-                pass
         raise WarehouseUnavailable("warehouse connection timed out") from None
-    except concurrent.futures.process.BrokenProcessPool:
-        _open_breaker("worker process died (native crash)")
-        raise WarehouseUnavailable("warehouse client crashed") from None
-    except Exception as e:
-        logger.error(f"Query error: {e}", exc_info=True)
+
+    if proc.returncode == 0:
+        try:
+            return pd.read_parquet(io.BytesIO(proc.stdout))
+        except Exception as e:
+            logger.error("Worker returned unreadable result: %s", e)
+            return pd.DataFrame()
+
+    stderr = proc.stderr.decode(errors="replace").strip()
+    if proc.returncode == 2:
+        # clean query error reported by the worker (bad SQL, missing table...)
+        logger.error("Query error: %s", stderr)
         return pd.DataFrame()
-    finally:
-        ex.shutdown(wait=False, cancel_futures=True)
+
+    # any other exit means the native client died (segfault = -11)
+    _open_breaker(f"worker died with code {proc.returncode}: {stderr[-200:]}")
+    raise WarehouseUnavailable("warehouse client crashed") from None
 
 
 def get_db():
