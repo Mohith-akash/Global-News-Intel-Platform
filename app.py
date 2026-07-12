@@ -1,7 +1,13 @@
 """
 GDELT News Intelligence Dashboard
-Real-time global news analytics powered by AI. 
+Real-time global news analytics powered by AI.
 """
+
+import faulthandler
+
+# On a native crash (segfault), print the python line every thread was
+# executing to stderr - it lands in the cloud log and names the culprit.
+faulthandler.enable()
 
 import streamlit as st
 import os
