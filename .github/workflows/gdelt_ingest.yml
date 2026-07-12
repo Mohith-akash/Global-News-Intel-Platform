@@ -1,44 +1,19 @@
 name: Hourly GDELT Refresh (Polars)
 
-# Scheduling: hourly. cron-job.org may still fire workflow_dispatch more often,
-# so the throttle job below skips any run that starts less than 50 minutes
-# after the last successful one. MotherDuck Lite has 10 CU-hours/month; the
-# old 15-min cadence (96 runs/day) was burning the whole budget on ingest.
-# Setup: see scripts/trigger_ingestion.py for cron-job.org configuration.
+# Scheduling: GitHub cron, hourly. The external cron-job.org trigger was
+# deleted, so no throttle logic is needed anymore. (A previous throttle job
+# counted skipped runs as successes and starved ingestion entirely - keep
+# any future rate limiting based on the refresh-data JOB conclusion, never
+# the run conclusion.) MotherDuck Lite has 10 CU-hours/month; hourly is the
+# budget-safe cadence.
 on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
-  throttle:
-    runs-on: ubuntu-latest
-    outputs:
-      proceed: ${{ steps.gate.outputs.proceed }}
-    steps:
-      - name: Skip if last successful run was under 50 minutes ago
-        id: gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          last=$(gh run list --repo ${{ github.repository }} \
-            --workflow gdelt_ingest.yml --status success --limit 1 \
-            --json updatedAt --jq '.[0].updatedAt' || echo "")
-          if [ -n "$last" ]; then
-            last_s=$(date -d "$last" +%s); now_s=$(date +%s)
-            mins=$(( (now_s - last_s) / 60 ))
-            if [ "$mins" -lt 50 ]; then
-              echo "Last successful run ${mins}m ago - skipping (hourly throttle)."
-              echo "proceed=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          echo "proceed=true" >> "$GITHUB_OUTPUT"
-
   refresh-data:
     runs-on: ubuntu-latest
-    needs: throttle
-    if: needs.throttle.outputs.proceed == 'true'
     timeout-minutes: 30
 
     steps:
