@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       batches:
-        description: "15-min batches to fetch (20 = 5h steady state, 96 = 24h backfill)"
+        description: "15-min batches to fetch (20 = 5h steady state, 96 = 24h, 288 = 3-day backfill)"
         required: false
         default: "20"
 
