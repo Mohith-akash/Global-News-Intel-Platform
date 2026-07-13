@@ -247,11 +247,25 @@ def _latest_batch_times(n: int = 4) -> list:
     return [rounded_time - datetime.timedelta(minutes=15 * i) for i in range(n)]
 
 
-def get_gdelt_urls(n: int = 4) -> list:
-    """URLs for the last n GDELT export batches. The job runs hourly, so the
-    default n=4 covers every 15-minute file published in the past hour.
-    (The old single-file version silently dropped 3 of 4 batches once the
-    schedule moved from 15 minutes to hourly.)"""
+def _batch_count() -> int:
+    """How many 15-minute batches to fetch per run.
+
+    Default 20 (five hours): github's free-tier cron regularly skips hours,
+    and a run that only covers the past hour turns every skipped hour into a
+    permanent hole in the feed. Five hours of overlap self-heals the usual
+    gaps; the writers dedup on EVENT_ID / GKG_ID so overlap costs nothing.
+    Override with GDELT_BATCHES (workflow_dispatch passes it) for backfills.
+    """
+    try:
+        return max(1, min(96, int(os.getenv("GDELT_BATCHES", "20"))))
+    except ValueError:
+        return 20
+
+
+def get_gdelt_urls(n: int = None) -> list:
+    """URLs for the last n GDELT export batches (default: _batch_count())."""
+    if n is None:
+        n = _batch_count()
     return [
         f"http://data.gdeltproject.org/gdeltv2/{t.strftime('%Y%m%d%H%M00')}.export.CSV.zip"
         for t in _latest_batch_times(n)
@@ -522,9 +536,11 @@ GCAM_EMOTIONS = {
 }
 
 
-def get_gdelt_gkg_urls(n: int = 4) -> list:
-    """URLs for the last n GDELT GKG batches - same hourly coverage as the
+def get_gdelt_gkg_urls(n: int = None) -> list:
+    """URLs for the last n GDELT GKG batches - same coverage window as the
     event export files."""
+    if n is None:
+        n = _batch_count()
     return [
         f"http://data.gdeltproject.org/gdeltv2/{t.strftime('%Y%m%d%H%M00')}.gkg.csv.zip"
         for t in _latest_batch_times(n)

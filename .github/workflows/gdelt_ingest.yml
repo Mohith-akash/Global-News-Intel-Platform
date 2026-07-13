@@ -10,11 +10,18 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+    inputs:
+      batches:
+        description: "15-min batches to fetch (20 = 5h steady state, 96 = 24h backfill)"
+        required: false
+        default: "20"
 
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      GDELT_BATCHES: ${{ inputs.batches || '20' }}
 
     steps:
     # 1. Checkout code

@@ -13,14 +13,14 @@ from src.database import safe_query, retry_cache_race
 
 
 @retry_cache_race
-@st.cache_data(ttl=86400, show_spinner=False)
+@st.cache_data(ttl=14400, show_spinner=False)
 def _emotion_query(_conn, sql):
     """Cached wrapper for emotion queries.
 
     st.tabs renders every tab on each rerun, so without caching these
     gkg_emotions scans would hit MotherDuck on every page load and every
     5-min auto-reload. Cache keyed on the SQL string (the connection is
-    excluded via the underscore prefix). 24h TTL matches the rest of the
+    excluded via the underscore prefix). 4h TTL matches the rest of the
     dashboard.
     """
     return safe_query(_conn, sql)
