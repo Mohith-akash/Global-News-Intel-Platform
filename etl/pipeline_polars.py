@@ -257,7 +257,7 @@ def _batch_count() -> int:
     Override with GDELT_BATCHES (workflow_dispatch passes it) for backfills.
     """
     try:
-        return max(1, min(96, int(os.getenv("GDELT_BATCHES", "20"))))
+        return max(1, min(288, int(os.getenv("GDELT_BATCHES", "20"))))
     except ValueError:
         return 20
 
