@@ -9,48 +9,33 @@ import datetime
 import streamlit as st
 import plotly.graph_objects as go
 from collections import Counter
-from src.database import safe_query, retry_cache_race
-
-
-@retry_cache_race
-@st.cache_data(ttl=14400, show_spinner=False)
-def _emotion_query(_conn, sql):
-    """Cached wrapper for emotion queries.
-
-    st.tabs renders every tab on each rerun, so without caching these
-    gkg_emotions scans would hit MotherDuck on every page load and every
-    5-min auto-reload. Cache keyed on the SQL string (the connection is
-    excluded via the underscore prefix). 4h TTL matches the rest of the
-    dashboard.
-    """
-    return safe_query(_conn, sql)
+from src.database import safe_query_batch, retry_cache_race
 
 
 def _gkg_cutoff_24h():
     """24h-ago cutoff as GKG's 14-digit numeric timestamp (YYYYMMDDHHMMSS).
 
-    Rounded down to the hour so the SQL string (= the cache key) stays stable
-    between reruns instead of busting the cache on every page load. Without
-    this filter the emotion queries scan the whole multi-million-row table —
-    and the UI labels claim "rolling 24h".
+    Rounded down to the hour so the cache key stays stable between reruns
+    instead of busting the cache on every page load. Without this filter the
+    emotion queries scan the whole multi-million-row table — and the UI
+    labels claim "rolling 24h".
     """
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
     return int(cutoff.strftime('%Y%m%d%H0000'))
 
 
-def check_gkg_table_exists(conn):
-    """Check if gkg_emotions table exists and has data."""
-    try:
-        result = _emotion_query(conn, "SELECT 1 FROM gkg_emotions LIMIT 1")
-        return not result.empty
-    except Exception:
-        return False
+@retry_cache_race
+@st.cache_data(ttl=14400, show_spinner=False)
+def _emotions_bundle(cutoff):
+    """All emotions-tab queries in ONE worker subprocess, cached 4h.
 
-
-def render_emotions_pulse(conn):
-    """Render the global emotion pulse meter with a beautiful gauge."""
-    try:
-        df = _emotion_query(conn, f"""
+    st.tabs renders every tab on each rerun, and each query used to spawn
+    its own subprocess (python startup + MotherDuck handshake per query).
+    One batch pays that cost once. Keyed on the hour-stable cutoff.
+    """
+    return safe_query_batch({
+        'exists': ("SELECT 1 FROM gkg_emotions LIMIT 1", None),
+        'pulse': (f"""
             SELECT
                 AVG(AVG_TONE) as avg_mood,
                 AVG(EMOTION_FEAR) as avg_fear,
@@ -59,8 +44,66 @@ def render_emotions_pulse(conn):
                 AVG(EMOTION_TRUST) as avg_trust,
                 COUNT(*) as article_count
             FROM gkg_emotions
-            WHERE DATE >= {_gkg_cutoff_24h()}
-        """)
+            WHERE DATE >= {cutoff}
+        """, None),
+        'breakdown': (f"""
+            SELECT
+                AVG(EMOTION_FEAR) as fear,
+                AVG(EMOTION_ANGER) as anger,
+                AVG(EMOTION_SADNESS) as sadness,
+                AVG(EMOTION_JOY) as joy,
+                AVG(EMOTION_TRUST) as trust,
+                AVG(EMOTION_ANXIETY) as anxiety,
+                AVG(EMOTION_ANTICIPATION) as anticipation
+            FROM gkg_emotions
+            WHERE DATE >= {cutoff}
+        """, None),
+        'themes': (f"""
+            SELECT TOP_THEMES FROM gkg_emotions
+            WHERE TOP_THEMES IS NOT NULL AND LENGTH(TOP_THEMES) > 0
+              AND DATE >= {cutoff}
+            LIMIT 500
+        """, None),
+        'stats': (f"""
+            SELECT
+                COUNT(*) as total_articles,
+                AVG(POSITIVE_SCORE) as avg_positive,
+                AVG(NEGATIVE_SCORE) as avg_negative,
+                AVG(EMOTION_FEAR) as avg_fear,
+                AVG(EMOTION_JOY) as avg_joy
+            FROM gkg_emotions
+            WHERE DATE >= {cutoff}
+        """, None),
+        'insights': (f"""
+            SELECT
+                AVG(AVG_TONE) as tone,
+                AVG(EMOTION_FEAR) as fear,
+                AVG(EMOTION_JOY) as joy,
+                AVG(EMOTION_ANGER) as anger,
+                COUNT(*) as cnt
+            FROM gkg_emotions
+            WHERE DATE >= {cutoff}
+        """, None),
+    })
+
+
+def _emotion_data(key):
+    """Fetch one slice of the cached emotions bundle."""
+    return _emotions_bundle(_gkg_cutoff_24h())[key]
+
+
+def check_gkg_table_exists(conn):
+    """Check if gkg_emotions table exists and has data."""
+    try:
+        return not _emotion_data('exists').empty
+    except Exception:
+        return False
+
+
+def render_emotions_pulse(conn):
+    """Render the global emotion pulse meter with a beautiful gauge."""
+    try:
+        df = _emotion_data('pulse')
         
         if df.empty:
             st.info("📊 Emotion data is being collected...")
@@ -137,18 +180,7 @@ def render_emotions_pulse(conn):
 def render_emotion_breakdown(conn):
     """Render emotion breakdown as a beautiful radar chart."""
     try:
-        df = _emotion_query(conn, f"""
-            SELECT
-                AVG(EMOTION_FEAR) as fear,
-                AVG(EMOTION_ANGER) as anger,
-                AVG(EMOTION_SADNESS) as sadness,
-                AVG(EMOTION_JOY) as joy,
-                AVG(EMOTION_TRUST) as trust,
-                AVG(EMOTION_ANXIETY) as anxiety,
-                AVG(EMOTION_ANTICIPATION) as anticipation
-            FROM gkg_emotions
-            WHERE DATE >= {_gkg_cutoff_24h()}
-        """)
+        df = _emotion_data('breakdown')
         
         if df.empty:
             st.info("📊 Collecting emotion data...")
@@ -283,12 +315,7 @@ def render_trending_themes(conn):
     """Render trending themes from TOP_THEMES field."""
     try:
         # Get raw TOP_THEMES data
-        df = _emotion_query(conn, f"""
-            SELECT TOP_THEMES FROM gkg_emotions
-            WHERE TOP_THEMES IS NOT NULL AND LENGTH(TOP_THEMES) > 0
-              AND DATE >= {_gkg_cutoff_24h()}
-            LIMIT 500
-        """)
+        df = _emotion_data('themes')
         
         if df.empty or len(df) == 0:
             st.info("📊 Theme data is being collected...")
@@ -371,16 +398,7 @@ def render_trending_themes(conn):
 def render_emotion_stats(conn):
     """Render emotion statistics cards using st.metric - consistent with HOME page."""
     try:
-        df = _emotion_query(conn, f"""
-            SELECT
-                COUNT(*) as total_articles,
-                AVG(POSITIVE_SCORE) as avg_positive,
-                AVG(NEGATIVE_SCORE) as avg_negative,
-                AVG(EMOTION_FEAR) as avg_fear,
-                AVG(EMOTION_JOY) as avg_joy
-            FROM gkg_emotions
-            WHERE DATE >= {_gkg_cutoff_24h()}
-        """)
+        df = _emotion_data('stats')
         
         if df.empty:
             return
@@ -448,16 +466,7 @@ def render_emotion_stats(conn):
 def render_emotion_insights(conn):
     """Render AI-style emotion insights."""
     try:
-        df = _emotion_query(conn, f"""
-            SELECT
-                AVG(AVG_TONE) as tone,
-                AVG(EMOTION_FEAR) as fear,
-                AVG(EMOTION_JOY) as joy,
-                AVG(EMOTION_ANGER) as anger,
-                COUNT(*) as cnt
-            FROM gkg_emotions
-            WHERE DATE >= {_gkg_cutoff_24h()}
-        """)
+        df = _emotion_data('insights')
         
         if df.empty:
             return
