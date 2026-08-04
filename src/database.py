@@ -18,6 +18,7 @@ import os
 import sys
 import json
 import time
+import shutil
 import logging
 import tempfile
 import functools
@@ -122,6 +123,73 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
             os.unlink(out_path)
         except OSError:
             pass
+
+
+def safe_query_batch(queries, timeout=90):
+    """Run many queries in ONE worker subprocess.
+
+    `queries` is {name: (sql, params_or_None)}. Returns {name: DataFrame},
+    with an empty frame (and a log line) for any query that errored — same
+    per-query contract as safe_query.
+
+    This exists because a cold dashboard load runs ~17 cached queries; one
+    subprocess each meant ~17 python spawns and ~17 MotherDuck handshakes,
+    rendering the page piece by piece for 30-60s. One worker doing the whole
+    batch pays the spawn + handshake once.
+
+    Raises WarehouseUnavailable (and opens the breaker) if the connection
+    itself hangs, dies, or is quota-blocked — identical to safe_query.
+    """
+    if time.time() < _breaker_until:
+        raise WarehouseUnavailable("warehouse circuit breaker open")
+
+    payload = json.dumps({"queries": [
+        {"name": name, "sql": sql, "params": params}
+        for name, (sql, params) in queries.items()
+    ]})
+    out_dir = tempfile.mkdtemp()
+    try:
+        try:
+            proc = subprocess.run(
+                [sys.executable, _WORKER, out_dir],
+                input=payload.encode(),
+                capture_output=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            _open_breaker(f"batch hung >{timeout}s")
+            raise WarehouseUnavailable("warehouse connection timed out") from None
+
+        stderr = proc.stderr.decode(errors="replace").strip()
+        if proc.returncode != 0:
+            # batch mode reports per-query errors in the manifest, so any
+            # nonzero exit means the connection itself failed or the native
+            # client died
+            _open_breaker(f"batch worker died with code {proc.returncode}: {stderr[-200:]}")
+            raise WarehouseUnavailable("warehouse client crashed") from None
+
+        try:
+            with open(os.path.join(out_dir, "manifest.json")) as f:
+                manifest = json.load(f)
+        except Exception:
+            _open_breaker("batch worker wrote no manifest")
+            raise WarehouseUnavailable("warehouse client crashed") from None
+
+        results = {}
+        for name in queries:
+            status = manifest.get(name)
+            if status == "ok":
+                try:
+                    results[name] = pd.read_parquet(os.path.join(out_dir, f"{name}.parquet"))
+                    continue
+                except Exception as e:
+                    logger.error("Unreadable batch result %s: %s", name, e)
+            else:
+                logger.error("Batch query %s failed: %s", name, status)
+            results[name] = pd.DataFrame()
+        return results
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
 
 
 def get_db():
