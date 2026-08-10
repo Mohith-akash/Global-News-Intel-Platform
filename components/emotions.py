@@ -517,7 +517,7 @@ def render_emotions_tab(conn):
                     This feature tracks 11 emotional dimensions (GCAM) across global news.
                     <br><br>
                     <b>Status:</b> Waiting for GKG data collection.<br>
-                    The pipeline runs every 15 minutes. Check back soon!
+                    The pipeline runs hourly. Check back soon!
                 </p>
             </div>
         """, unsafe_allow_html=True)

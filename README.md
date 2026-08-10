@@ -28,7 +28,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
                      └────────────┬────────────┘
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  INGESTION (every 15 min via cron-job.org → workflow_dispatch)           │
+│  INGESTION (hourly; each run re-pulls 5h of 15-min batches, dedup by ID) │
 │  GitHub Actions → Dagster → Polars → schema/threshold validation         │
 └─────────────────────────────────────────────────────────────────────────┘
                                   │
@@ -142,7 +142,7 @@ streamlit run app.py
 Run the pipeline manually:
 
 ```bash
-# Ingestion (normally triggered every 15 min)
+# Ingestion (normally triggered hourly)
 python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
 
 # Embedding generation (normally every 12 hours)

@@ -178,8 +178,8 @@ def render_about():
                 <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Fear, joy, anger, trust + 7 more GCAM dimensions</div>
             </div>
             <div style="background:#1a2332;border-radius:6px;padding:0.6rem;">
-                <div><span style="color:#ef4444;font-size:0.7rem;">SCHEDULE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⏱️ 30min → ⚡ <b>15min</b> updates</span></div>
-                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">Near real-time data freshness</div>
+                <div><span style="color:#ef4444;font-size:0.7rem;">SCHEDULE</span> <span style="color:#e2e8f0;font-size:0.9rem;margin-left:0.5rem;">⏱️ Manual → ⚡ <b>Hourly</b> ingestion</span></div>
+                <div style="color:#64748b;font-size:0.75rem;margin-top:0.2rem;">5-hour overlap window self-heals skipped runs</div>
             </div>
         </div>
         """, unsafe_allow_html=True)

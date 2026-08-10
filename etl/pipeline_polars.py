@@ -391,7 +391,8 @@ def select_best_headline_per_event_polars(df: pl.DataFrame) -> pl.DataFrame:
 def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
     """
     Extract raw GDELT data with Polars.
-    Runs hourly and pulls all four 15-minute batches from the past hour.
+    Runs hourly and re-pulls the last _batch_count() 15-minute batches
+    (20 = five hours) so a skipped cron run does not leave a hole.
     Embeddings are computed by a separate job every 12 hours.
     """
     logger.info("🚀 Starting GDELT extraction (Polars-powered)")
