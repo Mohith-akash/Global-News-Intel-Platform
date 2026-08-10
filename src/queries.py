@@ -28,15 +28,15 @@ def _dashboard_bundle(t):
     """Every dashboard query, one worker call. Cached 4h."""
     dates = get_dates()
     three_days = (datetime.datetime.now() - datetime.timedelta(days=3)).strftime('%Y%m%d')
-    table_name = t.split('.')[-1]
 
     return safe_query_batch({
-        'total': (f"""
-            SELECT estimated_size
-            FROM duckdb_tables()
-            WHERE table_name = '{table_name}'
-            LIMIT 1
-        """, None),
+        # A real COUNT(*), not duckdb_tables().estimated_size. The estimate was
+        # meant to dodge a slow full scan, but it is a lazily-refreshed catalog
+        # statistic: it sat frozen for a day at a time (so the headline number
+        # looked stuck) and read 2,920 rows high. COUNT(*) on a columnar store
+        # comes off column metadata - measured at 0.03s against 24M rows,
+        # actually faster than the catalog lookup it replaced.
+        'total': (f"SELECT COUNT(*) AS total FROM {t}", None),
         'weekly': (f"""
             SELECT
                 COUNT(*) as recent,
@@ -116,8 +116,8 @@ def get_metrics(_c, t):
     b = _dashboard_bundle(t)
     total_df, weekly, hs = b['total'], b['weekly'], b['hotspot']
     total = None
-    if not total_df.empty and total_df.iloc[0]['estimated_size']:
-        total = int(total_df.iloc[0]['estimated_size'])
+    if not total_df.empty and total_df.iloc[0]['total']:
+        total = int(total_df.iloc[0]['total'])
     return {
         'total': total,
         'recent': int(weekly.iloc[0]['recent'] or 0) if not weekly.empty else 0,
