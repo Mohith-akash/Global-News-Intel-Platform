@@ -1,86 +1,143 @@
 name: App Health Monitor
 
+# Why a browser and not curl: on Streamlit Community Cloud "/" 303-redirects
+# through a share.streamlit.io auth handshake, and /healthz is a PLATFORM
+# endpoint - a subdomain with no app deployed also answers {"status":"ok"}.
+# The app's real content only exists after a websocket connection, so the
+# only honest check is loading the page and looking for markup the Python
+# app produces.
+
 on:
-  workflow_dispatch:        # triggered by cron-job.org every 10 min
+  workflow_dispatch:
   schedule:
-    - cron: '*/30 * * * *' # fallback: GitHub's own cron every 30 min
+    - cron: '17 * * * *'   # hourly, offset off the :00 ingest rush
+
+permissions:
+  contents: read
+  issues: write            # alert channel that needs no secret setup
+
+env:
+  APP_URL: ${{ vars.APP_URL || 'https://global-news-intel-platform.streamlit.app' }}
+  NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}   # optional phone push
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Check app health
-        id: check1
+      - name: Install Playwright
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-            "${{ secrets.APP_URL }}/_stcore/health" || echo "000")
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "First check: HTTP $STATUS"
+          pip install --quiet playwright
+          playwright install chromium --with-deps
 
-      - name: App is healthy — done
-        if: steps.check1.outputs.status == '200'
-        run: echo "✅ App is healthy, nothing to do."
-
-      # --- App appears down — wait for Streamlit's auto-restart ---
-
-      - name: Wait 3 min for auto-restart
-        if: steps.check1.outputs.status != '200'
+      - name: Load the app and check it rendered
+        id: check
         run: |
-          echo "⚠️ App returned ${{ steps.check1.outputs.status }}. Waiting 3 min for auto-restart..."
-          sleep 180
+          python << 'EOF'
+          import os
+          from playwright.sync_api import sync_playwright
 
-      - name: Recheck after first wait
-        if: steps.check1.outputs.status != '200'
-        id: check2
+          URL = os.environ["APP_URL"]
+          MARKER = "GLOBAL NEWS INTELLIGENCE"   # from render_header()
+
+          def app_text(page):
+              """App content lives in an iframe on Community Cloud."""
+              chunks = []
+              for f in page.frames:
+                  try:
+                      chunks.append(f.inner_text("body"))
+                  except Exception:
+                      pass
+              return "\n".join(chunks)
+
+          healthy, detail = False, "no content rendered"
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page()
+              try:
+                  page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+
+                  # Streamlit sleeps idle apps behind a wake button.
+                  page.wait_for_timeout(5000)
+                  if "get this app back up" in page.content():
+                      try:
+                          page.get_by_text("Yes, get this app back up!").click(timeout=5000)
+                          detail = "app was asleep, wake requested"
+                      except Exception:
+                          pass
+
+                  # Poll for the header the python app renders. 90s covers a
+                  # cold container boot plus the first uncached query batch.
+                  for _ in range(18):
+                      if MARKER in app_text(page).upper():
+                          healthy = True
+                          break
+                      page.wait_for_timeout(5000)
+              except Exception as e:
+                  detail = f"{type(e).__name__}: {e}"[:200]
+              finally:
+                  browser.close()
+
+          # Write outputs explicitly (not via stdout redirect) so a stray
+          # library warning cannot corrupt them, and flatten detail to one
+          # line because GITHUB_OUTPUT is key=value per line.
+          detail = " ".join(("app rendered" if healthy else detail).split())
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"healthy={'true' if healthy else 'false'}\n")
+              fh.write(f"detail={detail}\n")
+          print(f"healthy={healthy} detail={detail}")
+          EOF
+
+      - name: Report
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-            "${{ secrets.APP_URL }}/_stcore/health" || echo "000")
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "Second check: HTTP $STATUS"
+          echo "healthy=${{ steps.check.outputs.healthy }} (${{ steps.check.outputs.detail }})"
 
-      - name: Wait 3 more min if still down
-        if: steps.check1.outputs.status != '200' && steps.check2.outputs.status != '200'
+      # Primary alert: a GitHub issue. No secrets needed - GitHub emails the
+      # repo owner on creation. One open issue at a time so a long outage
+      # cannot spam the tracker.
+      - name: Open an outage issue
+        if: steps.check.outputs.healthy != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Still down. Waiting another 3 min..."
-          sleep 180
-
-      - name: Final recheck
-        if: steps.check1.outputs.status != '200' && steps.check2.outputs.status != '200'
-        id: check3
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-            "${{ secrets.APP_URL }}/_stcore/health" || echo "000")
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "Third check: HTTP $STATUS"
-
-      # --- Send email only if the first check failed ---
-
-      - name: Determine recovery status
-        if: steps.check1.outputs.status != '200'
-        id: outcome
-        run: |
-          C2="${{ steps.check2.outputs.status }}"
-          C3="${{ steps.check3.outputs.status }}"
-          if [ "$C2" = "200" ]; then
-            echo "msg=✅ Recovered after 3 min (auto-restart worked)" >> $GITHUB_OUTPUT
-            echo "subject=GDELT App Recovered (was down, now OK)" >> $GITHUB_OUTPUT
-          elif [ "$C3" = "200" ]; then
-            echo "msg=✅ Recovered after 6 min (took 2 auto-restart cycles)" >> $GITHUB_OUTPUT
-            echo "subject=GDELT App Recovered (took 6 min)" >> $GITHUB_OUTPUT
-          else
-            echo "msg=❌ Still down after 6 min — manual intervention needed" >> $GITHUB_OUTPUT
-            echo "subject=🚨 GDELT App Still Down — Action Required" >> $GITHUB_OUTPUT
+          EXISTING=$(gh issue list --label outage --state open --limit 1 --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            echo "Outage issue #$EXISTING already open, not filing another."
+            exit 0
           fi
+          gh label create outage --color B60205 --description "Downtime detected by health monitor" 2>/dev/null || true
+          gh issue create \
+          --title "App down - dashboard did not render" \
+          --label outage \
+          --body "The health monitor loaded the app in a real browser and never saw the dashboard header.
 
+          Detail: ${{ steps.check.outputs.detail }}
+          App: ${{ env.APP_URL }}
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Streamlit Cloud usually restarts a crashed app by itself. If it has not,
+          reboot from https://share.streamlit.io. This issue closes automatically
+          on the next healthy check."
+
+      # Optional phone push. Skipped when NTFY_TOPIC is unset instead of
+      # hanging on a POST to the bare ntfy.sh root (that was exit code 28).
       - name: Send push notification via ntfy
-        if: steps.check1.outputs.status != '200'
+        if: steps.check.outputs.healthy != 'true' && env.NTFY_TOPIC != ''
         run: |
-          curl -s \
-            -H "Title: ${{ steps.outcome.outputs.subject }}" \
-            -H "Priority: ${{ steps.check3.outputs.status == '200' && 'default' || 'urgent' }}" \
-            -H "Tags: ${{ steps.check3.outputs.status == '200' && 'white_check_mark' || 'rotating_light' }}" \
-            -d "${{ steps.outcome.outputs.msg }}
+          curl -s --max-time 20 \
+            -H "Title: GDELT app is down" \
+            -H "Priority: urgent" \
+            -H "Tags: rotating_light" \
+            -d "Dashboard did not render.
+          Detail: ${{ steps.check.outputs.detail }}
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "https://ntfy.sh/$NTFY_TOPIC" || echo "ntfy push failed, issue alert still filed"
 
-          Checks: ${{ steps.check1.outputs.status }} → ${{ steps.check2.outputs.status }} → ${{ steps.check3.outputs.status || 'n/a' }}
-          Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
+      - name: Close outage issue after recovery
+        if: steps.check.outputs.healthy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for N in $(gh issue list --label outage --state open --json number --jq '.[].number'); do
+            gh issue close "$N" --comment "App rendered normally again. Closed automatically by the health monitor."
+          done
