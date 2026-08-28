@@ -250,16 +250,23 @@ def _latest_batch_times(n: int = 4) -> list:
 def _batch_count() -> int:
     """How many 15-minute batches to fetch per run.
 
-    Default 20 (five hours): github's free-tier cron regularly skips hours,
-    and a run that only covers the past hour turns every skipped hour into a
-    permanent hole in the feed. Five hours of overlap self-heals the usual
-    gaps; the writers dedup on EVENT_ID / GKG_ID so overlap costs nothing.
+    Default 96 (24 hours). This used to be 20 (five hours), sized for a cron
+    that skipped the odd hour. Github's scheduler has since degraded much
+    further - observed gaps of 8, 10 and 11 hours between runs - and every
+    hour past the lookback is a permanent hole: 2026-08-27 landed 59,510
+    events against ~108,000 on the days either side, roughly 45% lost.
+    A 24-hour window self-heals any gap short of a full day.
+
+    Overlap is nearly free: the writers dedup on EVENT_ID / GKG_ID, so
+    re-fetched batches insert nothing. The extra cost is downloading ~96
+    small files per run inside Actions (free), not MotherDuck compute,
+    which matters on the Lite plan's 10 CU-hours/month.
     Override with GDELT_BATCHES (workflow_dispatch passes it) for backfills.
     """
     try:
-        return max(1, min(288, int(os.getenv("GDELT_BATCHES", "20"))))
+        return max(1, min(288, int(os.getenv("GDELT_BATCHES", "96"))))
     except ValueError:
-        return 20
+        return 96
 
 
 def get_gdelt_urls(n: int = None) -> list:

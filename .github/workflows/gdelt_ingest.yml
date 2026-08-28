@@ -12,16 +12,16 @@ on:
   workflow_dispatch:
     inputs:
       batches:
-        description: "15-min batches to fetch (20 = 5h steady state, 96 = 24h, 288 = 3-day backfill)"
+        description: "15-min batches to fetch (96 = 24h steady state, 288 = 3-day backfill)"
         required: false
-        default: "20"
+        default: "96"
 
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      GDELT_BATCHES: ${{ inputs.batches || '20' }}
+      GDELT_BATCHES: ${{ inputs.batches || '96' }}
 
     steps:
     # 1. Checkout code
