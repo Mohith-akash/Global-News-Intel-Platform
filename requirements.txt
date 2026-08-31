@@ -15,9 +15,11 @@ numpy==2.2.6
 # Database
 duckdb==1.5.1
 
-# AI/ML - Using latest compatible versions
-llama-index-core==0.13.0
-llama-index-llms-cerebras==0.3.1
+# AI/ML - Cerebras is called directly over its OpenAI-compatible REST API
+# (see src/ai_engine.py). llama-index was dropped because its wrapper sent no
+# output cap, which let a reasoning model bill its hidden chain-of-thought up
+# to 40,960 tokens a call. It also pulled in transformers/tokenizers/nltk for
+# nothing: ~10 packages and ~40MB of RSS on the Streamlit container.
 
 # Orchestration
 dagster==1.12.22
