@@ -8,7 +8,7 @@ Serverless ELT pipeline that ingests, processes, and visualizes 100,000+ global 
 
 | Metric | Value |
 |--------|-------|
-| Cumulative events processed | 20M+ |
+| Cumulative events processed | 25M+ |
 | Daily ingestion | 100K+ events |
 | Live operation | 8+ months, continuous scheduled runs |
 | Unique visitors | 6,000+ in the first few months, 100+ new daily, no promotion |
