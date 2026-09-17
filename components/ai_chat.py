@@ -96,6 +96,30 @@ def render_ai_chat(c, tbl="events_dagster"):
             render_rag_chat(c, tbl)
 
 
+def resolve_date_range(qi, dates):
+    """Turn a detect_query_type() result into (min_date, max_date) bounds.
+
+    SQL mode reads the time period out of the question; RAG mode used to
+    ignore it and always search the last 30 days, so "what happened in
+    germany this week" ranked a month-old story above this week's news
+    (similarity beats recency when everything in the window is eligible).
+    Both modes go through the same interpretation now.
+    """
+    if qi.get('is_specific_date') and qi.get('specific_date'):
+        return qi['specific_date'], qi['specific_date']
+    if qi.get('is_week_range') and qi.get('week_start') and qi.get('week_end'):
+        return qi['week_start'], qi['week_end']
+    if qi.get('is_month_range') and qi.get('month_start') and qi.get('month_end'):
+        return qi['month_start'], qi['month_end']
+    if qi.get('time_period') == 'all' or qi.get('is_aggregate'):
+        return dates['three_months_ago'], None
+    if qi.get('time_period') == 'month':
+        return dates['month_ago'], None
+    if qi.get('time_period') == 'day':
+        return dates['today'], dates['today']
+    return dates['week_ago'], None
+
+
 def render_rag_chat(c, tbl="events_dagster"):
     """RAG-based semantic search chat."""
     prompt = st.chat_input("Ask about events semantically...", key="rag_chat")
@@ -110,9 +134,15 @@ def render_rag_chat(c, tbl="events_dagster"):
             
             with st.spinner("🧠 Searching semantically..."):
                 try:
-                    # Get date range - use last 30 days like SQL mode
+                    # Honour the time period in the question, same as SQL mode
                     dates = get_dates()
-                    result = rag_query(prompt, c, llm, top_k=15, min_date=dates['month_ago'], table_name=tbl)
+                    qi = detect_query_type(prompt)
+                    min_date, max_date = resolve_date_range(qi, dates)
+                    st.caption(f"🗓️ Searching {qi['period_label']}")
+                    result = rag_query(
+                        prompt, c, llm, top_k=15,
+                        min_date=min_date, max_date=max_date, table_name=tbl,
+                    )
                     
                     # Display answer (escape $ to prevent LaTeX rendering)
                     st.markdown(result["answer"].replace('$', r'\$'))
