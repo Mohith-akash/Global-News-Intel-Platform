@@ -108,7 +108,16 @@ def polish_batch(headlines: list[str], api_key: str) -> list[str | None]:
                 "model": CEREBRAS_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0,
-                "max_tokens": 4000,
+                # gpt-oss-120b is a reasoning model and bills its hidden
+                # chain-of-thought as completion tokens. Measured on a real
+                # 25-headline batch: without reasoning_effort it spent 2,545 of
+                # 2,889 completion tokens thinking - 88% of the bill - to emit a
+                # JSON array of reformatted strings. Asking for low reasoning
+                # cuts that to 963 and halves the cost per call, with the
+                # validate_polished() guard still catching any bad output.
+                # 1500 is ample: a 25-item array runs ~300 tokens.
+                "max_completion_tokens": 1500,
+                "reasoning_effort": "low",
             },
             timeout=60,
         )
