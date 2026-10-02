@@ -102,7 +102,7 @@ def render_about():
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>Databricks/Spark</b> <span style="color:#ef4444;font-size:0.7rem;">~$500/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>DuckDB</b></td>
-                <td style="padding:0.4rem;color:#64748b;">Columnar OLAP for 20M+ events — runs in-process</td>
+                <td style="padding:0.4rem;color:#64748b;">Columnar OLAP for 30M+ events, runs in-process</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>Snowflake/BigQuery</b> <span style="color:#ef4444;font-size:0.7rem;">~$300/mo</span></td>
@@ -122,12 +122,12 @@ def render_about():
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>OpenAI Embeddings</b> <span style="color:#ef4444;font-size:0.7rem;">~$50/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>Voyage AI</b></td>
-                <td style="padding:0.4rem;color:#64748b;">200M free tokens — creates RAG embeddings</td>
+                <td style="padding:0.4rem;color:#64748b;">200M free tokens, creates RAG embeddings</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>OpenAI GPT-4 API</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>Cerebras</b></td>
-                <td style="padding:0.4rem;color:#64748b;">GPT-OSS 120B free tier — Text-to-SQL + RAG</td>
+                <td style="padding:0.4rem;color:#64748b;">GPT-OSS 120B free tier, Text-to-SQL + RAG</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>dbt Cloud</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
@@ -137,7 +137,7 @@ def render_about():
             <tr>
                 <td style="padding:0.4rem;color:#94a3b8;"><b>Tableau/Power BI</b> <span style="color:#ef4444;font-size:0.7rem;">~$70/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>Streamlit</b></td>
-                <td style="padding:0.4rem;color:#64748b;">Python dashboards with Plotly — free hosting</td>
+                <td style="padding:0.4rem;color:#64748b;">Python dashboards with Plotly, free hosting</td>
             </tr>
         </table>
         <div style="display:flex;justify-content:space-around;margin-top:1rem;padding-top:1rem;border-top:1px solid #1e3a5f;">
@@ -207,7 +207,7 @@ def render_about():
             </div>
             <div style="display:flex;justify-content:space-around;padding-top:0.75rem;border-top:1px solid #1e3a5f;">
                 <div style="text-align:center;">
-                    <div style="font-size:1.25rem;font-weight:700;color:#06b6d4;">20M+</div>
+                    <div style="font-size:1.25rem;font-weight:700;color:#06b6d4;">30M+</div>
                     <div style="font-size:0.65rem;color:#64748b;">Events</div>
                 </div>
                 <div style="text-align:center;">
