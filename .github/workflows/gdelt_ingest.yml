@@ -39,14 +39,14 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirements-etl.txt
 
     # 4. Run Dagster Pipeline (Polars-powered)
     - name: Execute Dagster Job (Polars)
       env:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
       run: |
-        echo "🚀 Starting GDELT Ingestion (Polars + custom validation)..."
+        echo "🚀 Starting GDELT Ingestion (Polars + Great Expectations)..."
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
         echo "✅ Data Refresh Complete."
 

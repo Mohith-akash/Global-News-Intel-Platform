@@ -1,0 +1,5 @@
+# ingest job only (gdelt_ingest.yml). kept out of requirements.txt so the
+# streamlit app doesn't install GX + scipy it never uses, and changing this
+# file doesn't trigger a streamlit cloud rebuild
+-r requirements.txt
+great_expectations==1.23.2

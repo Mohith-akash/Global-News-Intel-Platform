@@ -1,5 +1,5 @@
 """
-GDELT ingestion pipeline: Polars-based extraction with schema/threshold
+GDELT ingestion pipeline: Polars-based extraction, Great Expectations
 validation, loading into MotherDuck via Dagster assets.
 
 Runs every 15 minutes via GitHub Actions; embeddings run separately
@@ -55,176 +55,85 @@ GDELT_SCHEMA = {
 
 
 # =============================================================================
-# DATA QUALITY VALIDATION
+# DATA QUALITY VALIDATION (Great Expectations / GX Core)
 # =============================================================================
 
-class DataQualityValidator:
+def build_gdelt_suite(batches: int = 1):
     """
-    Custom schema + threshold validation for GDELT data.
-    Validates GDELT data before loading to warehouse.
+    Expectation suite for one ingestion run of GDELT events.
+    Row count bounds are per 15-min batch, scaled by how many batches the
+    run pulled (96 by default) - a fixed 100-50,000 range failed every run
+    once the 24h lookback went in.
     """
-    
-    def __init__(self, df: pl.DataFrame):
-        self.df = df
-        self.results = []
-        self.passed = True
-    
-    def expect_column_to_exist(self, column: str) -> "DataQualityValidator":
-        """Expect a column to exist in the DataFrame."""
-        exists = column in self.df.columns
-        self.results.append({
-            "expectation": "expect_column_to_exist",
-            "column": column,
-            "success": exists
-        })
-        if not exists:
-            self.passed = False
-        return self
-    
-    def expect_column_values_to_not_be_null(self, column: str, threshold: float = 0.95) -> "DataQualityValidator":
-        """Expect column to have at least threshold% non-null values."""
-        if column not in self.df.columns:
-            self.results.append({
-                "expectation": "expect_column_values_to_not_be_null",
-                "column": column,
-                "success": False,
-                "reason": "Column does not exist"
-            })
-            self.passed = False
-            return self
-        
-        non_null_ratio = 1 - (self.df[column].null_count() / len(self.df))
-        success = non_null_ratio >= threshold
-        self.results.append({
-            "expectation": "expect_column_values_to_not_be_null",
-            "column": column,
-            "success": success,
-            "non_null_ratio": round(non_null_ratio, 4),
-            "threshold": threshold
-        })
-        if not success:
-            self.passed = False
-        return self
-    
-    def expect_column_values_to_be_unique(self, column: str) -> "DataQualityValidator":
-        """Expect column values to be unique (no duplicates)."""
-        if column not in self.df.columns:
-            self.results.append({
-                "expectation": "expect_column_values_to_be_unique",
-                "column": column,
-                "success": False,
-                "reason": "Column does not exist"
-            })
-            self.passed = False
-            return self
-        
-        unique_count = self.df[column].n_unique()
-        total_count = len(self.df)
-        success = unique_count == total_count
-        self.results.append({
-            "expectation": "expect_column_values_to_be_unique",
-            "column": column,
-            "success": success,
-            "unique_count": unique_count,
-            "total_count": total_count
-        })
-        # Note: We don't fail on duplicates - we'll deduplicate later
-        return self
-    
-    def expect_column_values_to_be_between(self, column: str, min_val: float, max_val: float) -> "DataQualityValidator":
-        """Expect column values to be within a range."""
-        if column not in self.df.columns:
-            self.results.append({
-                "expectation": "expect_column_values_to_be_between",
-                "column": column,
-                "success": False,
-                "reason": "Column does not exist"
-            })
-            return self
-        
-        # Filter out nulls for range check
-        non_null = self.df.filter(pl.col(column).is_not_null())
-        if len(non_null) == 0:
-            self.results.append({
-                "expectation": "expect_column_values_to_be_between",
-                "column": column,
-                "success": True,
-                "reason": "No non-null values to check"
-            })
-            return self
-        
-        in_range = non_null.filter(
-            (pl.col(column) >= min_val) & (pl.col(column) <= max_val)
-        )
-        ratio = len(in_range) / len(non_null)
-        success = ratio >= 0.99  # Allow 1% outliers
-        self.results.append({
-            "expectation": "expect_column_values_to_be_between",
-            "column": column,
-            "success": success,
-            "min": min_val,
-            "max": max_val,
-            "in_range_ratio": round(ratio, 4)
-        })
-        return self
-    
-    def expect_table_row_count_to_be_between(self, min_rows: int, max_rows: int) -> "DataQualityValidator":
-        """Expect table to have between min and max rows."""
-        row_count = len(self.df)
-        success = min_rows <= row_count <= max_rows
-        self.results.append({
-            "expectation": "expect_table_row_count_to_be_between",
-            "success": success,
-            "row_count": row_count,
-            "min": min_rows,
-            "max": max_rows
-        })
-        if not success:
-            self.passed = False
-        return self
-    
-    def validate(self) -> dict:
-        """Run all validations and return results."""
-        passed_count = sum(1 for r in self.results if r["success"])
-        failed_count = len(self.results) - passed_count
-        
-        return {
-            "success": self.passed,
-            "statistics": {
-                "evaluated_expectations": len(self.results),
-                "successful_expectations": passed_count,
-                "unsuccessful_expectations": failed_count
-            },
-            "results": self.results
-        }
+    import great_expectations as gx
+    import great_expectations.expectations as gxe
 
+    suite = gx.ExpectationSuite(name="gdelt_events")
 
-def validate_gdelt_data(df: pl.DataFrame) -> dict:
-    """
-    Run data quality checks on GDELT data.
-    Returns validation results dict.
-    """
-    validator = DataQualityValidator(df)
-    
     # Required columns must exist
-    validator.expect_column_to_exist("EVENT_ID")
-    validator.expect_column_to_exist("DATE")
-    validator.expect_column_to_exist("MAIN_ACTOR")
-    
-    # Primary key should not be null
-    validator.expect_column_values_to_not_be_null("EVENT_ID", threshold=1.0)
-    validator.expect_column_values_to_not_be_null("DATE", threshold=1.0)
-    
-    # Check for reasonable row count (GDELT 15-min batch)
-    validator.expect_table_row_count_to_be_between(100, 50000)
-    
-    # Goldstein scale should be between -10 and 10
-    validator.expect_column_values_to_be_between("IMPACT_SCORE", -10.0, 10.0)
-    
-    # Sentiment score (AvgTone) typically between -100 and 100
-    validator.expect_column_values_to_be_between("SENTIMENT_SCORE", -100.0, 100.0)
-    
-    return validator.validate()
+    for column in ("EVENT_ID", "DATE", "MAIN_ACTOR"):
+        suite.add_expectation(gxe.ExpectColumnToExist(column=column))
+
+    # Primary key and date should never be null
+    suite.add_expectation(gxe.ExpectColumnValuesToNotBeNull(column="EVENT_ID"))
+    suite.add_expectation(gxe.ExpectColumnValuesToNotBeNull(column="DATE"))
+
+    # Reasonable row count: 100 to 50,000 per batch
+    suite.add_expectation(gxe.ExpectTableRowCountToBeBetween(
+        min_value=100 * batches, max_value=50000 * batches))
+
+    # Goldstein scale is -10 to 10, AvgTone typically -100 to 100.
+    # Nulls are skipped, 1% outliers allowed.
+    suite.add_expectation(gxe.ExpectColumnValuesToBeBetween(
+        column="IMPACT_SCORE", min_value=-10.0, max_value=10.0, mostly=0.99))
+    suite.add_expectation(gxe.ExpectColumnValuesToBeBetween(
+        column="SENTIMENT_SCORE", min_value=-100.0, max_value=100.0, mostly=0.99))
+
+    return suite
+
+
+def validate_gdelt_data(df: pl.DataFrame, batches: int = 1) -> dict:
+    """
+    Run the GX suite against an ingestion run's DataFrame.
+    Returns success, GX statistics and the failed expectations only.
+    """
+    # imported here, not at module top: dagster runs each step in its own
+    # process and only this one needs GX (slow import)
+    os.environ.setdefault("GX_ANALYTICS_ENABLED", "False")
+    # basicConfig above puts root at INFO, GX floods it with registry noise on import
+    logging.getLogger("great_expectations").setLevel(logging.WARNING)
+    import great_expectations as gx
+    from great_expectations.data_context.types.base import ProgressBarsConfig
+
+    context = gx.get_context(mode="ephemeral")
+    context.variables.progress_bars = ProgressBarsConfig(globally=False)
+    batch_definition = (
+        context.data_sources.add_pandas("gdelt")
+        .add_dataframe_asset(name="events")
+        .add_batch_definition_whole_dataframe("ingest_run")
+    )
+    suite = context.suites.add(build_gdelt_suite(batches))
+    validation = context.validation_definitions.add(
+        gx.ValidationDefinition(name="gdelt_events_check", data=batch_definition, suite=suite)
+    )
+
+    result = validation.run(batch_parameters={"dataframe": df.to_pandas()})
+
+    failed = []
+    for r in result.results:
+        if r.success:
+            continue
+        failed.append({
+            "expectation": r.expectation_config.type,
+            "column": r.expectation_config.kwargs.get("column"),
+            "observed": r.result.get("observed_value", r.result.get("unexpected_percent")),
+        })
+
+    return {
+        "success": result.success,
+        "statistics": result.statistics,
+        "results": failed,
+    }
 
 
 # =============================================================================
@@ -425,7 +334,7 @@ def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
         
         # Data Quality Validation
         logger.info("🔍 Running data quality validation...")
-        validation_result = validate_gdelt_data(df)
+        validation_result = validate_gdelt_data(df, batches=len(parts))
         
         if not validation_result["success"]:
             context.log.warning(f"⚠️ Data quality issues: {validation_result['results']}")
