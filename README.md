@@ -29,7 +29,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  INGESTION (hourly; each run re-pulls 5h of 15-min batches, dedup by ID) │
-│  GitHub Actions → Dagster → Polars → schema/threshold validation         │
+│  GitHub Actions → Dagster → Polars → Great Expectations (GX) checks      │
 └─────────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -55,7 +55,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 ### Data flow
 
 1. **Extract:** GDELT Events API + GKG feed, parsed with Polars
-2. **Validate:** schema and threshold checks before anything is written
+2. **Validate:** Great Expectations suite (required columns, null keys, value ranges, batch size) before anything is written
 3. **Load:** deduplicated inserts into MotherDuck (serverless DuckDB)
 4. **Transform:** dbt models build staging views and mart tables
 5. **Emotions:** GKG tone/fear/joy/topics extracted on a rolling 24h window
@@ -77,7 +77,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | AI chat | Plain-English questions answered via generated SQL or RAG |
 | LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
 | Hourly updates | External cron trigger → GitHub Actions → Dagster job |
-| Data quality gates | Custom schema + threshold validation before load |
+| Data quality gates | Great Expectations suite on every ingestion run, before load |
 | Trend analysis | 30-day time series, intensity tracking, actor monitoring |
 
 ## Screenshots
@@ -104,7 +104,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 |-------|------|------|
 | Processing | Polars | DataFrame processing (replaced Pandas in the hot path) |
 | Transformation | dbt Core | Staging/marts models, schema tests |
-| Validation | Custom validator | Schema + threshold checks at ingestion |
+| Validation | Great Expectations (GX Core) | Expectation suite run at ingestion |
 | Orchestration | Dagster | Asset-based pipeline definitions |
 | Scheduling | GitHub Actions | hourly ingestion, 12-hour embeddings, health monitor |
 | Warehouse | MotherDuck (DuckDB) | Serverless OLAP storage + native vector search |
@@ -142,7 +142,8 @@ streamlit run app.py
 Run the pipeline manually:
 
 ```bash
-# Ingestion (normally triggered hourly)
+# Ingestion (normally triggered hourly), needs the ETL extras
+pip install -r requirements-etl.txt
 python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
 
 # Embedding generation (normally every 12 hours)
