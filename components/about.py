@@ -199,7 +199,7 @@ def render_about():
             </div>
             <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.4rem;">
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🚀 Voyage AI</span>
-                <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🦙 LlamaIndex</span>
+                <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">✅ Great Expectations</span>
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🧠 Cerebras</span>
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">📊 Plotly</span>
                 <span style="background:#1e3a5f;border-radius:6px;padding:0.4rem 0.6rem;color:#e2e8f0;font-size:0.8rem;">🎨 Streamlit</span>

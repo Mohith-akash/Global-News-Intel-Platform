@@ -10,7 +10,7 @@ Serverless ELT pipeline that ingests, processes, and visualizes 100,000+ global 
 |--------|-------|
 | Cumulative events processed | 30M+ |
 | Daily ingestion | 100K+ events |
-| Live operation | 8+ months, continuous scheduled runs |
+| Live operation | Since December 2025, scheduled hourly runs |
 | Unique visitors | 6,000+ in the first few months, 100+ new daily, no promotion |
 | Coverage | 200+ countries, 100+ languages |
 | Typical query latency | < 1 second |
@@ -28,7 +28,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
                      └────────────┬────────────┘
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  INGESTION (hourly; each run re-pulls 5h of 15-min batches, dedup by ID) │
+│  INGESTION (hourly; each run re-pulls 24h of 15-min files, dedup by ID)  │
 │  GitHub Actions → Dagster → Polars → Great Expectations (GX) checks      │
 └─────────────────────────────────────────────────────────────────────────┘
                                   │
@@ -66,7 +66,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 
 The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (~10x faster), bringing the total monthly cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
 
-Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1).
+Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens.
 
 ## Features
 
@@ -76,7 +76,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | Emotion analytics | GKG-powered tracking: fear, joy, positive/negative, global mood index |
 | AI chat | Plain-English questions answered via generated SQL or RAG |
 | LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
-| Hourly updates | External cron trigger → GitHub Actions → Dagster job |
+| Hourly updates | GitHub Actions cron → Dagster job |
 | Data quality gates | Great Expectations suite on every ingestion run, before load |
 | Trend analysis | 30-day time series, intensity tracking, actor monitoring |
 
@@ -108,7 +108,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | Orchestration | Dagster | Asset-based pipeline definitions |
 | Scheduling | GitHub Actions | hourly ingestion, 12-hour embeddings, health monitor |
 | Warehouse | MotherDuck (DuckDB) | Serverless OLAP storage + native vector search |
-| LLM | Cerebras (GPT-OSS 120B) | Text-to-SQL and RAG answers via LlamaIndex |
+| LLM | Cerebras (GPT-OSS 120B) | Text-to-SQL and RAG answers, direct API calls with an output cap |
 | Embeddings | Voyage AI | 1024-dim vectors for semantic search |
 | Frontend | Streamlit + Plotly | Dashboard and charts |
 
@@ -162,7 +162,7 @@ gdelt_project/
 │   ├── config.py             # Configuration constants
 │   ├── database.py           # Database connection
 │   ├── queries.py            # SQL query functions
-│   ├── ai_engine.py          # LLM setup (Cerebras + LlamaIndex)
+│   ├── ai_engine.py          # Cerebras client (direct API, capped output)
 │   ├── rag_engine.py         # RAG engine (Voyage AI + vector search)
 │   ├── data_processing.py    # Headline extraction
 │   ├── utils.py              # Utility functions
