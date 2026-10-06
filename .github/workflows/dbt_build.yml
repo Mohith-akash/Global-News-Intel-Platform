@@ -1,9 +1,10 @@
 name: Weekly dbt Build
 
-# Builds the staging views and mart tables in MotherDuck and runs every dbt
-# test, then checks source freshness. Weekly, not daily: a full build scans
-# the 30M-row events table several times (~3.5 min of warehouse time), and
-# MotherDuck Lite has 10 CU-hours a month shared with ingest and the app.
+# Builds staging and the mart tables in MotherDuck and runs every dbt test,
+# then checks source freshness. Weekly and incremental: the first full build
+# (dedup over 30M+ events) hit MotherDuck's daily compute limit on the free
+# plan, which ingest and the app share. stg_events now only re-reads the last
+# 7 days each run.
 on:
   schedule:
     - cron: '30 5 * * 0'   # Sundays 05:30 UTC, off the :00 ingest
