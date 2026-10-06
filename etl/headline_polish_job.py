@@ -115,8 +115,11 @@ def polish_batch(headlines: list[str], api_key: str) -> list[str | None]:
                 # JSON array of reformatted strings. Asking for low reasoning
                 # cuts that to 963 and halves the cost per call, with the
                 # validate_polished() guard still catching any bad output.
-                # 1500 is ample: a 25-item array runs ~300 tokens.
-                "max_completion_tokens": 1500,
+                # The cap covers reasoning too: re-measured Oct 2026 at 850-1150
+                # reasoning + ~350 answer per batch, so 1500 cut some arrays off
+                # mid-JSON ("substring not found"). Billing is per token used,
+                # so the higher cap only costs on batches that would have failed.
+                "max_completion_tokens": 4000,
                 "reasoning_effort": "low",
             },
             timeout=60,
