@@ -57,7 +57,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 1. **Extract:** GDELT Events API + GKG feed, parsed with Polars
 2. **Validate:** Great Expectations suite (required columns, null keys, value ranges, batch size) before anything is written
 3. **Load:** deduplicated inserts into MotherDuck (serverless DuckDB)
-4. **Transform:** dbt models build staging views and mart tables
+4. **Transform:** dbt builds staging views (deduplicated events, cleaned GKG) and five mart tables, then runs 30+ tests and a source freshness check, weekly in GitHub Actions
 5. **Emotions:** GKG tone/fear/joy/topics extracted on a rolling 24h window
 6. **Embed:** Voyage AI generates 1024-dim vectors every 12 hours
 7. **Serve:** Streamlit dashboard with dual-mode AI chat (SQL + RAG)
@@ -66,7 +66,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 
 The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (~10x faster), bringing the total monthly cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
 
-Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens.
+Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens. The SQL chat also started with the LLM writing the query (LlamaIndex `NLSQLTableQueryEngine`). It got GDELT's conventions wrong (dates as `YYYY-MM-DD` instead of `YYYYMMDD`, the wrong year, 2-letter instead of 3-letter country codes), so questions are now routed to tested query templates and the LLM only writes the answer from the results.
 
 ## Features
 
@@ -74,7 +74,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 |---------|-------------|
 | Real-time dashboard | Live metrics, trending news, sentiment, geographic distribution |
 | Emotion analytics | GKG-powered tracking: fear, joy, positive/negative, global mood index |
-| AI chat | Plain-English questions answered via generated SQL or RAG |
+| AI chat | Two modes: RAG (keyword pre-filter plus vector search) and a SQL mode that routes questions to tested query templates; Cerebras writes the answer |
 | LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
 | Hourly updates | GitHub Actions cron → Dagster job |
 | Data quality gates | Great Expectations suite on every ingestion run, before load |
@@ -103,12 +103,12 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 | Layer | Tool | Role |
 |-------|------|------|
 | Processing | Polars | DataFrame processing (replaced Pandas in the hot path) |
-| Transformation | dbt Core | Staging/marts models, schema tests |
+| Transformation | dbt Core | Staging/marts models, schema tests, weekly build in GitHub Actions |
 | Validation | Great Expectations (GX Core) | Expectation suite run at ingestion |
 | Orchestration | Dagster | Asset-based pipeline definitions |
 | Scheduling | GitHub Actions | hourly ingestion, 12-hour embeddings, health monitor |
 | Warehouse | MotherDuck (DuckDB) | Serverless OLAP storage + native vector search |
-| LLM | Cerebras (GPT-OSS 120B) | Text-to-SQL and RAG answers, direct API calls with an output cap |
+| LLM | Cerebras (GPT-OSS 120B) | Chat answers and headline repair, direct API calls with an output cap |
 | Embeddings | Voyage AI | 1024-dim vectors for semantic search |
 | Frontend | Streamlit + Plotly | Dashboard and charts |
 
@@ -149,8 +149,8 @@ python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
 # Embedding generation (normally every 12 hours)
 python -m dagster job execute -f etl/embedding_job.py -j gdelt_embedding_job
 
-# dbt models
-cd dbt && dbt run
+# dbt models + tests (MOTHERDUCK_TOKEN must be set)
+cd dbt && dbt build --profiles-dir .
 ```
 
 ## Project structure
@@ -181,7 +181,9 @@ gdelt_project/
 └── .github/workflows/
     ├── gdelt_ingest.yml          # hourly ingestion
     ├── gdelt_embeddings_12hr.yml # 12-hour embedding job
-    └── health_monitor.yml        # Uptime checks + ntfy alerts
+    ├── dbt_build.yml             # weekly dbt build + tests
+    ├── tests.yml                 # pytest on push
+    └── health_monitor.yml        # Uptime checks, outage issue alerts
 ```
 
 ## License
