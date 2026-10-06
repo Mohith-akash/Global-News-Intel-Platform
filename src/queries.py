@@ -2,7 +2,7 @@
 Database query functions for GDELT platform.
 
 All dashboard data is fetched by ONE cached bundle (_dashboard_bundle) that
-runs every query in a single worker subprocess — one python spawn and one
+runs every query in a single worker subprocess - one python spawn and one
 MotherDuck handshake per cache refresh instead of one per query, which is
 what made cold page loads render piece by piece for 30-60s. The public
 get_* functions just pick their slice out of the bundle, keeping the old

@@ -226,7 +226,7 @@ def search_similar_headlines(
         merged = merged.head(top_k)
         return merged
 
-    # Last resort — keyword search without vectors
+    # Last resort - keyword search without vectors
     logger.info("Vector searches returned no results, falling back to keyword search")
     return _fallback_keyword_search(query, conn, top_k, min_date, max_date, table_name=tbl)
 
@@ -246,7 +246,7 @@ def _hybrid_search(
     
     This avoids scanning the entire table's embeddings on MotherDuck.
     """
-    # Build keyword filter — require ANY keyword to match headline
+    # Build keyword filter - require ANY keyword to match headline
     like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
     
     sql = f"""
@@ -433,7 +433,7 @@ def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None, m
             "sql": None
         }
 
-    # GDELT MAIN_ACTOR codes that are entity-type labels, not real actors — skip these
+    # GDELT MAIN_ACTOR codes that are entity-type labels, not real actors - skip these
     _GDELT_NOISE_ACTORS = {
         'army', 'government', 'police', 'military', 'industry', 'business',
         'media', 'economist', 'official', 'minister', 'rebel', 'opposition',
@@ -491,7 +491,7 @@ def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None, m
             except Exception:
                 pass
 
-        # Build context line — no actor field, it's almost always noise from GDELT
+        # Build context line - no actor field, it's almost always noise from GDELT
         parts = [f"[{date_fmt}]", headline]
         if country:
             parts.append(f"— {country}")

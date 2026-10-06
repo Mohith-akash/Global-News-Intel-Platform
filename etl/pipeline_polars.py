@@ -649,7 +649,7 @@ def gdelt_gkg_motherduck(context: AssetExecutionContext, gdelt_gkg_data: pl.Data
 
                 # Retention: the dashboard only reads the last 24h of GKG data
                 # (dbt daily models use up to 30 days), so anything older is
-                # dead weight — without this the table grows ~3M rows/month.
+                # dead weight - without this the table grows ~3M rows/month.
                 # GKG DATE is a 14-digit numeric timestamp (YYYYMMDDHHMMSS).
                 cutoff = int((datetime.datetime.now(datetime.timezone.utc)
                               - datetime.timedelta(days=GKG_RETENTION_DAYS)).strftime('%Y%m%d000000'))

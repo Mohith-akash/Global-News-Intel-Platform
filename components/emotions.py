@@ -17,7 +17,7 @@ def _gkg_cutoff_24h():
 
     Rounded down to the hour so the cache key stays stable between reruns
     instead of busting the cache on every page load. Without this filter the
-    emotion queries scan the whole multi-million-row table — and the UI
+    emotion queries scan the whole multi-million-row table - and the UI
     labels claim "rolling 24h".
     """
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
