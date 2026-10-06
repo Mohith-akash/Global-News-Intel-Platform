@@ -19,16 +19,23 @@ permissions:
 env:
   APP_URL: ${{ vars.APP_URL || 'https://global-news-intel-platform.streamlit.app' }}
   NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}   # optional phone push
+  # there is no checkout, so gh can't infer the repo from .git. without this
+  # every gh call died with "not a git repository" and no alert was filed
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   monitor:
-    runs-on: ubuntu-latest
+    # pinned: ubuntu-latest moves to 26.04 on 2026-10-19
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      # no --with-deps: its apt-get hung on the ubuntu mirrors and timed
+      # out runs; the hosted runner already ships chromium's libraries
       - name: Install Playwright
+        timeout-minutes: 5
         run: |
           pip install --quiet playwright
-          playwright install chromium --with-deps
+          playwright install chromium
 
       - name: Load the app and check it rendered
         id: check

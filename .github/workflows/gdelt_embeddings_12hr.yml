@@ -6,19 +6,24 @@ on:
     - cron: '0 0,12 * * *'
   workflow_dispatch: # Manual trigger
 
+permissions:
+  contents: read
+  issues: write   # the failure alert below files an issue; the default token is read-only
+
 jobs:
   generate-embeddings:
-    runs-on: ubuntu-latest
+    # pinned: ubuntu-latest moves to 26.04 on 2026-10-19
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
     # 1. Checkout code
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     # 2. Set up Python with caching
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: '3.11'
         cache: 'pip'
@@ -52,10 +57,18 @@ jobs:
 
     - name: Notify on failure
       if: failure()
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
       run: |
-        echo "::error::GDELT 12-hr embedding job failed — check logs above"
-        curl -s -o /dev/null -w "%{http_code}" \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          -X POST "https://api.github.com/repos/${{ github.repository }}/issues" \
-          -d "{\"title\":\"[ALERT] GDELT embeddings failed $(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"body\":\"The 12-hr embedding generation job failed.\\n\\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"labels\":[\"bug\"]}" || true
+        echo "::error::GDELT 12-hr embedding job failed - check logs above"
+        OPEN=$(gh issue list --state open --json title --jq '[.[] | select(.title | startswith("[ALERT] GDELT embeddings failed"))] | length')
+        if [ "$OPEN" != "0" ]; then
+          echo "Alert issue already open, not filing another."
+          exit 0
+        fi
+        gh issue create --label bug \
+          --title "[ALERT] GDELT embeddings failed $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --body "The 12-hr embedding generation job failed.
+
+        Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
