@@ -579,8 +579,10 @@ def process_gkg_batch_polars(content: bytes) -> pl.DataFrame:
     # Clean up - drop raw fields, keep processed ones
     df = df.drop(["TONE", "GCAM", "THEMES"])
     
-    # Filter out rows with null GKG_ID
-    df = df.filter(pl.col("GKG_ID").is_not_null())
+    # Keep real records only. Line breaks inside the extras field split some
+    # records, and the fragments ("---", "</PAGE_LINKS>...") came through as
+    # rows with no DATE; a real GKG_ID looks like 20261006073000-123
+    df = df.filter(pl.col("GKG_ID").str.contains(r"^\d{14}-T?\d+$").fill_null(False))
     
     logger.info(f"📊 Processed {len(df):,} GKG records")
     return df
