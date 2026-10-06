@@ -3,7 +3,6 @@ AI Chat component for GDELT dashboard.
 Supports two modes: SQL (precise queries) and RAG (semantic search).
 """
 
-import re
 import pandas as pd
 import streamlit as st
 
@@ -11,8 +10,9 @@ from src.database import safe_query
 from src.ai_engine import get_cerebras_llm, AI_AVAILABLE
 from src.data_processing import extract_headline
 from src.headline_utils import clean_headline
-from src.utils import get_dates, get_country, get_country_code, get_impact_label, detect_query_type
+from src.utils import get_dates, get_country, get_impact_label, detect_query_type
 from src.rag_engine import rag_query, get_voyage_api_key
+from src.sql_templates import build_sql
 
 
 def render_ai_chat(c, tbl="events_dagster"):
@@ -210,151 +210,20 @@ def render_sql_chat(c, tbl="events_dagster"):
             try:
                 dates = get_dates()
                 qi = detect_query_type(prompt)
-                
-                if qi['is_specific_date'] and qi['specific_date']:
-                    date_filter = f"DATE = '{qi['specific_date']}'"
-                elif qi.get('is_week_range') and qi.get('week_start') and qi.get('week_end'):
-                    # Handle "last week" or "this week" queries
-                    date_filter = f"DATE >= '{qi['week_start']}' AND DATE <= '{qi['week_end']}'"
-                elif qi.get('is_month_range') and qi.get('month_start') and qi.get('month_end'):
-                    # Handle month-only queries like "events in october"
-                    date_filter = f"DATE >= '{qi['month_start']}' AND DATE <= '{qi['month_end']}'"
-                elif qi['time_period'] == 'all' or qi['is_aggregate']:
-                    date_filter = f"DATE >= '{dates['three_months_ago']}'"
-                elif qi['time_period'] == 'month':
-                    date_filter = f"DATE >= '{dates['month_ago']}'"
-                elif qi['time_period'] == 'day':
-                    date_filter = f"DATE = '{dates['today']}'"
-                else:
-                    date_filter = f"DATE >= '{dates['week_ago']}'"
 
-                sql = None
                 answer = ""
-                is_country_aggregate = False
-                is_count_aggregate = False
-                country_filter_name = None
                 with st.spinner("🔍 Querying..."):
-                    # Determine display limit from query (default 5, max 10)
-                    limit = 5
-                    m = re.search(r'(\d+)\s*(events?|results?|items?)', prompt.lower())
-                    if m: 
-                        limit = min(int(m.group(1)), 10)
-                    m2 = re.search(r'top\s+(\d+)', prompt.lower())
-                    if m2:
-                        limit = min(int(m2.group(1)), 10)
-                    
-                    # For month-range queries, cap at 5 to keep responses focused
-                    if qi.get('is_month_range'):
-                        limit = min(limit, 5)
-                    
-                    # Fetch more rows to account for filtering/deduplication (more = better quality)
-                    fetch_limit = min(limit * 50, 500)  # 50x multiplier, capped at 500
-                    
-                    # Helper: detect country codes in prompt
-                    def get_country_codes_from_prompt(text):
-                        codes = []
-                        clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
-                        
-                        # Check for region aliases first (e.g., "middle east" -> multiple country codes)
-                        try:
-                            from src.config import REGION_ALIASES
-                            for region, region_codes in REGION_ALIASES.items():
-                                if region in clean_text:
-                                    codes.extend(region_codes)
-                                    return codes  # Return region codes immediately
-                        except ImportError:
-                            pass
-                        
-                        # Check for multi-word phrases first
-                        multi_word_regions = [
-                            'middle east', 'united states', 'united kingdom', 'great britain',
-                            'south korea', 'north korea', 'saudi arabia', 'south africa',
-                            'new zealand'
-                        ]
-                        for phrase in multi_word_regions:
-                            if phrase in clean_text:
-                                code = get_country_code(phrase)
-                                if code and code not in codes:
-                                    codes.append(code)
-                        
-                        # Then check individual words
-                        for w in clean_text.split():
-                            if len(w) >= 2:
-                                code = get_country_code(w)
-                                if code and code not in codes: 
-                                    codes.append(code)
-                        return codes
-                    
-                    prompt_lower = prompt.lower()
-                    has_crisis = 'crisis' in prompt_lower or 'severe' in prompt_lower
-                    has_country_word = 'countr' in prompt_lower
-                    has_major = 'major' in prompt_lower or 'important' in prompt_lower or 'significant' in prompt_lower or 'biggest' in prompt_lower or 'trending' in prompt_lower
-                    
-                    # Check for specific query types (ORDER MATTERS!)
-                    
-                    # 1. COUNTRIES WITH CRISIS - must come before plain crisis
-                    if has_crisis and has_country_word:
-                        is_country_aggregate = True
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
-                    
-                    # 2. Plain crisis events (require a few articles for quality headlines)
-                    elif has_crisis:
-                        # Check if user specified a country for crisis events
-                        crisis_codes = get_country_codes_from_prompt(prompt)
-                        if crisis_codes:
-                            if len(crisis_codes) == 1:
-                                crisis_country_filter = f"ACTOR_COUNTRY_CODE = '{crisis_codes[0]}'"
-                            else:
-                                codes_str = "', '".join(crisis_codes)
-                                crisis_country_filter = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {crisis_country_filter} AND ARTICLE_COUNT >= 3 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
-                        else:
-                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 3 AND IMPACT_SCORE < -3 AND {date_filter} ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT {fetch_limit}"
-                    
-                    # 3. MAJOR/IMPORTANT events - higher article count (trending stories)
-                    elif has_major:
-                        sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
-                    
-                    # 4. TOP COUNTRIES - check this BEFORE is_aggregate
-                    elif 'top' in prompt_lower and has_country_word:
-                        is_country_aggregate = True
-                        sql = f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}"
-                    
-                    # 5. Aggregate queries (how many, count, total) - now with country support
-                    elif qi['is_aggregate']:
-                        is_count_aggregate = True
-                        codes = get_country_codes_from_prompt(prompt)
-                        if codes:
-                            cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
-                            country_filter_name = get_country(codes[0]) or codes[0]
-                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND {date_filter}"
-                        else:
-                            sql = f"SELECT COUNT(*) as TOTAL_EVENTS FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {date_filter}"
-                    
-                    # 6. Default: specific events query
-                    else:
-                        codes = get_country_codes_from_prompt(prompt)
+                    # keyword-routed template; dates and country codes are bound
+                    # parameters, `sql` is the readable version shown in the chat
+                    plan = build_sql(prompt, qi, dates, tbl)
+                    sql = plan.display_sql()
+                    limit = plan.limit
+                    is_country_aggregate = plan.is_country_aggregate
+                    is_count_aggregate = plan.is_count_aggregate
+                    country_filter_name = plan.country_filter_name
 
-                        # Require a few articles so headlines are real stories, not noise
-                        article_threshold = 3
-
-                        if codes:
-                            if len(codes) == 1:
-                                cf = f"ACTOR_COUNTRY_CODE = '{codes[0]}'"
-                            else:
-                                codes_str = "', '".join(codes)
-                                cf = f"ACTOR_COUNTRY_CODE IN ('{codes_str}')"
-                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND {cf} AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT {fetch_limit}"
-                        else:
-                            sql = f"SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM {tbl} WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > {article_threshold} AND {date_filter} ORDER BY ARTICLE_COUNT DESC LIMIT {fetch_limit}"
-                    
-                    # Enforce LIMIT on aggregate queries only (event queries need more rows for filtering)
-                    if sql and (is_count_aggregate or is_country_aggregate):
-                        if 'LIMIT' not in sql.upper():
-                            sql = sql.rstrip(';') + f' LIMIT {limit}'
-                    
-                    if sql:
-                        data = safe_query(c, sql)
+                    if plan.sql:
+                        data = safe_query(c, plan.sql, plan.params)
                         if not data.empty:
                             dd = data.copy()
                             dd.columns = [col.upper() for col in dd.columns]

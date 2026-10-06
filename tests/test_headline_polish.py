@@ -7,8 +7,19 @@ from pathlib import Path
 
 # Load the module file directly with stubs for its heavy runtime deps
 # (dagster/duckdb/requests/dotenv aren't needed to test validate_polished).
+# Stub only what isn't installed: a stub left in sys.modules would replace the
+# real package for every test collected after this one.
+def _installed(name):
+    try:
+        __import__(name)
+        return True
+    except ImportError:
+        return False
+
+
 for name in ("duckdb", "requests"):
-    sys.modules.setdefault(name, types.ModuleType(name))
+    if not _installed(name):
+        sys.modules[name] = types.ModuleType(name)
 
 dagster_stub = types.ModuleType("dagster")
 for attr in ("asset", "Output", "Definitions", "ScheduleDefinition", "define_asset_job", "AssetExecutionContext"):
@@ -17,11 +28,13 @@ dagster_stub.asset = lambda *a, **k: (lambda f: f)
 dagster_stub.define_asset_job = lambda *a, **k: None
 dagster_stub.ScheduleDefinition = lambda *a, **k: None
 dagster_stub.Definitions = lambda *a, **k: None
-sys.modules.setdefault("dagster", dagster_stub)
+if not _installed("dagster"):
+    sys.modules["dagster"] = dagster_stub
 
 dotenv_stub = types.ModuleType("dotenv")
 dotenv_stub.load_dotenv = lambda *a, **k: None
-sys.modules.setdefault("dotenv", dotenv_stub)
+if not _installed("dotenv"):
+    sys.modules["dotenv"] = dotenv_stub
 
 _spec = importlib.util.spec_from_file_location(
     "headline_polish_job", Path(__file__).resolve().parent.parent / "etl" / "headline_polish_job.py"
