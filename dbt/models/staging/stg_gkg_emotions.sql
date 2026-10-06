@@ -9,7 +9,7 @@
 
 SELECT
     GKG_ID as gkg_id,
-    DATE as date_str,
+    CAST(DATE AS VARCHAR) as date_str,
     SOURCE as source_name,
     PERSONS as persons,
     ORGS as organizations,
@@ -52,3 +52,7 @@ SELECT
         ELSE NULL
     END AS dominant_emotion
 FROM {{ source('gdelt', 'gkg_emotions') }}
+-- broken records split by line breaks in the extras field have no DATE and
+-- a fragment for an id; the ingest filters them now, this covers old rows
+WHERE DATE IS NOT NULL
+QUALIFY ROW_NUMBER() OVER (PARTITION BY GKG_ID ORDER BY DATE DESC) = 1

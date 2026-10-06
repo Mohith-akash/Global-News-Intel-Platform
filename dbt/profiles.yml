@@ -1,3 +1,5 @@
+# MotherDuck reads MOTHERDUCK_TOKEN from the environment; passing it as a
+# duckdb setting fails on duckdb 1.5 ("can only be set during initialization")
 gdelt_dbt:
   target: dev
   outputs:
@@ -7,13 +9,9 @@ gdelt_dbt:
       extensions:
         - httpfs
         - parquet
-      settings:
-        motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
     prod:
       type: duckdb
       path: 'md:gdelt_db'
       extensions:
         - httpfs
         - parquet
-      settings:
-        motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
