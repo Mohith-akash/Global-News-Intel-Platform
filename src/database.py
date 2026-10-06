@@ -67,7 +67,7 @@ def _open_breaker(reason):
     logger.error("MotherDuck %s - circuit breaker open for %ss", reason, _BREAKER_COOLDOWN)
 
 
-def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-site compat
+def safe_query(conn, sql, params=None):  # noqa: ARG001 - conn kept for call-site compat
     """Execute SQL against MotherDuck in an isolated subprocess.
 
     Crash modes this survives (all observed in production):
@@ -81,7 +81,7 @@ def safe_query(conn, sql, params=None):  # noqa: ARG001 — conn kept for call-s
     With @st.cache_data TTL=24h on the callers, the ~1s subprocess overhead
     is paid a handful of times per day.
 
-    Pass `params` (a list) for parameterized queries — the RAG keyword filters
+    Pass `params` (a list) for parameterized queries - the RAG keyword filters
     use this to bind values safely instead of string interpolation.
     """
     if time.time() < _breaker_until:
@@ -129,7 +129,7 @@ def safe_query_batch(queries, timeout=90):
     """Run many queries in ONE worker subprocess.
 
     `queries` is {name: (sql, params_or_None)}. Returns {name: DataFrame},
-    with an empty frame (and a log line) for any query that errored — same
+    with an empty frame (and a log line) for any query that errored - same
     per-query contract as safe_query.
 
     This exists because a cold dashboard load runs ~17 cached queries; one
@@ -138,7 +138,7 @@ def safe_query_batch(queries, timeout=90):
     batch pays the spawn + handshake once.
 
     Raises WarehouseUnavailable (and opens the breaker) if the connection
-    itself hangs, dies, or is quota-blocked — identical to safe_query.
+    itself hangs, dies, or is quota-blocked - identical to safe_query.
     """
     if time.time() < _breaker_until:
         raise WarehouseUnavailable("warehouse circuit breaker open")

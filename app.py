@@ -78,7 +78,7 @@ def main():
     conn = get_db()
     tbl = detect_table(conn)
 
-    # Auto-refresh hourly to match the ingest cadence — JS reload works in all
+    # Auto-refresh hourly to match the ingest cadence - JS reload works in all
     # browsers unlike <meta> in body. Was 5 minutes, which re-ran every session
     # 12x/hour for data that only changes once an hour.
     st.markdown('<script>setTimeout(()=>location.reload(),3600000)</script>', unsafe_allow_html=True)

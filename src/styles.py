@@ -161,7 +161,7 @@ def inject_css():
             border-bottom: none !important;
             box-shadow: none !important;
         }
-        /* Kill tab highlight/underline — every known method for Streamlit */
+        /* Kill tab highlight/underline - every known method for Streamlit */
         [data-baseweb="tab-highlight"],
         .stTabs [data-baseweb="tab-highlight"],
         div[data-baseweb="tab-highlight"] {

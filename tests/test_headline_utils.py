@@ -1,4 +1,4 @@
-"""Unit tests for src.headline_utils — URL headline extraction and cleaning."""
+"""Unit tests for src.headline_utils - URL headline extraction and cleaning."""
 
 import importlib.util
 from pathlib import Path

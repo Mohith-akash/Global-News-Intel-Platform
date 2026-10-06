@@ -96,7 +96,7 @@ def validate_polished(original: str, polished) -> str | None:
 def polish_batch(headlines: list[str], api_key: str) -> list[str | None]:
     """Send one batch of headlines to Cerebras; return validated results.
 
-    Any parse failure or API error returns all-None for the batch — rows stay
+    Any parse failure or API error returns all-None for the batch - rows stay
     NULL and the dashboard keeps using the regex-cleaned headline.
     """
     prompt = PROMPT_TEMPLATE.format(headlines_json=json.dumps(headlines))
