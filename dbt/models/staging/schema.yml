@@ -3,25 +3,42 @@ version: 2
 sources:
   - name: gdelt
     description: "Raw GDELT data ingested by Dagster pipeline"
+    schema: main   # the ingest writes to gdelt_db.main; without this dbt looked in a "gdelt" schema
+    # DATE is a calendar day (events: 'YYYYMMDD', gkg: YYYYMMDDHHMMSS), so
+    # freshness is checked in days; it catches an ingest that has stopped
     freshness:
-      warn_after: {count: 1, period: hour}
-      error_after: {count: 3, period: hour}
-    loaded_at_field: DATE
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 72, period: hour}
+    loaded_at_field: "strptime(substr(CAST(DATE AS VARCHAR), 1, 8), '%Y%m%d')"
     tables:
       - name: events_dagster
         description: "Raw events from GDELT API"
+        columns:
+          - name: EVENT_ID
+            description: "GDELT GLOBALEVENTID; repeats in the raw table, stg_events dedups"
+            tests:
+              - not_null
+              - unique:
+                  config:
+                    severity: warn
       - name: gkg_emotions
         description: "Raw GKG emotion data from GDELT (rolling 24h articles)"
         columns:
           - name: GKG_ID
             description: "Unique GKG record identifier"
             tests:
-              - unique
               - not_null
+              - unique:
+                  config:
+                    # 19 old broken-record fragments without a DATE share ids;
+                    # stg_gkg_emotions drops them and the ingest no longer writes them
+                    where: "DATE IS NOT NULL"
           - name: DATE
-            description: "Record date in YYYYMMDD format"
+            description: "Record timestamp, YYYYMMDDHHMMSS"
             tests:
-              - not_null
+              - not_null:
+                  config:
+                    severity: warn
           - name: SOURCE
             description: "Source publication or outlet"
           - name: PERSONS

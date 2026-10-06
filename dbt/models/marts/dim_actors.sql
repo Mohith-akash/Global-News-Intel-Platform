@@ -14,7 +14,8 @@ WITH events AS (
 actor_stats AS (
     SELECT
         actor_name,
-        actor_country_code,
+        -- a few actor names show up under more than one country, keep the usual one
+        MODE(actor_country_code) AS actor_country_code,
         
         -- Activity metrics
         COUNT(*) AS total_events,
@@ -35,7 +36,7 @@ actor_stats AS (
         MODE(sentiment_category) AS typical_sentiment
         
     FROM events
-    GROUP BY actor_name, actor_country_code
+    GROUP BY actor_name
 ),
 
 ranked AS (

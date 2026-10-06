@@ -1,0 +1,47 @@
+name: Weekly dbt Build
+
+# Builds the staging views and mart tables in MotherDuck and runs every dbt
+# test, then checks source freshness. Weekly, not daily: a full build scans
+# the 30M-row events table several times (~3.5 min of warehouse time), and
+# MotherDuck Lite has 10 CU-hours a month shared with ingest and the app.
+on:
+  schedule:
+    - cron: '30 5 * * 0'   # Sundays 05:30 UTC, off the :00 ingest
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dbt-build
+  cancel-in-progress: false
+
+jobs:
+  dbt-build:
+    # pinned: ubuntu-latest moves to 26.04 on 2026-10-19
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dbt
+    env:
+      MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7.0.1
+
+    - name: Set up Python
+      uses: actions/setup-python@v7.0.0
+      with:
+        python-version: '3.11'
+
+    # same dbt and duckdb versions as requirements.txt
+    - name: Install dbt
+      run: pip install dbt-core==1.9.4 dbt-duckdb==1.9.2 duckdb==1.5.1
+
+    - name: dbt build (models + tests)
+      run: dbt build --profiles-dir .
+
+    - name: Source freshness
+      run: dbt source freshness --profiles-dir .

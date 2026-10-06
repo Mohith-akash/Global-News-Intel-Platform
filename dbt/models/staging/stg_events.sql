@@ -58,6 +58,13 @@ cleaned AS (
         
     FROM source
     WHERE EVENT_ID IS NOT NULL
+    -- the raw table holds ~1.5M repeated EVENT_IDs (Nov/Dec 2025 backfill
+    -- overlap, plus overlapping ingest runs in mid 2026); keep one row per
+    -- event, preferring the copy with a headline
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY EVENT_ID
+        ORDER BY (HEADLINE IS NULL), ARTICLE_COUNT DESC
+    ) = 1
 )
 
 SELECT * FROM cleaned
