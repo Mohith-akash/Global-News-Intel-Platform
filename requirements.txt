@@ -9,7 +9,7 @@ polars==1.28.0
 # transitive natives, pinned on purpose: unpinned pyarrow floated to 25.0.0
 # on rebuild and segfaults in pandas_compat.convert_column when streamlit
 # serializes dataframes (pandas 2.2.x era code vs 2026 pyarrow)
-pyarrow==18.1.0
+pyarrow==23.0.1
 numpy==2.2.6
 
 # Database
@@ -22,7 +22,7 @@ duckdb==1.5.1
 # nothing: ~10 packages and ~40MB of RSS on the Streamlit container.
 
 # Orchestration
-dagster==1.12.22
+dagster==1.13.1
 
 # Utilities
 pycountry==24.6.1
