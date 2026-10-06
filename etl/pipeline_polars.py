@@ -532,6 +532,9 @@ def process_gkg_batch_polars(content: bytes) -> pl.DataFrame:
                 infer_schema_length=10000,
                 ignore_errors=True,
                 truncate_ragged_lines=True,
+                # ~6% of gkg files carry stray non-utf8 bytes (in columns we
+                # don't keep) and strict decoding dropped the whole file
+                encoding="utf8-lossy",
             )
         except Exception as e:
             logger.error(f"Error reading GKG CSV: {e}")

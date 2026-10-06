@@ -82,19 +82,25 @@ def get_embeddings_batch(texts: list, api_key: str, batch_size: int = BATCH_SIZE
             continue
         
         try:
-            response = requests.post(
-                VOYAGE_API_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "input": clean_batch,
-                    "model": VOYAGE_MODEL
-                },
-                timeout=30
-            )
-            
+            # free tier allows 3 requests/min, so batches 4+ came back 429 and
+            # were dropped. wait out the window and retry instead
+            for attempt in range(5):
+                response = requests.post(
+                    VOYAGE_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "input": clean_batch,
+                        "model": VOYAGE_MODEL
+                    },
+                    timeout=30
+                )
+                if response.status_code != 429:
+                    break
+                time.sleep(21)
+
             if response.status_code == 200:
                 embeddings = [d["embedding"] for d in response.json()["data"]]
                 batch_results = [None] * len(batch)
