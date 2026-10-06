@@ -16,6 +16,12 @@ on:
         required: false
         default: "96"
 
+# never two ingests at once: overlapping runs both passed the "already
+# loaded?" check and inserted the same events twice
+concurrency:
+  group: gdelt-ingest
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write   # the failure alert below files an issue; the default token is read-only
