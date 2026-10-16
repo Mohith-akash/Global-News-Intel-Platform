@@ -34,13 +34,13 @@ def render_ai_chat(tbl="events_dagster"):
             </div>
         </div>''', unsafe_allow_html=True)
         return
-    
+
     if "qa_history" not in st.session_state:
         st.session_state.qa_history = []
 
     # Check if RAG is available
     rag_available = get_voyage_api_key() is not None
-    
+
     # Previous conversations (shared between modes)
     if st.session_state.qa_history:
         past = st.session_state.qa_history[-5:]
@@ -61,7 +61,7 @@ def render_ai_chat(tbl="events_dagster"):
     mode_options = ["🔍 SQL Mode", "🧠 RAG Mode"]
     if not rag_available:
         mode_options = ["🔍 SQL Mode", "🧠 RAG Mode (requires API key)"]
-    
+
     selected_mode = st.radio(
         "Select Mode",
         mode_options,
@@ -69,9 +69,9 @@ def render_ai_chat(tbl="events_dagster"):
         label_visibility="collapsed",
         key="mode_selector"
     )
-    
+
     is_sql_mode = "SQL" in selected_mode
-    
+
     # Show mode-specific info
     if is_sql_mode:
         st.markdown('''<div class="ai-info-card">
@@ -129,7 +129,7 @@ def render_rag_chat(tbl="events_dagster"):
             if not llm:
                 st.error("❌ Cerebras AI not available")
                 return
-            
+
             with st.spinner("🧠 Searching semantically..."):
                 try:
                     # Honour the time period in the question, same as SQL mode
@@ -141,14 +141,14 @@ def render_rag_chat(tbl="events_dagster"):
                         prompt, llm, top_k=15,
                         min_date=min_date, max_date=max_date, table_name=tbl,
                     )
-                    
+
                     # Display answer (escape $ to prevent LaTeX rendering)
                     st.markdown(result["answer"].replace('$', r'\$'))
-                    
+
                     # Display retrieved headlines
                     if not result["headlines"].empty:
                         df = result["headlines"].copy()
-                        
+
                         # Format for display
                         if 'ACTOR_COUNTRY_CODE' in df.columns:
                             df['COUNTRY'] = df['ACTOR_COUNTRY_CODE'].apply(
@@ -163,7 +163,7 @@ def render_rag_chat(tbl="events_dagster"):
                                 pass
                         if 'similarity' in df.columns:
                             df['RELEVANCE'] = (df['similarity'] * 100).round(1).astype(str) + '%'
-                        
+
                         with st.expander("📋 Retrieved Headlines", expanded=True):
                             display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY', 'RELEVANCE', 'NEWS_LINK']
                             display_cols = [col for col in display_cols if col in df.columns]
@@ -179,7 +179,7 @@ def render_rag_chat(tbl="events_dagster"):
                                     "NEWS_LINK": st.column_config.LinkColumn("Link", width=50, display_text="🔗"),
                                 }
                             )
-                    
+
                     # Save to history
                     st.session_state.qa_history.append({
                         "question": prompt,
@@ -189,7 +189,7 @@ def render_rag_chat(tbl="events_dagster"):
                     })
                     if len(st.session_state.qa_history) > 50:
                         st.session_state.qa_history = st.session_state.qa_history[-50:]
-                        
+
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)[:100]}")
 
@@ -225,12 +225,12 @@ def render_sql_chat(tbl="events_dagster"):
                         if not data.empty:
                             dd = data.copy()
                             dd.columns = [col.upper() for col in dd.columns]
-                            
+
                             # Handle COUNT(*) aggregate queries
                             if is_count_aggregate:
                                 total = dd.iloc[0]['TOTAL_EVENTS']
                                 location = f"in {country_filter_name}" if country_filter_name else "globally"
-                                
+
                                 ai_prompt = f"""Database query result: {total:,} events recorded {location} during {qi['period_label']}.
 
 Question: {prompt}
@@ -248,23 +248,23 @@ Provide a brief, factual answer using ONLY this data. State the count clearly.""
                                     <div style="font-size:0.75rem;color:#94a3b8;">{qi['period_label']}</div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                                
+
                                 with st.expander("🔍 SQL"):
                                     st.code(sql, language='sql')
-                            
+
                             # Handle country aggregate query differently
                             elif is_country_aggregate:
                                 # Convert country codes to names
                                 dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(
                                     lambda x: get_country(x) or x if x and str(x) not in ('None', 'nan', '') else '—'
                                 )
-                                
+
                                 # Build summary for AI
                                 country_list = []
                                 for _, row in dd.iterrows():
                                     country_list.append(f"- {row['COUNTRY']}: {row['EVENT_COUNT']:,} events")
                                 summary_text = "\n".join(country_list)
-                                
+
                                 ai_prompt = f"""You are a news analyst. Below is real data from the GDELT database showing event counts by country ({qi['period_label']}). Use ONLY this data — do not invent reasons or add facts not shown here.
 
 {summary_text}
@@ -286,7 +286,7 @@ Based solely on the event counts above, briefly describe which countries dominat
                                         "EVENT_COUNT": st.column_config.NumberColumn("Event Count", width=120)
                                     }
                                 )
-                                
+
                                 with st.expander("🔍 SQL"):
                                     st.code(sql, language='sql')
                             else:
@@ -296,7 +296,7 @@ Based solely on the event counts above, briefly describe which countries dominat
                                     dd['COUNTRY'] = dd['ACTOR_COUNTRY_CODE'].apply(
                                         lambda x: get_country(x) or x if x and str(x) not in ('None', 'nan', '') else '—'
                                     )
-                                
+
                                 if 'NEWS_LINK' in dd.columns:
                                     headlines = []
                                     valid_indices = []
@@ -308,17 +308,17 @@ Based solely on the event counts above, briefly describe which countries dominat
                                         else:
                                             # Extract from URL if DB headline missing/bad
                                             headline = extract_headline(row.get('NEWS_LINK', ''))
-                                        
+
                                         if headline:
                                             headlines.append(headline)
                                             valid_indices.append(idx)
-                                    
+
                                     # Filter to only rows with valid headlines
                                     if valid_indices:
                                         dd = dd.loc[valid_indices].copy()
                                         dd = dd.reset_index(drop=True)  # Reset index for proper list assignment
                                         dd['HEADLINE'] = headlines
-                                        
+
                                         # Smart deduplication: skip first word, use words 2-6
                                         # "Snow Expected Across Much Uk" -> "expected across much uk"
                                         # "Snowfall Expected Across Much Uk" -> "expected across much uk" (SAME!)
@@ -329,17 +329,17 @@ Based solely on the event counts above, briefly describe which countries dominat
                                         dd = dd.drop(columns=['_dedup_key'])
                                     else:
                                         dd = dd.head(0)  # Empty dataframe
-                                
+
                                 # Add severity label
                                 if 'IMPACT_SCORE' in dd.columns:
                                     dd['SEVERITY'] = dd['IMPACT_SCORE'].apply(get_impact_label)
-                                
+
                                 # Format date
                                 if 'DATE' in dd.columns:
-                                    try: 
+                                    try:
                                         dd['DATE'] = pd.to_datetime(dd['DATE'].astype(str), format='%Y%m%d').dt.strftime('%b %d')
                                     except Exception: pass
-                                
+
                                 # Check if we have any valid data after filtering
                                 if dd.empty:
                                     st.warning("📭 No events found for this query")
@@ -354,9 +354,9 @@ Based solely on the event counts above, briefly describe which countries dominat
                                         severity = row.get('SEVERITY', '')
                                         score = row.get('IMPACT_SCORE', 0)
                                         summary_data.append(f"- {headline} | {country} | {date} | Severity: {severity} ({score})")
-                                    
+
                                     summary_text = "\n".join(summary_data)
-                                    
+
                                     ai_prompt = f"""You are a news analyst. Below are {len(summary_data)} events from the GDELT database ({qi['period_label']}).
 
 {summary_text}
@@ -368,13 +368,13 @@ Write a concise analytical answer (3-5 sentences) that directly answers the ques
                                     _resp = llm.complete(ai_prompt)
                                     answer = str(_resp) if _resp is not None else "No response from AI."
                                     st.markdown(answer.replace('$', r'\$'))
-                                    
+
                                     display_cols = ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY']
                                     if 'NEWS_LINK' in dd.columns:
                                         display_cols.append('NEWS_LINK')
-                                    
+
                                     display_cols = [col for col in display_cols if col in dd.columns]
-                                    
+
                                     st.dataframe(
                                         dd[display_cols].head(limit),
                                         hide_index=True,
@@ -387,7 +387,7 @@ Write a concise analytical answer (3-5 sentences) that directly answers the ques
                                             "NEWS_LINK": st.column_config.LinkColumn("🔗", width=40)
                                         }
                                     )
-                                
+
                                 with st.expander("🔍 SQL"):
                                     st.code(sql, language='sql')
                         else:
@@ -401,7 +401,7 @@ Write a concise analytical answer (3-5 sentences) that directly answers the ques
                     else:
                         st.warning("⚠️ Could not generate query")
                         answer = "Could not process query."
-                
+
                 st.session_state.qa_history.append({"question": prompt, "answer": answer, "sql": sql, "mode": "sql"})
                 # Limit history to 50 messages to prevent unbounded memory growth
                 if len(st.session_state.qa_history) > 50:

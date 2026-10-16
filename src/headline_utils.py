@@ -191,7 +191,7 @@ def clean_headline(text: str) -> Optional[str]:
     words = text.strip().split()
     while words and len(words[-1]) <= 2:
         words.pop()
-    
+
     # Remove truncated words (3 chars or less ending in consonant)
     # Catches obvious cases like "Def", "Bui", "Mur"
     while words:
@@ -207,7 +207,7 @@ def clean_headline(text: str) -> Optional[str]:
             words.pop()
         else:
             break
-    
+
     text = ' '.join(words)
 
     # Truncate if too long
@@ -222,7 +222,7 @@ def clean_headline(text: str) -> Optional[str]:
     # Quality check - need enough content to be useful
     if len(text) < 25 or len(text.split()) < 5:
         return None
-    
+
     # Reject if last word has weird capitalization
     words = text.split()
     if words:

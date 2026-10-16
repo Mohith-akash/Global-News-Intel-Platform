@@ -98,7 +98,7 @@ def render_ticker(t):
             country = get_country(r.get('ACTOR_COUNTRY_CODE', '')) or 'Global'
             items.append(f"⚠️ {actor} ({country}) • {r.get('IMPACT_SCORE', 0):.1f}")
         txt = " │ ".join(items) + " │ "
-    
+
     st.markdown('''
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;
                     padding:0.5rem;margin-bottom:0.5rem;text-align:center;">
@@ -117,12 +117,12 @@ def render_sentiment(t):
     if df.empty:
         st.info("Loading...")
         return
-    
+
     avg = df.iloc[0]['avg'] or 0
     neg = int(df.iloc[0]['neg'] or 0)
     pos = int(df.iloc[0]['pos'] or 0)
     total = int(df.iloc[0]['total'] or 1)
-    
+
     if avg < -2:
         status, color = ("⚠️ ELEVATED", "#ef4444")
     elif avg < 0:
@@ -131,7 +131,7 @@ def render_sentiment(t):
         status, color = ("🟢 STABLE", "#10b981")
     else:
         status, color = ("✨ POSITIVE", "#06b6d4")
-    
+
     st.markdown(f'''
         <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem;text-align:center;margin-bottom:0.5rem;">
             <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;margin-bottom:0.25rem;">Weekly Sentiment</div>
@@ -160,15 +160,15 @@ def render_actors(t):
     if df.empty:
         st.info("🎯 Loading...")
         return
-    
+
     labels = []
     for _, r in df.iterrows():
         actor = r['MAIN_ACTOR'][:25]
         country = get_country(r.get('ACTOR_COUNTRY_CODE', ''))
         labels.append(f"{actor} ({country[:10]})" if country else actor)
-    
+
     colors = ['#ef4444' if x and x < -3 else ('#f59e0b' if x and x < 0 else ('#10b981' if x and x > 3 else '#06b6d4')) for x in df['avg_impact']]
-    
+
     fig = go.Figure(go.Bar(
         x=df['events'], y=labels, orientation='h', marker_color=colors,
         text=df['events'].apply(lambda x: f'{x:,}'), textposition='outside',
@@ -189,7 +189,7 @@ def render_distribution(t, chart_key='distribution'):
     if df.empty:
         st.info("📊 Loading...")
         return
-    
+
     colors = {'Crisis': '#ef4444', 'Negative': '#f59e0b', 'Neutral': '#64748b', 'Positive': '#10b981', 'Very Positive': '#06b6d4'}
     fig = go.Figure(data=[go.Pie(
         labels=df['cat'], values=df['cnt'], hole=0.6,
@@ -208,11 +208,11 @@ def render_countries(t):
     if df.empty:
         st.info("🏆 Loading...")
         return
-    
+
     df = df.head(8)
     df['name'] = df['country'].apply(lambda x: get_country(x) or x or 'Unknown')
     fmt = lambda n: f"{n/1000:.1f}K" if n >= 1000 else str(int(n))
-    
+
     fig = go.Figure(go.Bar(
         x=df['name'], y=df['events'], marker_color='#06b6d4',
         text=df['events'].apply(fmt), textposition='outside', textfont=dict(color='#94a3b8', size=10)
@@ -236,7 +236,7 @@ def render_trending(t):
     if df.empty:
         st.info("🔥 No stories")
         return
-    
+
     st.dataframe(
         df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'ARTICLE_COUNT', 'NEWS_LINK']],
         hide_index=True, height=400, width='stretch',
@@ -260,7 +260,7 @@ def render_feed(t):
     if df.empty:
         st.info("📋 No events")
         return
-    
+
     st.dataframe(
         df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'NEWS_LINK']],
         hide_index=True, height=600, width='stretch',
@@ -279,14 +279,14 @@ def render_timeseries(t):
     if df.empty:
         st.info("📈 Loading...")
         return
-    
+
     df['date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     fig.add_trace(go.Scatter(x=df['date'], y=df['events'], fill='tozeroy', fillcolor='rgba(6,182,212,0.15)', line=dict(color='#06b6d4', width=2), name='Total'), secondary_y=False)
     fig.add_trace(go.Scatter(x=df['date'], y=df['negative'], line=dict(color='#ef4444', width=2), name='Negative'), secondary_y=True)
     fig.add_trace(go.Scatter(x=df['date'], y=df['positive'], line=dict(color='#10b981', width=2), name='Positive'), secondary_y=True)
-    
+
     fig.update_layout(
         height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=0, r=0, t=30, b=0), showlegend=True,

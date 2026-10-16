@@ -33,7 +33,7 @@ def process_df(df):
     # Extract and clean headlines
     headlines = []
     quality_scores = []
-    
+
     for _, row in df.iterrows():
         db_headline = row.get('HEADLINE')
         url = row.get('NEWS_LINK', '')
@@ -54,7 +54,7 @@ def process_df(df):
 
     df['HEADLINE'] = headlines
     df['_QUALITY'] = quality_scores
-    
+
     # Filter out rows without valid headlines or very low quality
     df = df[df['HEADLINE'].notna() & (df['_QUALITY'] >= 0.3)]
 

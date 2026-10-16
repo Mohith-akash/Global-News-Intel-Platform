@@ -10,9 +10,9 @@ EMBEDDING_DIMENSIONS = 1024  # voyage-3.5-lite output dimensions
 
 COUNTRY_ALIASES = {
     # United States
-    'usa': 'USA', 'us': 'USA', 'america': 'USA', 'united states': 'USA', 
+    'usa': 'USA', 'us': 'USA', 'america': 'USA', 'united states': 'USA',
     'u.s.': 'USA', 'u.s.a.': 'USA', 'american': 'USA', 'americans': 'USA',
-    # United Kingdom  
+    # United Kingdom
     'uk': 'GBR', 'britain': 'GBR', 'british': 'GBR', 'england': 'GBR',
     'great britain': 'GBR', 'united kingdom': 'GBR',
     # Russia

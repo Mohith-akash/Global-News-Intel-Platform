@@ -17,53 +17,53 @@ STOPWORDS = {
     'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
     'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
     'shall', 'can', 'need', 'dare', 'ought', 'used', 'up', 'down', 'out', 'off',
-    
+
     # Question words
     'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how',
-    
+
     # Common verbs and nouns
     'show', 'get', 'give', 'go', 'come', 'make', 'take', 'see', 'know', 'think',
     'want', 'tell', 'find', 'ask', 'work', 'seem', 'feel', 'try', 'leave', 'call',
     'events', 'event', 'news', 'data', 'results', 'result', 'query', 'search',
     'list', 'all', 'any', 'some', 'many', 'much', 'more', 'most', 'other',
-    
+
     # Time-related words
     'today', 'yesterday', 'tomorrow', 'week', 'month', 'year', 'day', 'time',
     'now', 'then', 'before', 'after', 'during', 'while', 'since', 'until',
     'recent', 'latest', 'last', 'next', 'first', 'second', 'past', 'current',
-    
+
     # Month names (should not match countries)
     'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
     'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september',
     'october', 'november', 'december',
-    
+
     # Numbers and ordinals
     'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-    
+
     # Direction words (not countries)
     'east', 'west', 'north', 'south', 'eastern', 'western', 'northern', 'southern',
     'middle', 'central',
-    
+
     # Query-specific words
     'top', 'bottom', 'best', 'worst', 'major', 'minor', 'big', 'small', 'large',
     'high', 'low', 'important', 'significant', 'trending', 'popular', 'crisis',
     'severe', 'critical', 'level', 'count', 'total', 'number', 'amount',
     'countries', 'country', 'region', 'regions', 'global', 'world', 'worldwide',
     'international', 'local', 'national', 'foreign', 'domestic',
-    
+
     # Common adjectives
     'new', 'old', 'good', 'bad', 'great', 'little', 'own', 'same', 'different',
     'right', 'wrong', 'long', 'short', 'early', 'late',
-    
+
     # Articles and pronouns
     'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
     'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their',
-    
+
     # Conjunctions and prepositions
     'about', 'above', 'across', 'against', 'along', 'among', 'around', 'because',
     'between', 'beyond', 'during', 'except', 'inside', 'into', 'like', 'near',
     'over', 'through', 'toward', 'under', 'upon', 'within', 'without',
-    
+
     # Misc words that shouldn't match
     'only', 'just', 'also', 'very', 'even', 'still', 'already', 'always', 'never',
     'often', 'sometimes', 'usually', 'really', 'actually', 'probably', 'maybe',
@@ -75,25 +75,25 @@ def get_country_code(name):
     """Convert country name to ISO 3-letter code."""
     if not name or not isinstance(name, str):
         return None
-    
+
     name_lower = name.lower().strip()
-    
+
     # Skip if too short
     if len(name_lower) < 2:
         return None
-    
+
     # Skip stopwords
     if name_lower in STOPWORDS:
         return None
-    
+
     # Check aliases first
     if name_lower in COUNTRY_ALIASES:
         return COUNTRY_ALIASES[name_lower]
-    
+
     # Skip if it's a number
     if name_lower.isdigit():
         return None
-    
+
     # Try pycountry fuzzy search
     try:
         result = pycountry.countries.search_fuzzy(name)
@@ -102,14 +102,14 @@ def get_country_code(name):
             matched_name = result[0].name.lower()
             # Only accept if the input is at least 3 chars and somewhat matches
             if len(name_lower) >= 3 and (
-                name_lower in matched_name or 
+                name_lower in matched_name or
                 matched_name.startswith(name_lower[:3]) or
                 name_lower.startswith(matched_name[:3])
             ):
                 return result[0].alpha_3
     except LookupError:
         pass
-    
+
     return None
 
 
@@ -135,14 +135,14 @@ def detect_query_type(prompt):
         'time_period': 'week',
         'period_label': 'the past week'
     }
-    
-    aggregate_keywords = ['count', 'total', 'how many', 'number of', 'sum', 'overall', 
+
+    aggregate_keywords = ['count', 'total', 'how many', 'number of', 'sum', 'overall',
                           'whole year', 'all time', 'entire', 'so far', 'all events']
     if any(kw in prompt_lower for kw in aggregate_keywords):
         result['is_aggregate'] = True
         result['time_period'] = 'all'
         result['period_label'] = 'all available data'
-    
+
     if 'year' in prompt_lower or 'all data' in prompt_lower:
         result['time_period'] = 'all'
         result['period_label'] = 'all available data'
@@ -174,10 +174,10 @@ def detect_query_type(prompt):
     elif 'today' in prompt_lower:
         result['time_period'] = 'day'
         result['period_label'] = 'today'
-    
+
     # Check for specific date patterns
     now = datetime.datetime.now()
-    
+
     # Month name mapping (must be checked in order to avoid partial matches)
     month_patterns = [
         ('january', 1), ('february', 2), ('march', 3), ('april', 4),
@@ -187,7 +187,7 @@ def detect_query_type(prompt):
         ('jun', 6), ('jul', 7), ('aug', 8), ('sep', 9),
         ('oct', 10), ('nov', 11), ('dec', 12)
     ]
-    
+
     # Try to find a date pattern (use word boundaries to avoid matching 'mar' in 'summarize')
     for month_name, month_num in month_patterns:
         # Pattern: month day (e.g., "oct 30", "october 15") - require word boundary
@@ -205,7 +205,7 @@ def detect_query_type(prompt):
                     return result
                 except ValueError:
                     pass
-        
+
         # Pattern: day month (e.g., "30 oct", "15 october")
         pattern2 = rf'\b(\d{{1,2}})\s+{month_name}\b'
         match2 = re.search(pattern2, prompt_lower)
@@ -221,7 +221,7 @@ def detect_query_type(prompt):
                     return result
                 except ValueError:
                     pass
-    
+
     # Check for month-only queries (e.g., "events in october", "october events")
     # Use word boundary regex to avoid false matches like 'summarize' → 'mar'
     for month_name, month_num in month_patterns:
@@ -240,7 +240,7 @@ def detect_query_type(prompt):
                     first_day = datetime.datetime(year, month_num, 1)
                     last_day_num = calendar.monthrange(year, month_num)[1]
                     last_day = datetime.datetime(year, month_num, last_day_num)
-                    
+
                     result['is_month_range'] = True
                     result['month_start'] = first_day.strftime('%Y%m%d')
                     result['month_end'] = last_day.strftime('%Y%m%d')
@@ -249,7 +249,7 @@ def detect_query_type(prompt):
                     return result
                 except ValueError:
                     pass
-    
+
     return result
 
 
@@ -267,28 +267,28 @@ REGIONAL_CODES = {
 
 def get_country(code):
     """Convert country code to full name."""
-    if not code or not isinstance(code, str): 
+    if not code or not isinstance(code, str):
         return None
-    
+
     code = code.strip().upper()
-    if len(code) < 2: 
+    if len(code) < 2:
         return None
-    
+
     # Check regional codes first
     if code in REGIONAL_CODES:
         return REGIONAL_CODES[code]
-    
+
     try:
         if len(code) == 2:
             country = pycountry.countries.get(alpha_2=code)
-            if country: 
+            if country:
                 return country.name
-        
+
         if len(code) == 3:
             country = pycountry.countries.get(alpha_3=code)
-            if country: 
+            if country:
                 return country.name
-        
+
         return None
     except Exception:
         return None
@@ -296,11 +296,11 @@ def get_country(code):
 
 def get_impact_label(score):
     """Convert impact score to readable label."""
-    if score is None: 
+    if score is None:
         return "Neutral"
-    
+
     score = float(score)
-    
+
     if score <= -8: return "🔴 Severe Crisis"
     if score <= -5: return "🔴 Major Conflict"
     if score <= -3: return "🟠 Rising Tensions"
@@ -313,11 +313,11 @@ def get_impact_label(score):
 
 def get_intensity_label(score):
     """Get intensity description for events."""
-    if score is None: 
+    if score is None:
         return "⚪ Neutral Event"
-    
+
     score = float(score)
-    
+
     if score <= -8: return "⚔️ Armed Conflict"
     if score <= -6: return "🔴 Major Crisis"
     if score <= -4: return "🟠 Serious Tension"

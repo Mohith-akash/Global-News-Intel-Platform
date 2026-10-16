@@ -175,12 +175,12 @@ def search_similar_headlines(
     4. Falls back to hybrid search (keyword + vector rerank) if pure vector fails
     """
     tbl = table_name or TARGET_TABLE
-    
+
     # Step 1: Get query embedding
     t0 = time.time()
     query_embedding = get_embedding(query)
     embed_time = time.time() - t0
-    
+
     if query_embedding is None:
         logger.warning("Failed to get query embedding, falling back to keyword search")
         return _fallback_keyword_search(query, top_k, min_date, max_date, table_name=tbl)
@@ -245,7 +245,7 @@ def _hybrid_search(
     """
     # Build keyword filter - require ANY keyword to match headline
     like_clauses = " OR ".join(["LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
-    
+
     sql = f"""
         WITH keyword_candidates AS (
             SELECT 
@@ -279,7 +279,7 @@ def _hybrid_search(
         ORDER BY similarity DESC
         LIMIT {top_k}
     """
-    
+
     t0 = time.time()
     result = safe_query(sql, keywords)
     query_time = time.time() - t0
@@ -330,7 +330,7 @@ def _prefiltered_vector_search(
         ORDER BY similarity DESC
         LIMIT {top_k}
     """
-    
+
     t0 = time.time()
     result = safe_query(sql)
     query_time = time.time() - t0
@@ -354,10 +354,10 @@ def _fallback_keyword_search(
     if max_date:
         date_filter += f" AND DATE <= '{max_date}'"
     keywords = _extract_keywords(query)
-    
+
     if not keywords:
         return pd.DataFrame()
-    
+
     # Build parameterized LIKE clauses for each keyword
     like_clauses = " OR ".join(["LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
 
@@ -366,7 +366,7 @@ def _fallback_keyword_search(
         "CASE WHEN LOWER(HEADLINE) LIKE '%' || ? || '%' THEN 1 ELSE 0 END"
         for _ in keywords
     ])
-    
+
     sql = f"""
         SELECT 
             DATE,
@@ -385,7 +385,7 @@ def _fallback_keyword_search(
         ORDER BY keyword_score DESC, ARTICLE_COUNT DESC
         LIMIT {top_k}
     """
-    
+
     # score_parts params first (SELECT position), then like_clauses params (WHERE position)
     result = safe_query(sql, keywords + keywords)
     # Drop the scoring column before returning

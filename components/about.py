@@ -7,14 +7,14 @@ import streamlit as st
 
 def render_about():
     """About page with architecture, tool comparison, and evolution."""
-    
+
     # TITLE
     st.markdown("""
     <div style="text-align:center;padding:0.75rem 0;">
         <h2 style="font-family:JetBrains Mono;color:#e2e8f0;font-size:1.5rem;margin:0;">🏗️ About This Project</h2>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # ARCHITECTURE - Compact single row with subtitles
     st.markdown("""
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 0;margin-bottom:0.5rem;">
@@ -55,7 +55,7 @@ def render_about():
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # FEATURES SECTION - NEW
     st.markdown("""
     <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem;margin-bottom:0.5rem;">
@@ -88,7 +88,7 @@ def render_about():
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # ENTERPRISE vs MY STACK - Full width, bigger font
     st.markdown("""
     <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:1rem;">
@@ -152,10 +152,10 @@ def render_about():
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # TWO COLUMNS - Evolution (left) + Tech Stack with Metrics (right)
     col1, col2 = st.columns([1, 1])
-    
+
     with col1:
         # EVOLUTION - Half width
         st.markdown("""
@@ -183,7 +183,7 @@ def render_about():
             </div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     with col2:
         # TECH STACK + KEY METRICS combined
         st.markdown("""
@@ -225,7 +225,7 @@ def render_about():
             </div>
         </div>
         """, unsafe_allow_html=True)
-    
+
     # CONTACT
     st.markdown("""
     <div style="text-align:center;margin-top:1.25rem;padding-top:1rem;border-top:1px solid #1e3a5f;">

@@ -104,15 +104,15 @@ def render_emotions_pulse():
     """Render the global emotion pulse meter with a beautiful gauge."""
     try:
         df = _emotion_data('pulse')
-        
+
         if df.empty:
             st.info("📊 Emotion data is being collected...")
             return
-        
+
         row = df.iloc[0]
         mood = row['avg_mood'] if row['avg_mood'] else 0
         articles = int(row['article_count'])
-        
+
         # Determine mood label and color
         if mood < -3:
             mood_label, mood_color = "Very Negative", "#ef4444"
@@ -124,14 +124,14 @@ def render_emotions_pulse():
             mood_label, mood_color = "Positive", "#84cc16"
         else:
             mood_label, mood_color = "Very Positive", "#22c55e"
-        
+
         # Create a gauge chart for global mood
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
             value=mood,
             number={'suffix': '', 'font': {'size': 48, 'color': mood_color}, 'valueformat': '.2f'},
             gauge={
-                'axis': {'range': [-10, 10], 'tickcolor': '#64748b', 
+                'axis': {'range': [-10, 10], 'tickcolor': '#64748b',
                          'tickfont': {'color': '#64748b', 'size': 11},
                          'tickwidth': 1, 'dtick': 5},
                 'bar': {'color': mood_color, 'thickness': 0.3},
@@ -151,14 +151,14 @@ def render_emotions_pulse():
                 }
             }
         ))
-        
+
         fig.update_layout(
             height=200,
             margin=dict(l=20, r=20, t=40, b=0),
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#e2e8f0'),
         )
-        
+
         st.plotly_chart(fig, width='stretch')
 
         # Mood label badge
@@ -172,7 +172,7 @@ def render_emotions_pulse():
                 </div>
             </div>
         """, unsafe_allow_html=True)
-                    
+
     except Exception:
         st.info("📊 Emotion data loading...")
 
@@ -181,13 +181,13 @@ def render_emotion_breakdown():
     """Render emotion breakdown as a beautiful radar chart."""
     try:
         df = _emotion_data('breakdown')
-        
+
         if df.empty:
             st.info("📊 Collecting emotion data...")
             return
-        
+
         row = df.iloc[0]
-        
+
         # Prepare data for radar chart with emojis
         emotions = ['😨 Fear', '😡 Anger', '😢 Sadness', '😊 Joy', '🤝 Trust', '😰 Anxiety', '🎯 Anticipation']
         values = [
@@ -199,16 +199,16 @@ def render_emotion_breakdown():
             row['anxiety'] if row['anxiety'] else 0,
             row['anticipation'] if row['anticipation'] else 0,
         ]
-        
+
         # Colors for each emotion
         colors = ['#ef4444', '#f97316', '#3b82f6', '#22c55e', '#06b6d4', '#eab308', '#8b5cf6']
-        
+
         # Close the radar chart
         emotions_closed = emotions + [emotions[0]]
         values_closed = values + [values[0]]
-        
+
         fig = go.Figure()
-        
+
         fig.add_trace(go.Scatterpolar(
             r=values_closed,
             theta=emotions_closed,
@@ -217,7 +217,7 @@ def render_emotion_breakdown():
             line=dict(color='#00d4ff', width=2),
             hovertemplate='%{theta}: %{r:.1f}<extra></extra>'
         ))
-        
+
         # Add markers at each point
         fig.add_trace(go.Scatterpolar(
             r=values,
@@ -226,7 +226,7 @@ def render_emotion_breakdown():
             marker=dict(size=10, color=colors, line=dict(color='#0a192f', width=2)),
             hovertemplate='%{theta}: %{r:.1f}<extra></extra>'
         ))
-        
+
         fig.update_layout(
             polar=dict(
                 radialaxis=dict(
@@ -248,7 +248,7 @@ def render_emotion_breakdown():
             margin=dict(l=50, r=50, t=20, b=20),
             paper_bgcolor='rgba(0,0,0,0)',
         )
-        
+
         st.plotly_chart(fig, width='stretch')
 
         # Show dominant emotion
@@ -256,7 +256,7 @@ def render_emotion_breakdown():
         max_idx = values.index(max(values))
         dominant = emotion_labels[max_idx]
         dominant_val = values[max_idx]
-        
+
         st.markdown(f"""
             <div style="text-align: center; padding: 0.5rem; background: linear-gradient(90deg, rgba(0,212,255,0.1) 0%, rgba(139,92,246,0.1) 100%); border-radius: 8px; margin-top: -10px;">
                 <span style="color: #94a3b8;">Dominant:</span>
@@ -264,7 +264,7 @@ def render_emotion_breakdown():
                 <span style="color: #64748b; margin-left: 0.3rem;">({dominant_val:.1f})</span>
             </div>
         """, unsafe_allow_html=True)
-        
+
     except Exception:
         st.info("📊 Emotion breakdown loading...")
 
@@ -316,25 +316,25 @@ def render_trending_themes():
     try:
         # Get raw TOP_THEMES data
         df = _emotion_data('themes')
-        
+
         if df.empty or len(df) == 0:
             st.info("📊 Theme data is being collected...")
             return
-        
+
         # Count themes manually in Python
         theme_counts = Counter()
-        
+
         for themes_str in df['TOP_THEMES'].tolist():
             if themes_str and str(themes_str).strip():
                 for theme in str(themes_str).split(','):
                     theme = theme.strip()
                     if theme and len(theme) > 2:
                         theme_counts[theme] += 1
-        
+
         if len(theme_counts) == 0:
             st.info("📊 No themes found yet...")
             return
-        
+
         # Get top themes and humanize
         themes_data = []
         seen = set()
@@ -345,18 +345,18 @@ def render_trending_themes():
                 seen.add(name)
             if len(themes_data) >= 8:
                 break
-        
+
         if len(themes_data) == 0:
             st.info("📊 Processing themes...")
             return
-        
+
         # Create bar chart
         names = [t[0] for t in themes_data]
         values = [t[1] for t in themes_data]
-        
-        # Gradient colors  
+
+        # Gradient colors
         colors = ['#00d4ff', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef']
-        
+
         fig = go.Figure(go.Bar(
             x=values,
             y=names,
@@ -369,7 +369,7 @@ def render_trending_themes():
             textfont=dict(color='white', size=11),
             hovertemplate='<b>%{y}</b><br>Mentions: %{x:,}<extra></extra>'
         ))
-        
+
         fig.update_layout(
             height=280,
             margin=dict(l=0, r=20, t=10, b=10),
@@ -377,7 +377,7 @@ def render_trending_themes():
             plot_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#e2e8f0'),
             xaxis=dict(
-                gridcolor='#1e3a5f', 
+                gridcolor='#1e3a5f',
                 zeroline=False,
                 showticklabels=False,
             ),
@@ -388,7 +388,7 @@ def render_trending_themes():
             ),
             bargap=0.3,
         )
-        
+
         st.plotly_chart(fig, width='stretch')
 
     except Exception as e:
@@ -399,10 +399,10 @@ def render_emotion_stats():
     """Render emotion statistics cards using st.metric - consistent with HOME page."""
     try:
         df = _emotion_data('stats')
-        
+
         if df.empty:
             return
-        
+
         row = df.iloc[0]
         pos = row['avg_positive'] if row['avg_positive'] else 0
         neg = row['avg_negative'] if row['avg_negative'] else 0
@@ -412,7 +412,7 @@ def render_emotion_stats():
 
         # Use st.metric like HOME page for consistency
         c1, c2, c3, c4, c5 = st.columns(5)
-        
+
         with c1:
             st.metric("📰 ARTICLES", f"{articles:,}", "GKG data")
             st.markdown('''
@@ -467,15 +467,15 @@ def render_emotion_insights():
     """Render AI-style emotion insights."""
     try:
         df = _emotion_data('insights')
-        
+
         if df.empty:
             return
-        
+
         row = df.iloc[0]
         tone = row['tone'] if row['tone'] else 0
         fear = row['fear'] if row['fear'] else 0
         joy = row['joy'] if row['joy'] else 0
-        
+
         # Generate insight based on data
         if fear > joy * 1.5:
             insight = "Global news is dominated by <b style='color:#ef4444'>fear and anxiety</b>, indicating heightened concerns."
@@ -492,7 +492,7 @@ def render_emotion_insights():
         else:
             insight = "News sentiment is <b style='color:#eab308'>balanced</b>, with mixed emotions in coverage."
             emoji = "🟡"
-        
+
         st.markdown(f"""
             <div style="padding: 0.8rem 1rem; background: linear-gradient(90deg, rgba(139,92,246,0.1) 0%, rgba(0,212,255,0.1) 100%); border-radius: 10px; border-left: 4px solid #8b5cf6; margin: 0.5rem 0;">
                 <span style="margin-right: 0.5rem;">{emoji}</span>
@@ -500,14 +500,14 @@ def render_emotion_insights():
                 <span style="color: #e2e8f0; font-size: 0.9rem;">{insight}</span>
             </div>
         """, unsafe_allow_html=True)
-        
+
     except Exception:
         pass
 
 
 def render_emotions_tab():
     """Main render function for Emotions & Themes tab."""
-    
+
     if not check_gkg_table_exists():
         st.markdown("""
             <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f; margin: 2rem 0;">
@@ -522,28 +522,28 @@ def render_emotions_tab():
             </div>
         """, unsafe_allow_html=True)
         return
-    
+
     # Stats row at top using columns
     render_emotion_stats()
-    
+
     # AI Insight
     render_emotion_insights()
-    
+
     st.markdown("")
-    
+
     # Trending themes - now above the charts for visibility
     st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Topics</span></div>', unsafe_allow_html=True)
     render_trending_themes()
-    
+
     st.markdown("")
-    
+
     # Main content - 2 columns (charts below)
     col1, col2 = st.columns([1, 1])
-    
+
     with col1:
         st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Global Mood Index</span></div>', unsafe_allow_html=True)
         render_emotions_pulse()
-    
+
     with col2:
         st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Radar</span></div>', unsafe_allow_html=True)
         render_emotion_breakdown()

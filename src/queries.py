@@ -5,8 +5,7 @@ All dashboard data is fetched by ONE cached bundle (_dashboard_bundle) that
 runs every query in a single worker subprocess - one python spawn and one
 MotherDuck handshake per cache refresh instead of one per query, which is
 what made cold page loads render piece by piece for 30-60s. The public
-get_* functions just pick their slice out of the bundle, keeping the old
-call sites unchanged.
+get_* functions just pick their slice out of the bundle.
 
 SQL safety note: f-strings here interpolate only internally-generated values
 (dates from datetime.now() via get_dates(), and a trusted table name `t`
