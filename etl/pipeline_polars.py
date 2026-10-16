@@ -18,7 +18,7 @@ from dagster import asset, Output, Definitions, ScheduleDefinition, define_asset
 from dotenv import load_dotenv
 import logging
 
-from src.headline_utils import extract_headline_from_url, clean_headline
+from src.headline_utils import extract_headline_from_url
 
 load_dotenv()
 
@@ -34,24 +34,10 @@ try:
 except ImportError:
     VOYAGE_MODEL = "voyage-3.5-lite"
     EMBEDDING_DIMENSIONS = 1024
-MIN_ARTICLE_COUNT_FOR_EMBEDDING = 3
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# GDELT Column Schema (for validation)
-GDELT_SCHEMA = {
-    "EVENT_ID": pl.Utf8,
-    "DATE": pl.Utf8,
-    "MAIN_ACTOR": pl.Utf8,
-    "ACTOR_COUNTRY_CODE": pl.Utf8,
-    "EVENT_CATEGORY_CODE": pl.Float64,
-    "IMPACT_SCORE": pl.Float64,
-    "ARTICLE_COUNT": pl.Float64,
-    "SENTIMENT_SCORE": pl.Float64,
-    "NEWS_LINK": pl.Utf8,
-}
 
 
 # =============================================================================

@@ -55,7 +55,7 @@ def main():
                     df = _run(c, q["sql"], q.get("params"))
                     df.to_parquet(os.path.join(out_path, f"{name}.parquet"))
                     manifest[name] = "ok"
-                except Exception as e:  # noqa: BLE001 - reported per query
+                except Exception as e:  # reported per query
                     manifest[name] = str(e)
             with open(os.path.join(out_path, "manifest.json"), "w") as f:
                 json.dump(manifest, f)
@@ -69,6 +69,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:  # noqa: BLE001 - report and exit nonzero
+    except Exception as e:  # report and exit nonzero
         print(f"query error: {e}", file=sys.stderr)
         sys.exit(2)

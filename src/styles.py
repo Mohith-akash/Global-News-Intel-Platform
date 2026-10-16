@@ -252,19 +252,7 @@ def inject_css():
             0% { transform: translateX(0); } 
             100% { transform: translateX(-50%); } 
         }
-        
-        /* Technology badges */
-        .tech-badge { 
-            display: inline-flex; 
-            background: var(--card-inner); 
-            border: 1px solid var(--border); 
-            border-radius: 20px; 
-            padding: 0.4rem 0.8rem; 
-            font-size: 0.75rem; 
-            color: var(--muted); 
-            margin: 0.25rem; 
-        }
-        
+
         /* Horizontal divider line */
         hr { 
             border: none; 
@@ -281,88 +269,18 @@ def inject_css():
             border-radius: 12px;
             padding: 1.5rem;
         }
-        .card-2rem { padding: 2rem; }
-        .card-mb { margin-bottom: 1rem; }
-        .card-my { margin: 2rem 0; }
-        .card-h280 { min-height: 280px; }
-        .card-h200 { min-height: 200px; }
-        .card-h100 { height: 100%; }
-        .card-center { text-align: center; }
-        
-        /* ============================================
-           PIPELINE FLOW DIAGRAM
-           ============================================ */
-        .pipeline-step {
-            background: var(--card-inner);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem;
-            display: inline-block;
-            margin: 0.5rem;
-        }
-        .pipeline-arrow {
-            color: var(--cyan);
-            margin: 0 0.5rem;
-        }
-        
-        /* ============================================
-           SECTION HEADERS
-           ============================================ */
-        .section-header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        .section-title {
-            font-family: 'JetBrains Mono', monospace;
-            color: var(--text);
-        }
-        .section-subtitle {
-            color: var(--dim);
-        }
-        .section-desc {
-            color: var(--muted);
-            max-width: 750px;
-            margin: 0 auto 1.5rem;
-            font-size: 1.1rem;
-        }
-        .section-desc-sm {
-            color: var(--dim);
-            max-width: 700px;
-            margin: 0 auto 2rem;
-        }
-        
+
         /* ============================================
            TITLE COLORS
            ============================================ */
         .title-cyan { color: var(--cyan); font-size: 0.9rem; }
-        .title-green { color: var(--green); font-size: 0.9rem; }
-        .title-amber { color: var(--amber); font-size: 0.9rem; }
-        .title-purple { color: var(--purple); font-size: 0.9rem; }
-        .title-white { color: var(--text); }
-        .title-center { text-align: center; margin-bottom: 1rem; }
-        .title-center-mb { text-align: center; margin-bottom: 1.5rem; }
         
         /* ============================================
            TEXT STYLES
            ============================================ */
         .text-muted { color: var(--muted); font-size: 0.85rem; }
-        .text-muted-lg { color: var(--muted); font-size: 0.9rem; }
-        .text-dim { color: var(--dim); }
-        .text-white { color: var(--text); }
-        .text-cyan { color: var(--cyan); }
-        .text-green { color: var(--green); }
-        .text-amber { color: var(--amber); }
-        .text-center { text-align: center; }
-        .text-sm { font-size: 0.75rem; }
         .text-xs { font-size: 0.7rem; }
-        
-        .muted-list {
-            color: var(--muted);
-            font-size: 0.85rem;
-            line-height: 1.8;
-        }
-        .muted-list-pl { padding-left: 1.2rem; }
-        
+
         /* ============================================
            HIGHLIGHT BOXES (stats grid)
            ============================================ */
@@ -371,93 +289,7 @@ def inject_css():
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1rem;
         }
-        .highlight-box {
-            text-align: center;
-            padding: 1rem;
-            border-radius: 8px;
-        }
-        .highlight-cyan { background: rgba(6,182,212,0.1); }
-        .highlight-green { background: rgba(16,185,129,0.1); }
-        .highlight-amber { background: rgba(245,158,11,0.1); }
-        .highlight-purple { background: rgba(139,92,246,0.1); }
-        
-        .highlight-value {
-            font-size: 2rem;
-            font-weight: 700;
-        }
-        .highlight-label {
-            font-size: 0.75rem;
-            color: var(--muted);
-        }
-        .value-cyan { color: var(--cyan); }
-        .value-green { color: var(--green); }
-        .value-amber { color: var(--amber); }
-        .value-purple { color: var(--purple); }
-        
-        /* ============================================
-           CALLOUT BOXES
-           ============================================ */
-        .callout-success {
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            background: rgba(16,185,129,0.1);
-            border-radius: 6px;
-            border-left: 3px solid var(--green);
-        }
-        .callout-success-text {
-            color: var(--green);
-            font-size: 0.75rem;
-        }
-        
-        .callout-big {
-            margin-top: 1rem;
-            padding: 1.25rem;
-            background: rgba(16,185,129,0.1);
-            border-radius: 12px;
-            border-left: 4px solid var(--green);
-            text-align: center;
-        }
-        .callout-big-value {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--green);
-            margin-bottom: 0.5rem;
-        }
-        .callout-big-label {
-            font-size: 0.85rem;
-            color: var(--muted);
-        }
-        
-        /* ============================================
-           INFO BOX
-           ============================================ */
-        .info-box {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            text-align: center;
-        }
-        .info-box-text {
-            font-size: 0.7rem;
-            color: var(--dim);
-        }
-        
-        /* ============================================
-           DEPRECATED BADGES
-           ============================================ */
-        .badge-deprecated {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            padding: 0.4rem 0.8rem;
-            display: inline-block;
-            margin: 0.25rem;
-            font-size: 0.75rem;
-            color: var(--dim);
-        }
-        
+
         /* ============================================
            INTENSITY GUIDE
            ============================================ */
@@ -505,39 +337,7 @@ def inject_css():
         
         .intensity-title { font-weight: 600; }
         .intensity-score { font-size: 0.7rem; color: var(--muted); }
-        
-        /* ============================================
-           CONTACT BUTTONS
-           ============================================ */
-        .contact-section {
-            text-align: center;
-        }
-        .contact-links {
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        .contact-link {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem 1.25rem;
-            color: var(--text);
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        /* ============================================
-           METRIC HINT
-           ============================================ */
-        .metric-hint {
-            text-align: center;
-            margin-top: -0.5rem;
-            font-size: 0.7rem;
-            color: var(--dim);
-        }
-        
+
         /* ============================================
            FOOTER
            ============================================ */
@@ -558,53 +358,7 @@ def inject_css():
         .footer-link {
             color: var(--cyan);
         }
-        
-        /* ============================================
-           SENTIMENT DISPLAY
-           ============================================ */
-        .sentiment-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.25rem;
-            text-align: center;
-            margin-bottom: 1rem;
-        }
-        .sentiment-label {
-            font-size: 0.7rem;
-            color: var(--dim);
-            text-transform: uppercase;
-            margin-bottom: 0.25rem;
-        }
-        .sentiment-status {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-        .sentiment-avg {
-            font-size: 0.8rem;
-            color: var(--muted);
-        }
-        
-        .sentiment-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 0.75rem;
-        }
-        .sentiment-box {
-            text-align: center;
-            padding: 0.75rem;
-            border-radius: 8px;
-        }
-        .sentiment-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-        .sentiment-box-label {
-            font-size: 0.65rem;
-            color: var(--muted);
-            text-transform: uppercase;
-        }
-        
+
         /* ============================================
            AI CHAT
            ============================================ */
