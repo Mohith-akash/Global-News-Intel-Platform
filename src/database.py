@@ -67,7 +67,7 @@ def _open_breaker(reason):
     logger.error("MotherDuck %s - circuit breaker open for %ss", reason, _BREAKER_COOLDOWN)
 
 
-def safe_query(conn, sql, params=None):  # noqa: ARG001 - conn kept for call-site compat
+def safe_query(sql, params=None):
     """Execute SQL against MotherDuck in an isolated subprocess.
 
     Crash modes this survives (all observed in production):
@@ -192,19 +192,11 @@ def safe_query_batch(queries, timeout=90):
         shutil.rmtree(out_dir, ignore_errors=True)
 
 
-def get_db():
-    """Kept for call-site compatibility; safe_query ignores the handle and
-    every query runs in its own child process, so there is no shared
-    connection anymore - and no MotherDuck call on the boot path at all.
-    """
-    return None
-
-
 @retry_cache_race
 @st.cache_data(ttl=86400)
-def detect_table(_conn):
+def detect_table():
     """Find the main events table."""
-    df = safe_query(_conn, "SHOW TABLES")
+    df = safe_query("SHOW TABLES")
     if not df.empty:
         for name in df.iloc[:, 0].tolist():
             if 'event' in name.lower():

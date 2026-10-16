@@ -355,7 +355,7 @@ def dedupe_headlines_simple(headlines: list) -> list:
     return keep_indices
 
 
-def get_best_headline(db_headline: str, url: str, impact_score: float = None) -> Optional[str]:
+def get_best_headline(db_headline: str, url: str) -> Optional[str]:
     """
     Get the best available headline from DB or URL extraction.
     Prefers DB headline if valid, falls back to URL extraction.

@@ -112,7 +112,7 @@ def _dashboard_bundle(t):
     })
 
 
-def get_metrics(_c, t):
+def get_metrics(t):
     b = _dashboard_bundle(t)
     total_df, weekly, hs = b['total'], b['weekly'], b['hotspot']
     total = None
@@ -126,33 +126,33 @@ def get_metrics(_c, t):
     }
 
 
-def get_alerts(_c, t):
+def get_alerts(t):
     return _dashboard_bundle(t)['alerts']
 
 
-def get_trending(_c, t):
+def get_trending(t):
     return _dashboard_bundle(t)['trending']
 
 
-def get_feed(_c, t):
+def get_feed(t):
     return _dashboard_bundle(t)['feed']
 
 
-def get_countries(_c, t):
+def get_countries(t):
     return _dashboard_bundle(t)['countries']
 
 
-def get_timeseries(_c, t):
+def get_timeseries(t):
     return _dashboard_bundle(t)['timeseries']
 
 
-def get_sentiment(_c, t):
+def get_sentiment(t):
     return _dashboard_bundle(t)['sentiment']
 
 
-def get_actors(_c, t):
+def get_actors(t):
     return _dashboard_bundle(t)['actors']
 
 
-def get_distribution(_c, t):
+def get_distribution(t):
     return _dashboard_bundle(t)['distribution']

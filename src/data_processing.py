@@ -2,25 +2,20 @@
 Data processing functions for headline extraction and cleaning.
 """
 
-import re
 import pandas as pd
 
 from src.headline_utils import (
     get_best_headline,
     clean_headline,
     dedupe_headlines_simple,
+    extract_headline_from_url,
     score_headline_quality
 )
 from src.utils import get_country, get_intensity_label
 
 
-def extract_headline(url, actor=None, impact_score=None):
-    """
-    Extract headline from URL.
-    Wrapper for backward compatibility - delegates to headline_utils.
-    """
-    from src.headline_utils import extract_headline_from_url, clean_headline
-    
+def extract_headline(url):
+    """Extract and clean a headline from a news URL."""
     extracted = extract_headline_from_url(url)
     if extracted:
         return clean_headline(extracted)
@@ -42,7 +37,6 @@ def process_df(df):
     for _, row in df.iterrows():
         db_headline = row.get('HEADLINE')
         url = row.get('NEWS_LINK', '')
-        impact = row.get('IMPACT_SCORE')
 
         # Prefer the LLM-polished headline (already display-ready); the regex
         # path would re-mangle its acronym casing via _title_case.
@@ -53,7 +47,7 @@ def process_df(df):
             # the scorer's capitalization penalty misfires on title case.
             quality = max(0.6, score_headline_quality(headline, url))
         else:
-            headline = get_best_headline(db_headline, url, impact)
+            headline = get_best_headline(db_headline, url)
             quality = score_headline_quality(headline, url) if headline else 0
         headlines.append(headline)
         quality_scores.append(quality)

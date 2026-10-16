@@ -160,7 +160,6 @@ def _extract_keywords(query: str) -> list[str]:
 
 def search_similar_headlines(
     query: str,
-    conn,
     top_k: int = 10,
     min_date: str = None,
     max_date: str = None,
@@ -184,7 +183,7 @@ def search_similar_headlines(
     
     if query_embedding is None:
         logger.warning("Failed to get query embedding, falling back to keyword search")
-        return _fallback_keyword_search(query, conn, top_k, min_date, max_date, table_name=tbl)
+        return _fallback_keyword_search(query, top_k, min_date, max_date, table_name=tbl)
 
     logger.info(f"Query embedding retrieved in {embed_time:.2f}s")
 
@@ -202,7 +201,7 @@ def search_similar_headlines(
 
     if keywords:
         hybrid = _hybrid_search(
-            keywords, embedding_str, conn, tbl,
+            keywords, embedding_str, tbl,
             top_k, date_filter
         )
         if hybrid is not None and not hybrid.empty:
@@ -210,7 +209,7 @@ def search_similar_headlines(
             all_results.append(hybrid)
 
     vector = _prefiltered_vector_search(
-        embedding_str, conn, tbl,
+        embedding_str, tbl,
         top_k, date_filter
     )
     if vector is not None and not vector.empty:
@@ -218,7 +217,6 @@ def search_similar_headlines(
         all_results.append(vector)
 
     if all_results:
-        import pandas as pd
         merged = pd.concat(all_results, ignore_index=True)
         # Deduplicate by headline, keep the one with highest similarity
         merged = merged.sort_values('similarity', ascending=False)
@@ -228,13 +226,12 @@ def search_similar_headlines(
 
     # Last resort - keyword search without vectors
     logger.info("Vector searches returned no results, falling back to keyword search")
-    return _fallback_keyword_search(query, conn, top_k, min_date, max_date, table_name=tbl)
+    return _fallback_keyword_search(query, top_k, min_date, max_date, table_name=tbl)
 
 
 def _hybrid_search(
     keywords: list[str],
     embedding_str: str,
-    conn,
     tbl: str,
     top_k: int,
     date_filter: str,
@@ -247,7 +244,7 @@ def _hybrid_search(
     This avoids scanning the entire table's embeddings on MotherDuck.
     """
     # Build keyword filter - require ANY keyword to match headline
-    like_clauses = " OR ".join([f"LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
+    like_clauses = " OR ".join(["LOWER(HEADLINE) LIKE '%' || ? || '%'" for _ in keywords])
     
     sql = f"""
         WITH keyword_candidates AS (
@@ -284,7 +281,7 @@ def _hybrid_search(
     """
     
     t0 = time.time()
-    result = safe_query(conn, sql, keywords)
+    result = safe_query(sql, keywords)
     query_time = time.time() - t0
     logger.info(f"Hybrid search completed in {query_time:.2f}s, {len(result)} results")
     return result if not result.empty else None
@@ -292,7 +289,6 @@ def _hybrid_search(
 
 def _prefiltered_vector_search(
     embedding_str: str,
-    conn,
     tbl: str,
     top_k: int,
     date_filter: str,
@@ -336,7 +332,7 @@ def _prefiltered_vector_search(
     """
     
     t0 = time.time()
-    result = safe_query(conn, sql)
+    result = safe_query(sql)
     query_time = time.time() - t0
     logger.info(f"Pre-filtered vector search completed in {query_time:.2f}s, {len(result)} results")
     return result if not result.empty else None
@@ -344,7 +340,6 @@ def _prefiltered_vector_search(
 
 def _fallback_keyword_search(
     query: str,
-    conn,
     top_k: int = 10,
     min_date: str = None,
     max_date: str = None,
@@ -392,17 +387,17 @@ def _fallback_keyword_search(
     """
     
     # score_parts params first (SELECT position), then like_clauses params (WHERE position)
-    result = safe_query(conn, sql, keywords + keywords)
+    result = safe_query(sql, keywords + keywords)
     # Drop the scoring column before returning
     if 'keyword_score' in result.columns:
         result = result.drop(columns=['keyword_score'])
     return result
 
 
-def rag_query(question: str, conn, llm, top_k: int = 10, min_date: str = None, max_date: str = None, table_name: str = None) -> dict:
+def rag_query(question: str, llm, top_k: int = 10, min_date: str = None, max_date: str = None, table_name: str = None) -> dict:
     """Full RAG pipeline: embed query → search → synthesize answer."""
     t0 = time.time()
-    headlines_df = search_similar_headlines(question, conn, top_k=top_k, min_date=min_date, max_date=max_date, table_name=table_name)
+    headlines_df = search_similar_headlines(question, top_k=top_k, min_date=min_date, max_date=max_date, table_name=table_name)
     search_time = time.time() - t0
     logger.info(f"RAG search completed in {search_time:.2f}s")
 

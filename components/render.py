@@ -31,8 +31,8 @@ def render_header():
     ''', unsafe_allow_html=True)
 
 
-def render_metrics(c, t):
-    m = get_metrics(c, t)
+def render_metrics(t):
+    m = get_metrics(t)
     c1, c2, c3, c4, c5 = st.columns(5)
     fmt = lambda n: f"{int(n):,}" if n else "—"
 
@@ -87,8 +87,8 @@ def render_metrics(c, t):
         ''', unsafe_allow_html=True)
 
 
-def render_ticker(c, t):
-    df = get_alerts(c, t)
+def render_ticker(t):
+    df = get_alerts(t)
     if df.empty:
         txt = "⚡ Monitoring global news │ "
     else:
@@ -112,8 +112,8 @@ def render_ticker(c, t):
     st.markdown(f'<div class="ticker"><div class="ticker-label"><span class="ticker-dot"></span> LIVE</div><div class="ticker-text">{txt + txt}</div></div>', unsafe_allow_html=True)
 
 
-def render_sentiment(c, t):
-    df = get_sentiment(c, t)
+def render_sentiment(t):
+    df = get_sentiment(t)
     if df.empty:
         st.info("Loading...")
         return
@@ -155,8 +155,8 @@ def render_sentiment(c, t):
     ''', unsafe_allow_html=True)
 
 
-def render_actors(c, t):
-    df = get_actors(c, t)
+def render_actors(t):
+    df = get_actors(t)
     if df.empty:
         st.info("🎯 Loading...")
         return
@@ -184,8 +184,8 @@ def render_actors(c, t):
     st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='actors_chart')
 
 
-def render_distribution(c, t, chart_key='distribution'):
-    df = get_distribution(c, t)
+def render_distribution(t, chart_key='distribution'):
+    df = get_distribution(t)
     if df.empty:
         st.info("📊 Loading...")
         return
@@ -203,8 +203,8 @@ def render_distribution(c, t, chart_key='distribution'):
     st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key=chart_key)
 
 
-def render_countries(c, t):
-    df = get_countries(c, t)
+def render_countries(t):
+    df = get_countries(t)
     if df.empty:
         st.info("🏆 Loading...")
         return
@@ -227,8 +227,8 @@ def render_countries(c, t):
     st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='countries_chart')
 
 
-def render_trending(c, t):
-    df = get_trending(c, t)
+def render_trending(t):
+    df = get_trending(t)
     if df.empty:
         st.info("🔥 Loading...")
         return
@@ -251,8 +251,8 @@ def render_trending(c, t):
     )
 
 
-def render_feed(c, t):
-    df = get_feed(c, t)
+def render_feed(t):
+    df = get_feed(t)
     if df.empty:
         st.info("📋 Loading...")
         return
@@ -274,8 +274,8 @@ def render_feed(c, t):
     )
 
 
-def render_timeseries(c, t):
-    df = get_timeseries(c, t)
+def render_timeseries(t):
+    df = get_timeseries(t)
     if df.empty:
         st.info("📈 Loading...")
         return

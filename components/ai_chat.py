@@ -15,7 +15,7 @@ from src.rag_engine import rag_query, get_voyage_api_key
 from src.sql_templates import build_sql
 
 
-def render_ai_chat(c, tbl="events_dagster"):
+def render_ai_chat(tbl="events_dagster"):
     """Main AI Chat component with SQL and RAG modes."""
     # Check if AI features are available
     if not AI_AVAILABLE:
@@ -37,8 +37,6 @@ def render_ai_chat(c, tbl="events_dagster"):
     
     if "qa_history" not in st.session_state:
         st.session_state.qa_history = []
-    if "ai_mode" not in st.session_state:
-        st.session_state.ai_mode = "sql"
 
     # Check if RAG is available
     rag_available = get_voyage_api_key() is not None
@@ -80,7 +78,7 @@ def render_ai_chat(c, tbl="events_dagster"):
             <div class="ai-example-label">💡 SQL MODE - Precise Queries:</div>
             <div class="ai-examples">• "What happened in India this week?"<br>• "Crisis events in Middle East"<br>• "Top 5 countries by events"<br>• "How many events in October?"</div>
         </div>''', unsafe_allow_html=True)
-        render_sql_chat(c, tbl)
+        render_sql_chat(tbl)
     else:
         if not rag_available:
             st.warning("⚠️ RAG Mode requires VOYAGE_API_KEY. Add it to your environment or Streamlit secrets.")
@@ -93,7 +91,7 @@ def render_ai_chat(c, tbl="events_dagster"):
                 <div class="ai-example-label">💡 RAG MODE - Semantic Search:</div>
                 <div class="ai-examples">• "What are the tensions in Asia about?"<br>• "Tell me about military conflicts"<br>• "What is happening between US and China?"<br>• "Summarize news about Russia and Ukraine"</div>
             </div>''', unsafe_allow_html=True)
-            render_rag_chat(c, tbl)
+            render_rag_chat(tbl)
 
 
 def resolve_date_range(qi, dates):
@@ -120,7 +118,7 @@ def resolve_date_range(qi, dates):
     return dates['week_ago'], None
 
 
-def render_rag_chat(c, tbl="events_dagster"):
+def render_rag_chat(tbl="events_dagster"):
     """RAG-based semantic search chat."""
     prompt = st.chat_input("Ask about events semantically...", key="rag_chat")
     if prompt:
@@ -140,7 +138,7 @@ def render_rag_chat(c, tbl="events_dagster"):
                     min_date, max_date = resolve_date_range(qi, dates)
                     st.caption(f"🗓️ Searching {qi['period_label']}")
                     result = rag_query(
-                        prompt, c, llm, top_k=15,
+                        prompt, llm, top_k=15,
                         min_date=min_date, max_date=max_date, table_name=tbl,
                     )
                     
@@ -196,7 +194,7 @@ def render_rag_chat(c, tbl="events_dagster"):
                     st.error(f"❌ Error: {str(e)[:100]}")
 
 
-def render_sql_chat(c, tbl="events_dagster"):
+def render_sql_chat(tbl="events_dagster"):
     """SQL-based precise query chat (original implementation)."""
     prompt = st.chat_input("Ask about global events (SQL)...", key="sql_chat")
     if prompt:
@@ -223,7 +221,7 @@ def render_sql_chat(c, tbl="events_dagster"):
                     country_filter_name = plan.country_filter_name
 
                     if plan.sql:
-                        data = safe_query(c, plan.sql, plan.params)
+                        data = safe_query(plan.sql, plan.params)
                         if not data.empty:
                             dd = data.copy()
                             dd.columns = [col.upper() for col in dd.columns]
@@ -309,7 +307,7 @@ Based solely on the event counts above, briefly describe which countries dominat
                                             headline = clean_headline(db_headline)
                                         else:
                                             # Extract from URL if DB headline missing/bad
-                                            headline = extract_headline(row.get('NEWS_LINK', ''), None, row.get('IMPACT_SCORE', None))
+                                            headline = extract_headline(row.get('NEWS_LINK', ''))
                                         
                                         if headline:
                                             headlines.append(headline)

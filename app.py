@@ -16,7 +16,7 @@ import logging
 
 from src.config import REQUIRED_ENVS
 from src.styles import inject_css
-from src.database import get_db, detect_table, WarehouseUnavailable
+from src.database import detect_table, WarehouseUnavailable
 from components import (
     render_header,
     render_metrics,
@@ -75,8 +75,7 @@ for key in REQUIRED_ENVS:
 
 def main():
     inject_css()
-    conn = get_db()
-    tbl = detect_table(conn)
+    tbl = detect_table()
 
     # Auto-refresh hourly to match the ingest cadence - JS reload works in all
     # browsers unlike <meta> in body. Was 5 minutes, which re-ran every session
@@ -90,32 +89,32 @@ def main():
     tabs = st.tabs(["📊 HOME", "📋 FEED", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
     
     with tabs[0]:
-        render_metrics(conn, tbl)
-        render_ticker(conn, tbl)
+        render_metrics(tbl)
+        render_ticker(tbl)
         st.markdown("---")
         c1, c2 = st.columns([6, 4])
         with c1:
             st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending News</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
-            render_trending(conn, tbl)
+            render_trending(tbl)
         with c2:
             st.markdown('<div class="card-hdr"><span>⚡</span><span class="card-title">Weekly Sentiment</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(7 Days)</span></div>', unsafe_allow_html=True)
-            render_sentiment(conn, tbl)
+            render_sentiment(tbl)
             st.markdown('<div class="card-hdr" style="margin-top:1rem;"><span>📊</span><span class="card-title">Tone Breakdown</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
-            render_distribution(conn, tbl, 'home_dist')
+            render_distribution(tbl, 'home_dist')
         st.markdown("---")
         c1, c2 = st.columns([6, 4])
         with c1:
             st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Most Mentioned</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
-            render_actors(conn, tbl)
+            render_actors(tbl)
         with c2:
             st.markdown('<div class="card-hdr"><span>🏆</span><span class="card-title">Top Countries</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(30 Days)</span></div>', unsafe_allow_html=True)
-            render_countries(conn, tbl)
+            render_countries(tbl)
     
     with tabs[1]:
         c1, c2 = st.columns([7, 3])
         with c1:
             st.markdown('<div class="card-hdr"><span>📋</span><span class="card-title">Recent Events Feed</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
-            render_feed(conn, tbl)
+            render_feed(tbl)
         with c2:
             st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Intensity Guide</span></div>', unsafe_allow_html=True)
             st.markdown('''<div class="card">
@@ -131,16 +130,16 @@ def main():
             </div>''', unsafe_allow_html=True)
         st.markdown("---")
         st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">30-Day Trend Analysis</span></div>', unsafe_allow_html=True)
-        render_timeseries(conn, tbl)
+        render_timeseries(tbl)
     
     with tabs[2]:
-        render_emotions_tab(conn)
+        render_emotions_tab()
     
     with tabs[3]:
         c1, c2 = st.columns([7, 3])
         with c1:
             st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
-            render_ai_chat(conn, tbl)
+            render_ai_chat(tbl)
         with c2:
             st.markdown('''<div class="card">
                 <h4 class="title-cyan">ℹ️ HOW IT WORKS</h4>

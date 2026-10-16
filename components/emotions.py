@@ -92,7 +92,7 @@ def _emotion_data(key):
     return _emotions_bundle(_gkg_cutoff_24h())[key]
 
 
-def check_gkg_table_exists(conn):
+def check_gkg_table_exists():
     """Check if gkg_emotions table exists and has data."""
     try:
         return not _emotion_data('exists').empty
@@ -100,7 +100,7 @@ def check_gkg_table_exists(conn):
         return False
 
 
-def render_emotions_pulse(conn):
+def render_emotions_pulse():
     """Render the global emotion pulse meter with a beautiful gauge."""
     try:
         df = _emotion_data('pulse')
@@ -177,7 +177,7 @@ def render_emotions_pulse(conn):
         st.info("📊 Emotion data loading...")
 
 
-def render_emotion_breakdown(conn):
+def render_emotion_breakdown():
     """Render emotion breakdown as a beautiful radar chart."""
     try:
         df = _emotion_data('breakdown')
@@ -311,7 +311,7 @@ def humanize_theme(theme):
     return cleaned if 2 < len(cleaned) < 20 else None
 
 
-def render_trending_themes(conn):
+def render_trending_themes():
     """Render trending themes from TOP_THEMES field."""
     try:
         # Get raw TOP_THEMES data
@@ -395,7 +395,7 @@ def render_trending_themes(conn):
         st.warning(f"📊 Theme error: {str(e)[:100]}")
 
 
-def render_emotion_stats(conn):
+def render_emotion_stats():
     """Render emotion statistics cards using st.metric - consistent with HOME page."""
     try:
         df = _emotion_data('stats')
@@ -463,7 +463,7 @@ def render_emotion_stats(conn):
         pass
 
 
-def render_emotion_insights(conn):
+def render_emotion_insights():
     """Render AI-style emotion insights."""
     try:
         df = _emotion_data('insights')
@@ -505,10 +505,10 @@ def render_emotion_insights(conn):
         pass
 
 
-def render_emotions_tab(conn):
+def render_emotions_tab():
     """Main render function for Emotions & Themes tab."""
     
-    if not check_gkg_table_exists(conn):
+    if not check_gkg_table_exists():
         st.markdown("""
             <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%); border-radius: 12px; border: 1px solid #1e3a5f; margin: 2rem 0;">
                 <div style="font-size: 4rem;">🧠</div>
@@ -524,16 +524,16 @@ def render_emotions_tab(conn):
         return
     
     # Stats row at top using columns
-    render_emotion_stats(conn)
+    render_emotion_stats()
     
     # AI Insight
-    render_emotion_insights(conn)
+    render_emotion_insights()
     
     st.markdown("")
     
     # Trending themes - now above the charts for visibility
     st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending Topics</span></div>', unsafe_allow_html=True)
-    render_trending_themes(conn)
+    render_trending_themes()
     
     st.markdown("")
     
@@ -542,8 +542,8 @@ def render_emotions_tab(conn):
     
     with col1:
         st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Global Mood Index</span></div>', unsafe_allow_html=True)
-        render_emotions_pulse(conn)
+        render_emotions_pulse()
     
     with col2:
         st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Emotion Radar</span></div>', unsafe_allow_html=True)
-        render_emotion_breakdown(conn)
+        render_emotion_breakdown()
