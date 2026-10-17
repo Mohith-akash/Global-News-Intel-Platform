@@ -60,9 +60,10 @@ cleaned AS (
         EMBEDDING IS NOT NULL AS has_embedding
 
     FROM source
-    -- the raw table holds ~1.5M repeated EVENT_IDs (Nov/Dec 2025 backfill
-    -- overlap, plus overlapping ingest runs in mid 2026); keep one row per
-    -- event, preferring the copy with a headline
+    -- the raw table held ~1.56M repeated EVENT_IDs (Nov/Dec 2025 backfill
+    -- overlap, plus overlapping ingest runs in mid 2026) until they were
+    -- deleted on 2026-10-17; this stays as a guard, preferring the copy with
+    -- a headline
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY EVENT_ID
         ORDER BY (HEADLINE IS NULL), ARTICLE_COUNT DESC

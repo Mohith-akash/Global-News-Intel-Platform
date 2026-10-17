@@ -15,11 +15,14 @@ sources:
         description: "Raw events from GDELT API"
         columns:
           - name: EVENT_ID
-            description: "GDELT GLOBALEVENTID; repeats in the raw table, stg_events dedups"
+            description: "GDELT GLOBALEVENTID, one row per event since the 2026-10-17 cleanup"
             tests:
               - not_null
               - unique:
                   config:
+                    # warn, not error: stg_events dedups anyway, so a repeat should
+                    # not stop the marts building. The table is clean now, so any
+                    # warning here means repeats are coming back
                     severity: warn
       - name: gkg_emotions
         description: "Raw GKG emotion data from GDELT (rolling 24h articles)"
@@ -28,11 +31,7 @@ sources:
             description: "Unique GKG record identifier"
             tests:
               - not_null
-              - unique:
-                  config:
-                    # 19 old broken-record fragments without a DATE share ids;
-                    # stg_gkg_emotions drops them and the ingest no longer writes them
-                    where: "DATE IS NOT NULL"
+              - unique
           - name: DATE
             description: "Record timestamp, YYYYMMDDHHMMSS"
             tests:

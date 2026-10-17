@@ -53,6 +53,7 @@ SELECT
     END AS dominant_emotion
 FROM {{ source('gdelt', 'gkg_emotions') }}
 -- broken records split by line breaks in the extras field have no DATE and
--- a fragment for an id; the ingest filters them now, this covers old rows
+-- a fragment for an id; the ingest filters them and the old ones were deleted
+-- on 2026-10-17, this stays as a guard
 WHERE DATE IS NOT NULL
 QUALIFY ROW_NUMBER() OVER (PARTITION BY GKG_ID ORDER BY DATE DESC) = 1
