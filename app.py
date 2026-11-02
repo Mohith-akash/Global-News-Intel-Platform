@@ -162,8 +162,8 @@ if __name__ == "__main__":
         main()
     except WarehouseUnavailable:
         st.warning(
-            "The data warehouse is at its free-tier usage limit right now. "
-            "Dashboards come back automatically when the quota resets - "
+            "The data warehouse is temporarily unreachable. "
+            "Dashboards come back on their own once it responds again - "
             "ingestion keeps running in the background."
         )
         st.stop()

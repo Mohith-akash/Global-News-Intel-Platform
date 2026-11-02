@@ -125,7 +125,7 @@ def safe_query(sql, params=None):
             pass
 
 
-def safe_query_batch(queries, timeout=90):
+def safe_query_batch(queries, timeout=45):
     """Run many queries in ONE worker subprocess.
 
     `queries` is {name: (sql, params_or_None)}. Returns {name: DataFrame},
@@ -139,6 +139,10 @@ def safe_query_batch(queries, timeout=90):
 
     Raises WarehouseUnavailable (and opens the breaker) if the connection
     itself hangs, dies, or is quota-blocked - identical to safe_query.
+
+    The 45s timeout has to stay under Streamlit's 60s script health check:
+    the health check runs the script, so a cache refresh that hits a hung
+    connection made the check fail with a 503. A normal batch takes ~3s.
     """
     if time.time() < _breaker_until:
         raise WarehouseUnavailable("warehouse circuit breaker open")
