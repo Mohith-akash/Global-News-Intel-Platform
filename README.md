@@ -2,7 +2,7 @@
 
 [![Pipeline](https://github.com/Mohith-akash/Global-News-Intel-Platform/actions/workflows/gdelt_ingest.yml/badge.svg)](https://github.com/Mohith-akash/Global-News-Intel-Platform/actions)
 
-Serverless ELT pipeline that ingests, processes, and visualizes 100,000+ global news events per day from the [GDELT Project](https://www.gdeltproject.org/), with an AI chat interface for natural-language queries.
+Serverless ELT pipeline that ingests, processes, and visualizes about 100,000 global news events a day from the [GDELT Project](https://www.gdeltproject.org/), with an AI chat interface for natural-language queries.
 
 **Live dashboard:** https://global-news-intel-platform.streamlit.app/
 
@@ -11,7 +11,7 @@ Serverless ELT pipeline that ingests, processes, and visualizes 100,000+ global 
 | Cumulative events processed | 30M+ |
 | Daily ingestion | 100K+ events |
 | Live operation | Since December 2025, scheduled hourly runs |
-| Unique visitors | 8,600+ since launch (Streamlit Cloud analytics), no promotion |
+| Unique visitors | 9,000+ since launch (Streamlit Cloud analytics), no promotion |
 | Coverage | 200+ countries, 100+ languages |
 | Typical query latency | < 1 second |
 | Monthly infrastructure cost | $0 |
@@ -64,7 +64,7 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 
 ### Cost engineering
 
-The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (~10x faster), bringing the total monthly cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
+The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (91s down to 6s on 116K rows), bringing the total monthly cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
 
 Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens. The SQL chat also started with the LLM writing the query (LlamaIndex `NLSQLTableQueryEngine`). It got GDELT's conventions wrong (dates as `YYYY-MM-DD` instead of `YYYYMMDD`, the wrong year, 2-letter instead of 3-letter country codes), so questions are now routed to tested query templates and the LLM only writes the answer from the results.
 
@@ -72,7 +72,7 @@ Other decisions that changed along the way: the LLM provider went from Gemini to
 
 | Feature | Description |
 |---------|-------------|
-| Real-time dashboard | Live metrics, trending news, sentiment, geographic distribution |
+| Live dashboard (updated hourly) | Live metrics, trending news, sentiment, geographic distribution |
 | Emotion analytics | GKG-powered tracking: fear, joy, positive/negative, global mood index |
 | AI chat | Two modes: RAG (keyword pre-filter plus vector search) and a SQL mode that routes questions to tested query templates; Cerebras writes the answer |
 | LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
