@@ -26,7 +26,7 @@ def render_ai_chat(tbl="events_dagster"):
             <div style="background:#1e293b;border-radius:8px;padding:1rem;margin-top:1rem;">
                 <div style="color:#64748b;font-size:0.85rem;">
                     <b>📊 What you can still do:</b><br>
-                    • View real-time event metrics and trends<br>
+                    • View the latest event metrics and trends<br>
                     • Browse the news feed and timeseries charts<br>
                     • Analyze emotion data from GKG<br>
                     • Explore geographic distribution and actors

@@ -153,7 +153,7 @@ def main():
         render_about()
     
     st.markdown('''<div class="footer">
-        <p class="footer-main"><b>GDELT</b> monitors worldwide news in real-time • 100K+ daily events</p>
+        <p class="footer-main"><b>GDELT</b> publishes new events every 15 minutes • about 100K events a day</p>
         <p class="footer-sub">Built by <a href="https://www.linkedin.com/in/mohith-akash/" class="footer-link">Mohith Akash</a></p>
     </div>''', unsafe_allow_html=True)
 
