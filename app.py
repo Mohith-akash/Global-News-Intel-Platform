@@ -1,6 +1,6 @@
 """
 GDELT News Intelligence Dashboard
-Real-time global news analytics powered by AI.
+Global news analytics powered by AI, updated hourly.
 """
 
 import faulthandler
