@@ -23,7 +23,7 @@ def render_header():
                 <span class="logo-icon">🌐</span>
                 <div>
                     <div class="logo-title">Global News Intelligence</div>
-                    <div class="logo-sub">Powered by GDELT • Real-Time Analytics</div>
+                    <div class="logo-sub">Powered by GDELT • Updated hourly</div>
                 </div>
             </div>
             <div class="live-badge"><span class="live-dot"></span> LIVE DATA</div>
