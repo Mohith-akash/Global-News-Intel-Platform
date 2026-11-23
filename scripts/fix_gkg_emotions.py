@@ -31,12 +31,10 @@ with duckdb.connect(db) as con:
     if not APPLY:
         print("dry run: would delete all rows, drop EMOTION_TRUST, add EMOTION_CONFIDENCE")
         sys.exit(0)
-    con.execute("BEGIN TRANSACTION")
-    con.execute("DELETE FROM gkg_emotions")
-    if "EMOTION_TRUST" in cols:
-        con.execute("ALTER TABLE gkg_emotions DROP COLUMN EMOTION_TRUST")
-    if "EMOTION_CONFIDENCE" not in cols:
-        con.execute("ALTER TABLE gkg_emotions ADD COLUMN EMOTION_CONFIDENCE DOUBLE")
-    con.execute("COMMIT")
+    # one statement, so it either fully happens or not at all (MotherDuck
+    # refuses a DELETE and an ALTER of the same table in one transaction)
+    keep = [c for c in cols if c not in ("EMOTION_TRUST", "EMOTION_CONFIDENCE")]
+    con.execute(f"CREATE OR REPLACE TABLE gkg_emotions AS SELECT {', '.join(keep)}, "
+                "CAST(NULL AS DOUBLE) AS EMOTION_CONFIDENCE FROM gkg_emotions LIMIT 0")
     cols = [r[0] for r in con.execute("DESCRIBE gkg_emotions").fetchall()]
     print(f"done: {con.execute('SELECT COUNT(*) FROM gkg_emotions').fetchone()[0]} rows, columns {cols}")
