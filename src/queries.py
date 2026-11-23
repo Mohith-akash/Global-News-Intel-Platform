@@ -7,11 +7,9 @@ MotherDuck handshake per cache refresh instead of one per query, which is
 what made cold page loads render piece by piece for 30-60s. The public
 get_* functions just pick their slice out of the bundle.
 
-SQL safety note: f-strings here interpolate only internally-generated values
-(dates from datetime.now() via get_dates(), and a trusted table name `t`
-supplied by the caller). No user-controlled input reaches these queries, so
-f-string formatting is safe. If user input is ever added, switch to DuckDB
-parameter binding ($1, $2, ...) instead.
+The f-strings only interpolate the table name and dates from get_dates(), never
+user input. Count-ordered lists break ties on a name column so the order is
+stable between refreshes.
 """
 
 import datetime
@@ -46,12 +44,12 @@ def _dashboard_bundle(t):
         'hotspot': (f"""
             SELECT ACTOR_COUNTRY_CODE, COUNT(*) as c FROM {t}
             WHERE DATE >= '{dates['week_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL
-            GROUP BY 1 ORDER BY 2 DESC LIMIT 1
+            GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1
         """, None),
         'alerts': (f"""
             SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t}
             WHERE DATE >= '{three_days}' AND IMPACT_SCORE < -4 AND MAIN_ACTOR IS NOT NULL
-            ORDER BY IMPACT_SCORE LIMIT 15
+            ORDER BY IMPACT_SCORE, MAIN_ACTOR LIMIT 15
         """, None),
         'trending': (f"""
             SELECT DATE, NEWS_LINK, HEADLINE, HEADLINE_AI, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
@@ -62,7 +60,7 @@ def _dashboard_bundle(t):
               AND ACTOR_COUNTRY_CODE IS NOT NULL
               AND HEADLINE IS NOT NULL
               AND LENGTH(HEADLINE) > 20
-            ORDER BY ARTICLE_COUNT DESC, DATE DESC
+            ORDER BY ARTICLE_COUNT DESC, DATE DESC, NEWS_LINK
             LIMIT 500
         """, None),
         'feed': (f"""
@@ -73,13 +71,13 @@ def _dashboard_bundle(t):
               AND ACTOR_COUNTRY_CODE IS NOT NULL
               AND HEADLINE IS NOT NULL
               AND LENGTH(HEADLINE) > 20
-            ORDER BY DATE DESC, ARTICLE_COUNT DESC
+            ORDER BY DATE DESC, ARTICLE_COUNT DESC, NEWS_LINK
             LIMIT 500
         """, None),
         'countries': (f"""
             SELECT ACTOR_COUNTRY_CODE as country, COUNT(*) as events FROM {t}
             WHERE DATE >= '{dates['month_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL
-            GROUP BY 1 ORDER BY 2 DESC
+            GROUP BY 1 ORDER BY 2 DESC, 1
         """, None),
         'timeseries': (f"""
             SELECT DATE, COUNT(*) as events,
@@ -97,7 +95,7 @@ def _dashboard_bundle(t):
         'actors': (f"""
             SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, COUNT(*) as events, AVG(IMPACT_SCORE) as avg_impact
             FROM {t} WHERE DATE >= '{dates['week_ago']}' AND MAIN_ACTOR IS NOT NULL AND LENGTH(MAIN_ACTOR) > 3
-            GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 10
+            GROUP BY 1, 2 ORDER BY 3 DESC, 1, 2 LIMIT 10
         """, None),
         'distribution': (f"""
             SELECT CASE
@@ -125,33 +123,13 @@ def get_metrics(t):
     }
 
 
-def get_alerts(t):
-    return _dashboard_bundle(t)['alerts']
+def _section(name):
+    def get(t):
+        return _dashboard_bundle(t)[name]
+    get.__name__ = f"get_{name}"
+    return get
 
 
-def get_trending(t):
-    return _dashboard_bundle(t)['trending']
-
-
-def get_feed(t):
-    return _dashboard_bundle(t)['feed']
-
-
-def get_countries(t):
-    return _dashboard_bundle(t)['countries']
-
-
-def get_timeseries(t):
-    return _dashboard_bundle(t)['timeseries']
-
-
-def get_sentiment(t):
-    return _dashboard_bundle(t)['sentiment']
-
-
-def get_actors(t):
-    return _dashboard_bundle(t)['actors']
-
-
-def get_distribution(t):
-    return _dashboard_bundle(t)['distribution']
+(get_alerts, get_trending, get_feed, get_countries, get_timeseries,
+ get_sentiment, get_actors, get_distribution) = map(_section, (
+    "alerts", "trending", "feed", "countries", "timeseries", "sentiment", "actors", "distribution"))

@@ -1,6 +1,7 @@
 """
 Utility functions for GDELT platform.
 """
+import calendar
 import datetime
 import re
 import pycountry
@@ -125,130 +126,71 @@ def get_dates():
     }
 
 
+AGGREGATE_WORDS = ('count', 'total', 'how many', 'number of', 'sum', 'overall',
+                   'whole year', 'all time', 'entire', 'so far', 'all events')
+# Full names before abbreviations: the first month found wins, and the full
+# name must win in "september 5" over "sep". Abbreviated "may" is the full name.
+_MONTH_NAMES = ('january february march april may june july august '
+                'september october november december').split()
+MONTHS = ([(m, i) for i, m in enumerate(_MONTH_NAMES, 1)]
+          + [(m[:3], i) for i, m in enumerate(_MONTH_NAMES, 1) if m != 'may'])
+
+
+def _week_range(now, weeks_back):
+    """Monday-Sunday of the current week (0) or the one before (1)."""
+    monday = now - datetime.timedelta(days=now.weekday() + 7 * weeks_back)
+    sunday = monday + datetime.timedelta(days=6)
+    return monday, sunday
+
+
 def detect_query_type(prompt):
-    """Detect query type and time period from user prompt."""
-    prompt_lower = prompt.lower()
-    result = {
-        'is_aggregate': False,
-        'is_specific_date': False,
-        'specific_date': None,
-        'time_period': 'week',
-        'period_label': 'the past week'
-    }
-
-    aggregate_keywords = ['count', 'total', 'how many', 'number of', 'sum', 'overall',
-                          'whole year', 'all time', 'entire', 'so far', 'all events']
-    if any(kw in prompt_lower for kw in aggregate_keywords):
-        result['is_aggregate'] = True
-        result['time_period'] = 'all'
-        result['period_label'] = 'all available data'
-
-    if 'year' in prompt_lower or 'all data' in prompt_lower:
-        result['time_period'] = 'all'
-        result['period_label'] = 'all available data'
-    elif 'last week' in prompt_lower:
-        # Calculate actual previous calendar week (Monday-Sunday)
-        now = datetime.datetime.now()
-        days_since_monday = now.weekday()
-        last_monday = now - datetime.timedelta(days=days_since_monday + 7)
-        last_sunday = last_monday + datetime.timedelta(days=6)
-        result['is_week_range'] = True
-        result['week_start'] = last_monday.strftime('%Y%m%d')
-        result['week_end'] = last_sunday.strftime('%Y%m%d')
-        result['time_period'] = 'last_week'
-        result['period_label'] = f"last week ({last_monday.strftime('%b %d')} - {last_sunday.strftime('%b %d')})"
-    elif 'this week' in prompt_lower:
-        # Calculate current calendar week (Monday-Sunday)
-        now = datetime.datetime.now()
-        days_since_monday = now.weekday()
-        this_monday = now - datetime.timedelta(days=days_since_monday)
-        this_sunday = this_monday + datetime.timedelta(days=6)
-        result['is_week_range'] = True
-        result['week_start'] = this_monday.strftime('%Y%m%d')
-        result['week_end'] = this_sunday.strftime('%Y%m%d')
-        result['time_period'] = 'this_week'
-        result['period_label'] = f"this week ({this_monday.strftime('%b %d')} - {this_sunday.strftime('%b %d')})"
-    elif 'month' in prompt_lower or '30 day' in prompt_lower:
-        result['time_period'] = 'month'
-        result['period_label'] = 'the past month'
-    elif 'today' in prompt_lower:
-        result['time_period'] = 'day'
-        result['period_label'] = 'today'
-
-    # Check for specific date patterns
+    """Read the time window out of a question: 'this week', 'oct 30', 'in march', ..."""
+    p = prompt.lower()
     now = datetime.datetime.now()
+    result = {'is_aggregate': False, 'is_specific_date': False, 'specific_date': None,
+              'time_period': 'week', 'period_label': 'the past week'}
 
-    # Month name mapping (must be checked in order to avoid partial matches)
-    month_patterns = [
-        ('january', 1), ('february', 2), ('march', 3), ('april', 4),
-        ('may', 5), ('june', 6), ('july', 7), ('august', 8),
-        ('september', 9), ('october', 10), ('november', 11), ('december', 12),
-        ('jan', 1), ('feb', 2), ('mar', 3), ('apr', 4),
-        ('jun', 6), ('jul', 7), ('aug', 8), ('sep', 9),
-        ('oct', 10), ('nov', 11), ('dec', 12)
-    ]
+    if any(w in p for w in AGGREGATE_WORDS):
+        result.update(is_aggregate=True, time_period='all', period_label='all available data')
 
-    # Try to find a date pattern (use word boundaries to avoid matching 'mar' in 'summarize')
-    for month_name, month_num in month_patterns:
-        # Pattern: month day (e.g., "oct 30", "october 15") - require word boundary
-        pattern = rf'(?:^|\s){month_name}\s+(\d{{1,2}})(?:\s|$|[^a-z])'
-        match = re.search(pattern, prompt_lower)
-        if match:
-            day = int(match.group(1))
-            if 1 <= day <= 31:
-                try:
-                    date_obj = datetime.datetime(now.year, month_num, day)
-                    result['is_specific_date'] = True
-                    result['specific_date'] = date_obj.strftime('%Y%m%d')
-                    result['time_period'] = 'specific'
-                    result['period_label'] = date_obj.strftime('%B %d, %Y')
-                    return result
-                except ValueError:
-                    pass
+    if 'year' in p or 'all data' in p:
+        result.update(time_period='all', period_label='all available data')
+    elif 'last week' in p or 'this week' in p:
+        which = 'last week' if 'last week' in p else 'this week'
+        monday, sunday = _week_range(now, 1 if which == 'last week' else 0)
+        result.update(is_week_range=True, week_start=monday.strftime('%Y%m%d'),
+                      week_end=sunday.strftime('%Y%m%d'), time_period=which.replace(' ', '_'),
+                      period_label=f"{which} ({monday:%b %d} - {sunday:%b %d})")
+    elif 'month' in p or '30 day' in p:
+        result.update(time_period='month', period_label='the past month')
+    elif 'today' in p:
+        result.update(time_period='day', period_label='today')
 
-        # Pattern: day month (e.g., "30 oct", "15 october")
-        pattern2 = rf'\b(\d{{1,2}})\s+{month_name}\b'
-        match2 = re.search(pattern2, prompt_lower)
-        if match2:
-            day = int(match2.group(1))
-            if 1 <= day <= 31:
-                try:
-                    date_obj = datetime.datetime(now.year, month_num, day)
-                    result['is_specific_date'] = True
-                    result['specific_date'] = date_obj.strftime('%Y%m%d')
-                    result['time_period'] = 'specific'
-                    result['period_label'] = date_obj.strftime('%B %d, %Y')
-                    return result
-                except ValueError:
-                    pass
+    # A day of a month: "oct 30" or "30 october" (word boundaries keep 'mar'
+    # out of 'summarize')
+    for name, month in MONTHS:
+        for rx in (rf'(?:^|\s){name}\s+(\d{{1,2}})(?:\s|$|[^a-z])', rf'\b(\d{{1,2}})\s+{name}\b'):
+            m = re.search(rx, p)
+            if not m:
+                continue
+            try:
+                day = datetime.datetime(now.year, month, int(m.group(1)))
+            except ValueError:
+                continue
+            result.update(is_specific_date=True, specific_date=day.strftime('%Y%m%d'),
+                          time_period='specific', period_label=day.strftime('%B %d, %Y'))
+            return result
 
-    # Check for month-only queries (e.g., "events in october", "october events")
-    # Use word boundary regex to avoid false matches like 'summarize' → 'mar'
-    for month_name, month_num in month_patterns:
-        # Pattern: month name as a standalone word (not part of another word)
-        month_pattern = rf'(?:^|\s){month_name}(?:\s|$|[^a-z])'
-        if re.search(month_pattern, prompt_lower):
-            # Make sure it's not already matched as a specific date
-            if not result['is_specific_date']:
-                try:
-                    # Create date range for the entire month
-                    import calendar
-                    year = now.year
-                    # If the month is in the future, assume last year
-                    if month_num > now.month:
-                        year = now.year - 1
-                    first_day = datetime.datetime(year, month_num, 1)
-                    last_day_num = calendar.monthrange(year, month_num)[1]
-                    last_day = datetime.datetime(year, month_num, last_day_num)
-
-                    result['is_month_range'] = True
-                    result['month_start'] = first_day.strftime('%Y%m%d')
-                    result['month_end'] = last_day.strftime('%Y%m%d')
-                    result['time_period'] = 'month_range'
-                    result['period_label'] = first_day.strftime('%B %Y')
-                    return result
-                except ValueError:
-                    pass
+    # A whole month: "events in october"; a month still ahead means last year's
+    for name, month in MONTHS:
+        if re.search(rf'(?:^|\s){name}(?:\s|$|[^a-z])', p):
+            year = now.year - 1 if month > now.month else now.year
+            first = datetime.datetime(year, month, 1)
+            last = first.replace(day=calendar.monthrange(year, month)[1])
+            result.update(is_month_range=True, month_start=first.strftime('%Y%m%d'),
+                          month_end=last.strftime('%Y%m%d'), time_period='month_range',
+                          period_label=first.strftime('%B %Y'))
+            return result
 
     return result
 
@@ -290,7 +232,7 @@ def get_country(code):
                 return country.name
 
         return None
-    except Exception:
+    except (KeyError, LookupError):
         return None
 
 

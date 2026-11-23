@@ -1,73 +1,59 @@
-"""MotherDuck query worker, run as a bare subprocess.
+"""MotherDuck query worker, run as a bare subprocess by src/database.py.
 
-Usage: python md_worker.py <output_path>
+Usage: python md_worker.py <output_dir>
 
-Single mode: stdin carries {"sql": ..., "params": ...}; <output_path> is a
-file and the result is written to it as parquet. Exit 0 ok, 2 query error.
+stdin carries {"queries": [{"name", "sql", "params"}, ...]}. Each result is
+written to <output_dir>/<name>.parquet, and manifest.json maps every name to
+"ok" or its error message. All queries share one connection, so a page load
+pays one process spawn and one MotherDuck handshake.
 
-Batch mode: stdin carries {"queries": [{"name","sql","params"}, ...]};
-<output_path> is a DIRECTORY. Each query result is written as
-<name>.parquet and a manifest.json maps name -> "ok" or the error message.
-The whole batch shares ONE connection, so the caller pays a single spawn
-and a single MotherDuck handshake instead of one per query. Exit 0 as long
-as the connection worked (per-query errors live in the manifest), 2 if the
-connection itself failed.
+Exit codes: 0 the connection worked (per-query errors are in the manifest),
+3 the connection failed, 2 anything else went wrong.
 
-Runs as its own script ON PURPOSE. The previous multiprocessing approach
-re-imported the app's __main__ module in every spawn child (that is how
-spawn bootstrapping works), which pulled in the full app stack including
-transformers - hundreds of MB and seconds of CPU per query, and enough
-memory pressure to evict streamlit caches and eventually crash the parent.
-A bare subprocess imports only what this file imports.
-
-The result goes to a FILE, not stdout, ON PURPOSE: the MotherDuck client
-prints notices (like the free-tier quota warning) straight to stdout, which
-corrupted the parquet byte stream when we piped results through it.
+Why a bare script: the previous multiprocessing approach re-imported the
+app's __main__ in every child (that is how spawn works), pulling the whole
+app stack into each query and eventually crashing the parent. This file
+imports only duckdb and pandas. Results go to files because the MotherDuck
+client prints notices (like quota warnings) to stdout.
 """
 
+import json
 import os
 import sys
-import json
-
-
-def _run(conn, sql, params):
-    if params is not None:
-        return conn.execute(sql, params).df()
-    return conn.execute(sql).df()
 
 
 def main():
     import duckdb
 
-    out_path = sys.argv[1]
-    req = json.loads(sys.stdin.read())
-
+    out_dir = sys.argv[1]
+    queries = json.loads(sys.stdin.read())["queries"]
     # GDELT_DB points the worker at a local duckdb file (tests, local runs)
     db = os.getenv("GDELT_DB") or f'md:gdelt_db?motherduck_token={os.getenv("MOTHERDUCK_TOKEN")}'
-    c = duckdb.connect(db, read_only=True)
     try:
-        if "queries" in req:
-            manifest = {}
-            for q in req["queries"]:
-                name = q["name"]
-                try:
-                    df = _run(c, q["sql"], q.get("params"))
-                    df.to_parquet(os.path.join(out_path, f"{name}.parquet"))
-                    manifest[name] = "ok"
-                except Exception as e:  # reported per query
-                    manifest[name] = str(e)
-            with open(os.path.join(out_path, "manifest.json"), "w") as f:
-                json.dump(manifest, f)
-        else:
-            df = _run(c, req["sql"], req.get("params"))
-            df.to_parquet(out_path)
+        con = duckdb.connect(db, read_only=True)
+    except Exception as e:
+        print(f"connection failed: {e}", file=sys.stderr)
+        sys.exit(3)
+
+    manifest = {}
+    try:
+        for q in queries:
+            try:
+                params = q.get("params")
+                rel = con.execute(q["sql"], params) if params is not None else con.execute(q["sql"])
+                rel.df().to_parquet(os.path.join(out_dir, f"{q['name']}.parquet"))
+                manifest[q["name"]] = "ok"
+            except Exception as e:  # reported per query
+                manifest[q["name"]] = str(e)
     finally:
-        c.close()
+        con.close()
+    with open(os.path.join(out_dir, "manifest.json"), "w") as f:
+        json.dump(manifest, f)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:  # report and exit nonzero
-        print(f"query error: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"worker error: {e}", file=sys.stderr)
         sys.exit(2)

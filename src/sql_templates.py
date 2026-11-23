@@ -40,23 +40,34 @@ class SqlPlan:
         return out
 
 
-def date_filter(qi: dict, dates: dict) -> tuple[str, list]:
-    """WHERE clause for the time window the question asks about."""
-    if qi['is_specific_date'] and qi['specific_date']:
-        return "DATE = ?", [qi['specific_date']]
+def date_bounds(qi: dict, dates: dict) -> tuple[str, str | None]:
+    """(first_day, last_day or None) for the time window a question asks about.
+
+    Shared by SQL mode and RAG mode so both read "this week" the same way.
+    """
+    if qi.get('is_specific_date') and qi.get('specific_date'):
+        return qi['specific_date'], qi['specific_date']
     if qi.get('is_week_range') and qi.get('week_start') and qi.get('week_end'):
-        # "last week" or "this week"
-        return "DATE >= ? AND DATE <= ?", [qi['week_start'], qi['week_end']]
+        return qi['week_start'], qi['week_end']
     if qi.get('is_month_range') and qi.get('month_start') and qi.get('month_end'):
-        # month-only questions like "events in october"
-        return "DATE >= ? AND DATE <= ?", [qi['month_start'], qi['month_end']]
-    if qi['time_period'] == 'all' or qi['is_aggregate']:
-        return "DATE >= ?", [dates['three_months_ago']]
-    if qi['time_period'] == 'month':
-        return "DATE >= ?", [dates['month_ago']]
-    if qi['time_period'] == 'day':
-        return "DATE = ?", [dates['today']]
-    return "DATE >= ?", [dates['week_ago']]
+        return qi['month_start'], qi['month_end']
+    if qi.get('time_period') == 'all' or qi.get('is_aggregate'):
+        return dates['three_months_ago'], None
+    if qi.get('time_period') == 'month':
+        return dates['month_ago'], None
+    if qi.get('time_period') == 'day':
+        return dates['today'], dates['today']
+    return dates['week_ago'], None
+
+
+def date_filter(qi: dict, dates: dict) -> tuple[str, list]:
+    """WHERE clause and parameters for date_bounds()."""
+    lo, hi = date_bounds(qi, dates)
+    if lo == hi:
+        return "DATE = ?", [lo]
+    if hi:
+        return "DATE >= ? AND DATE <= ?", [lo, hi]
+    return "DATE >= ?", [lo]
 
 
 def result_limit(prompt: str, qi: dict) -> int:

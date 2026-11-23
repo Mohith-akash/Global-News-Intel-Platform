@@ -1,17 +1,11 @@
 """
-Database connection and query utilities for GDELT platform.
+MotherDuck access for the app.
 
-MotherDuck calls run in a bare subprocess (python md_worker.py), not in the
-streamlit process and not via multiprocessing.
-Reason 1: when the warehouse is quota-blocked, the duckdb native client can
-hang while holding the GIL (freezing every thread, so in-process timeouts
-never fire) or segfault outright (killing whatever process it runs in).
-Reason 2: multiprocessing spawn re-imports the app's __main__ module in the
-child, which drags in the entire app stack (llama-index, transformers) -
-hundreds of MB per query child. That memory pressure evicted streamlit
-caches and eventually crashed the parent with a native allocation failure.
-A bare subprocess imports only duckdb and pandas, and subprocess.run kills
-it automatically on timeout.
+Every query runs in a bare subprocess (md_worker.py). When the warehouse is
+quota-blocked the duckdb client can hang while holding the GIL, so in-process
+timeouts never fire, or segfault and take its process down. In a child
+process both become a killed or failed subprocess, and a circuit breaker
+stops the app retrying a dead warehouse on every page load.
 """
 
 import os
@@ -67,133 +61,98 @@ def _open_breaker(reason):
     logger.error("MotherDuck %s - circuit breaker open for %ss", reason, _BREAKER_COOLDOWN)
 
 
-def safe_query(sql, params=None):
-    """Execute SQL against MotherDuck in an isolated subprocess.
+def _call_worker(queries, timeout):
+    """Run {name: (sql, params)} in one md_worker subprocess.
 
-    Crash modes this survives (all observed in production):
-      1. Child hangs on a quota-blocked connection -> subprocess.run kills it
-         at the timeout, breaker opens.
-      2. Child segfaults in the native client -> nonzero returncode in the
-         parent, breaker opens. The app itself never dies.
-
-    The child runs md_worker.py directly, so it imports only duckdb and
-    pandas - no multiprocessing bootstrapping, no app-stack re-import.
-    With @st.cache_data TTL=24h on the callers, the ~1s subprocess overhead
-    is paid a handful of times per day.
-
-    Pass `params` (a list) for parameterized queries - the RAG keyword filters
-    use this to bind values safely instead of string interpolation.
-    """
-    if time.time() < _breaker_until:
-        raise WarehouseUnavailable("warehouse circuit breaker open")
-
-    payload = json.dumps({"sql": sql, "params": params})
-    fd, out_path = tempfile.mkstemp(suffix=".parquet")
-    os.close(fd)
-    try:
-        try:
-            proc = subprocess.run(
-                [sys.executable, _WORKER, out_path],
-                input=payload.encode(),
-                capture_output=True,
-                timeout=45,
-            )
-        except subprocess.TimeoutExpired:
-            _open_breaker("query hung >45s")
-            raise WarehouseUnavailable("warehouse connection timed out") from None
-
-        if proc.returncode == 0:
-            try:
-                return pd.read_parquet(out_path)
-            except Exception as e:
-                logger.error("Worker returned unreadable result: %s", e)
-                return pd.DataFrame()
-
-        stderr = proc.stderr.decode(errors="replace").strip()
-        if proc.returncode == 2:
-            # clean query error reported by the worker (bad SQL, missing table...)
-            logger.error("Query error: %s", stderr)
-            return pd.DataFrame()
-
-        # any other exit means the native client died (segfault = -11)
-        _open_breaker(f"worker died with code {proc.returncode}: {stderr[-200:]}")
-        raise WarehouseUnavailable("warehouse client crashed") from None
-    finally:
-        try:
-            os.unlink(out_path)
-        except OSError:
-            pass
-
-
-def safe_query_batch(queries, timeout=45):
-    """Run many queries in ONE worker subprocess.
-
-    `queries` is {name: (sql, params_or_None)}. Returns {name: DataFrame},
-    with an empty frame (and a log line) for any query that errored - same
-    per-query contract as safe_query.
-
-    This exists because a cold dashboard load runs ~17 cached queries; one
-    subprocess each meant ~17 python spawns and ~17 MotherDuck handshakes,
-    rendering the page piece by piece for 30-60s. One worker doing the whole
-    batch pays the spawn + handshake once.
-
-    Raises WarehouseUnavailable (and opens the breaker) if the connection
-    itself hangs, dies, or is quota-blocked - identical to safe_query.
-
-    The 45s timeout has to stay under Streamlit's 60s script health check:
-    the health check runs the script, so a cache refresh that hits a hung
-    connection made the check fail with a 503. A normal batch takes ~3s.
+    Returns (exit_code, stderr, {name: DataFrame or error message}). A hang
+    is the one failure handled here: the child is killed at the timeout and
+    the breaker opens. Callers decide what a nonzero exit means.
     """
     if time.time() < _breaker_until:
         raise WarehouseUnavailable("warehouse circuit breaker open")
 
     payload = json.dumps({"queries": [
-        {"name": name, "sql": sql, "params": params}
-        for name, (sql, params) in queries.items()
+        {"name": name, "sql": sql, "params": params} for name, (sql, params) in queries.items()
     ]})
     out_dir = tempfile.mkdtemp()
     try:
         try:
-            proc = subprocess.run(
-                [sys.executable, _WORKER, out_dir],
-                input=payload.encode(),
-                capture_output=True,
-                timeout=timeout,
-            )
+            proc = subprocess.run([sys.executable, _WORKER, out_dir], input=payload.encode(),
+                                  capture_output=True, timeout=timeout)
         except subprocess.TimeoutExpired:
-            _open_breaker(f"batch hung >{timeout}s")
+            _open_breaker(f"query hung >{timeout}s")
             raise WarehouseUnavailable("warehouse connection timed out") from None
 
         stderr = proc.stderr.decode(errors="replace").strip()
         if proc.returncode != 0:
-            # batch mode reports per-query errors in the manifest, so any
-            # nonzero exit means the connection itself failed or the native
-            # client died
-            _open_breaker(f"batch worker died with code {proc.returncode}: {stderr[-200:]}")
-            raise WarehouseUnavailable("warehouse client crashed") from None
-
+            return proc.returncode, stderr, {}
         try:
             with open(os.path.join(out_dir, "manifest.json")) as f:
                 manifest = json.load(f)
-        except Exception:
-            _open_breaker("batch worker wrote no manifest")
+        except (OSError, ValueError):
+            _open_breaker("worker wrote no manifest")
             raise WarehouseUnavailable("warehouse client crashed") from None
 
         results = {}
         for name in queries:
-            status = manifest.get(name)
+            status = manifest.get(name, "no result")
             if status == "ok":
                 try:
                     results[name] = pd.read_parquet(os.path.join(out_dir, f"{name}.parquet"))
                     continue
                 except Exception as e:
-                    logger.error("Unreadable batch result %s: %s", name, e)
-            else:
-                logger.error("Batch query %s failed: %s", name, status)
-            results[name] = pd.DataFrame()
-        return results
+                    status = f"unreadable result: {e}"
+            results[name] = status
+        return 0, stderr, results
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
+
+
+def _frames(results):
+    """Error messages become empty frames (logged), like a query with no rows."""
+    out = {}
+    for name, r in results.items():
+        if isinstance(r, str):
+            logger.error("Query %s failed: %s", name, r)
+            r = pd.DataFrame()
+        out[name] = r
+    return out
+
+
+def safe_query_batch(queries, timeout=45):
+    """Run {name: (sql, params_or_None)} in ONE worker -> {name: DataFrame}.
+
+    A cold dashboard load runs ~17 queries; one subprocess each meant ~17
+    spawns and MotherDuck handshakes and a page that rendered piece by piece
+    for 30-60s. A query that errors comes back as an empty frame. If the
+    connection itself fails, hangs or crashes, the breaker opens and
+    WarehouseUnavailable is raised.
+
+    The 45s timeout stays under Streamlit's 60s script health check; a
+    normal batch takes ~3s.
+    """
+    code, stderr, results = _call_worker(queries, timeout)
+    if code != 0:
+        _open_breaker(f"worker died with code {code}: {stderr[-200:]}")
+        raise WarehouseUnavailable("warehouse client crashed") from None
+    return _frames(results)
+
+
+def safe_query(sql, params=None, timeout=45):
+    """One query in its own worker. Pass `params` (a list) to bind values.
+
+    Unlike a batch, a refused connection here only empties this result (the
+    chat says "no results") instead of opening the breaker for the whole
+    dashboard. A hang or a native crash still opens it.
+    """
+    code, stderr, results = _call_worker({"q": (sql, params)}, timeout)
+    if code in (2, 3):
+        logger.error("Query error: %s", stderr)
+        return pd.DataFrame()
+    if code != 0:  # the native client died (segfault = -11)
+        _open_breaker(f"worker died with code {code}: {stderr[-200:]}")
+        raise WarehouseUnavailable("warehouse client crashed") from None
+    return _frames(results)["q"]
 
 
 @retry_cache_race
