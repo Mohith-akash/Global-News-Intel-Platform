@@ -34,7 +34,7 @@ STOPWORDS = {
     'recent', 'latest', 'last', 'next', 'first', 'second', 'past', 'current',
 
     # Month names (should not match countries)
-    'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
     'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september',
     'october', 'november', 'december',
 
@@ -62,7 +62,7 @@ STOPWORDS = {
 
     # Conjunctions and prepositions
     'about', 'above', 'across', 'against', 'along', 'among', 'around', 'because',
-    'between', 'beyond', 'during', 'except', 'inside', 'into', 'like', 'near',
+    'between', 'beyond', 'except', 'inside', 'into', 'like', 'near',
     'over', 'through', 'toward', 'under', 'upon', 'within', 'without',
 
     # Misc words that shouldn't match
