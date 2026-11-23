@@ -2,7 +2,9 @@
 Configuration for GDELT platform.
 """
 
-CEREBRAS_MODEL = "gpt-oss-120b"  # llama3.1-8b archived; only production model on Cerebras as of May 2025
+import os
+
+CEREBRAS_MODEL = "gpt-oss-120b"  # replaced llama3.1-8b when Cerebras retired it
 
 # RAG Configuration (Voyage AI)
 VOYAGE_MODEL = "voyage-3.5-lite"  # 200M free tokens
@@ -84,6 +86,20 @@ COUNTRY_ALIASES = {
 }
 
 REQUIRED_ENVS = ["MOTHERDUCK_TOKEN", "CEREBRAS_API_KEY"]
+
+
+def get_secret(key):
+    """An API key from the environment, else from Streamlit secrets."""
+    val = os.getenv(key)
+    if val:
+        return val
+    try:
+        import streamlit as st
+        return st.secrets.get(key)
+    except Exception:  # no secrets file outside Streamlit
+        return None
+
+
 # Region to country codes mapping (for queries like "Middle East")
 REGION_ALIASES = {
     'middle east': ['ISR', 'SAU', 'IRN', 'IRQ', 'SYR', 'JOR', 'LBN', 'ARE', 'KWT', 'QAT', 'BHR', 'OMN', 'YEM', 'PSE'],

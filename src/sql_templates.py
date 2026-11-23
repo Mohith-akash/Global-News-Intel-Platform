@@ -138,7 +138,7 @@ def build_sql(prompt: str, qi: dict, dates: dict, tbl: str = "events_dagster") -
         return SqlPlan(
             f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM {tbl} WHERE {BASE_WHERE} "
             f"AND IMPACT_SCORE < -3 AND {df_sql} GROUP BY ACTOR_COUNTRY_CODE "
-            f"ORDER BY EVENT_COUNT DESC LIMIT {limit}",
+            f"ORDER BY EVENT_COUNT DESC, ACTOR_COUNTRY_CODE LIMIT {limit}",
             df_params, limit, is_country_aggregate=True,
         )
 
@@ -166,7 +166,7 @@ def build_sql(prompt: str, qi: dict, dates: dict, tbl: str = "events_dagster") -
     if 'top' in p and has_country_word:
         return SqlPlan(
             f"SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM {tbl} WHERE {BASE_WHERE} "
-            f"AND {df_sql} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT {limit}",
+            f"AND {df_sql} GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC, ACTOR_COUNTRY_CODE LIMIT {limit}",
             df_params, limit, is_country_aggregate=True,
         )
 

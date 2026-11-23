@@ -13,13 +13,12 @@ Dropping llama-index also takes transformers/tokenizers/nltk off the import
 path, about 40MB of RSS on the Streamlit container (measured: 129MB -> 89MB).
 """
 
-import os
 import logging
 
 import requests
 import streamlit as st
 
-from src.config import CEREBRAS_MODEL
+from src.config import CEREBRAS_MODEL, get_secret
 
 logger = logging.getLogger("gdelt")
 
@@ -36,7 +35,6 @@ MAX_COMPLETION_TOKENS = 1200
 # endpoint accepts it - see _post().
 REASONING_EFFORT = "low"
 
-AI_AVAILABLE = True
 
 
 class LLMUnavailable(RuntimeError):
@@ -123,7 +121,7 @@ class CerebrasLLM:
 @st.cache_resource
 def get_cerebras_llm():
     """Initialize the Cerebras client."""
-    api_key = os.getenv("CEREBRAS_API_KEY")
+    api_key = get_secret("CEREBRAS_API_KEY")
     if not api_key:
         logger.warning("CEREBRAS_API_KEY not found")
         return None

@@ -14,7 +14,7 @@ import os
 from dotenv import load_dotenv
 import logging
 
-from src.config import REQUIRED_ENVS
+from src.config import REQUIRED_ENVS, get_secret
 from src.styles import inject_css
 from src.database import detect_table, WarehouseUnavailable
 from components import (
@@ -45,19 +45,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gdelt")
 
-# =============================================================================
-# SECURITY & SECRETS
-# =============================================================================
-
-def get_secret(key):
-    """Get API keys from environment or Streamlit secrets."""
-    val = os.getenv(key)
-    if val:
-        return val
-    try:
-        return st.secrets.get(key)
-    except Exception:
-        return None
 
 missing = [k for k in REQUIRED_ENVS if not get_secret(k)]
 if missing:

@@ -138,21 +138,26 @@ def safe_query_batch(queries, timeout=45):
     return _frames(results)
 
 
-def safe_query(sql, params=None, timeout=45):
-    """One query in its own worker. Pass `params` (a list) to bind values.
+def safe_queries(queries, timeout=45):
+    """Several chat queries in one worker, with softer failure rules.
 
-    Unlike a batch, a refused connection here only empties this result (the
-    chat says "no results") instead of opening the breaker for the whole
+    Unlike a dashboard batch, a refused connection only empties these results
+    (the chat says "no results") instead of opening the breaker for the whole
     dashboard. A hang or a native crash still opens it.
     """
-    code, stderr, results = _call_worker({"q": (sql, params)}, timeout)
+    code, stderr, results = _call_worker(queries, timeout)
     if code in (2, 3):
         logger.error("Query error: %s", stderr)
-        return pd.DataFrame()
+        return {name: pd.DataFrame() for name in queries}
     if code != 0:  # the native client died (segfault = -11)
         _open_breaker(f"worker died with code {code}: {stderr[-200:]}")
         raise WarehouseUnavailable("warehouse client crashed") from None
-    return _frames(results)["q"]
+    return _frames(results)
+
+
+def safe_query(sql, params=None, timeout=45):
+    """One query; pass `params` (a list) to bind values."""
+    return safe_queries({"q": (sql, params)}, timeout)["q"]
 
 
 @retry_cache_race
