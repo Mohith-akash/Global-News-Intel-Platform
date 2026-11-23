@@ -1,298 +1,154 @@
-"""
-Render functions for dashboard UI components.
-"""
+"""Home and Feed tab widgets."""
 
 import datetime
+
 import pandas as pd
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 
-from src.queries import (
-    get_metrics, get_alerts, get_trending, get_feed, get_countries,
-    get_timeseries, get_sentiment, get_actors, get_distribution
-)
+from components.ui import GRID, MUTED, TEXT, metric_row, show_chart
 from src.data_processing import process_df
+from src.queries import (get_actors, get_alerts, get_countries, get_distribution, get_feed,
+                         get_metrics, get_sentiment, get_timeseries, get_trending)
 from src.utils import get_country
 
 
 def render_header():
-    st.markdown('''
-        <div class="header">
-            <div class="logo">
-                <span class="logo-icon">🌐</span>
-                <div>
-                    <div class="logo-title">Global News Intelligence</div>
-                    <div class="logo-sub">Powered by GDELT • Updated hourly</div>
-                </div>
-            </div>
-            <div class="live-badge"><span class="live-dot"></span> LIVE DATA</div>
-        </div>
-    ''', unsafe_allow_html=True)
+    st.markdown('''<div class="header"><div class="logo"><div>
+            <div class="logo-title">Global News Intelligence</div>
+            <div class="logo-sub">News events from GDELT, ingested hourly</div>
+        </div></div></div>''', unsafe_allow_html=True)
 
 
 def render_metrics(t):
     m = get_metrics(t)
-    c1, c2, c3, c4, c5 = st.columns(5)
     fmt = lambda n: f"{int(n):,}" if n else "—"
-
-    with c1:
-        st.metric("📡 TOTAL", fmt(m['total']), "All time")
-        st.markdown('''
-            <div style="text-align:center;margin-top:-0.5rem;">
-                <span style="font-size:0.7rem;color:#64748b;">
-                    💡 Total global events tracked in database
-                </span>
-            </div>
-        ''', unsafe_allow_html=True)
-    with c2:
-        st.metric("⚡ 7 DAYS", fmt(m['recent']), "Recent")
-        st.markdown('''
-            <div style="text-align:center;margin-top:-0.5rem;">
-                <span style="font-size:0.7rem;color:#64748b;">
-                    💡 Events from the past week
-                </span>
-            </div>
-        ''', unsafe_allow_html=True)
-    with c3:
-        st.metric("🚨 CRITICAL", fmt(m['critical']), "High impact")
-        st.markdown('''
-            <div style="text-align:center;margin-top:-0.5rem;">
-                <span style="font-size:0.7rem;color:#64748b;">
-                    💡 Severe events (impact score > 6) this week
-                </span>
-            </div>
-        ''', unsafe_allow_html=True)
-    with c4:
-        hs = m['hotspot']
-        name = get_country(hs) or hs or "N/A"
-        display_name = name if len(name) <= 15 else name[:15] + "..."
-        st.metric("🔥 HOTSPOT", display_name, hs or "")
-        st.markdown('''
-            <div style="text-align:center;margin-top:-0.5rem;">
-                <span style="font-size:0.7rem;color:#64748b;">
-                    💡 Country with most events this week
-                </span>
-            </div>
-        ''', unsafe_allow_html=True)
-    with c5:
-        now = datetime.datetime.now()
-        st.metric("📅 UPDATED", now.strftime("%H:%M"), now.strftime("%d %b"))
-        st.markdown('''
-            <div style="text-align:center;margin-top:-0.5rem;">
-                <span style="font-size:0.7rem;color:#64748b;">
-                    💡 UTC timezone • Data cached up to 4 hrs
-                </span>
-            </div>
-        ''', unsafe_allow_html=True)
+    hot = get_country(m['hotspot']) or m['hotspot'] or "—"
+    fetched = datetime.datetime.fromisoformat(m['fetched_at'])
+    metric_row([
+        ("Total events", fmt(m['total']), "Every event in the warehouse"),
+        ("Last 7 days", fmt(m['recent']), "Events from the past week"),
+        ("High impact", fmt(m['critical']), "Impact beyond ±6 this week"),
+        ("Top country", hot if len(hot) <= 15 else hot[:15] + "…", "Most events this week"),
+        ("Data as of", fetched.strftime("%H:%M UTC"), fetched.strftime("%d %b") + ", cached up to 4 h"),
+    ])
 
 
 def render_ticker(t):
     df = get_alerts(t)
     if df.empty:
-        txt = "⚡ Monitoring global news │ "
+        text = "No high-impact events in the last 3 days │ "
     else:
-        items = []
-        for _, r in df.iterrows():
-            actor = r.get('MAIN_ACTOR', '')[:30] or "Event"
-            country = get_country(r.get('ACTOR_COUNTRY_CODE', '')) or 'Global'
-            items.append(f"⚠️ {actor} ({country}) • {r.get('IMPACT_SCORE', 0):.1f}")
-        txt = " │ ".join(items) + " │ "
-
-    st.markdown('''
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:8px;
-                    padding:0.5rem;margin-bottom:0.5rem;text-align:center;">
-            <span style="font-size:0.7rem;color:#64748b;">
-                💡 <b>LIVE TICKER:</b> Shows high-impact events (score < -4) from 
-                the past 3 days. Numbers indicate severity level (-10 to +10 scale, 
-                where negative = conflict/crisis)
-            </span>
-        </div>
-    ''', unsafe_allow_html=True)
-    st.markdown(f'<div class="ticker"><div class="ticker-label"><span class="ticker-dot"></span> LIVE</div><div class="ticker-text">{txt + txt}</div></div>', unsafe_allow_html=True)
+        text = " │ ".join(f"{r['MAIN_ACTOR'][:30]} ({get_country(r['ACTOR_COUNTRY_CODE']) or 'Global'}) "
+                          f"{r['IMPACT_SCORE']:.1f}" for _, r in df.iterrows()) + " │ "
+    st.markdown('<div class="ticker-hint">High-impact events from the last 3 days (impact below −4, '
+                'on a scale from −10 conflict to +10 cooperation)</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="ticker"><div class="ticker-label">ALERTS</div>'
+                f'<div class="ticker-text">{text + text}</div></div>', unsafe_allow_html=True)
 
 
 def render_sentiment(t):
     df = get_sentiment(t)
     if df.empty:
-        st.info("Loading...")
+        st.info("No sentiment data for this week.")
         return
-
-    avg = df.iloc[0]['avg'] or 0
-    neg = int(df.iloc[0]['neg'] or 0)
-    pos = int(df.iloc[0]['pos'] or 0)
-    total = int(df.iloc[0]['total'] or 1)
-
-    if avg < -2:
-        status, color = ("⚠️ ELEVATED", "#ef4444")
-    elif avg < 0:
-        status, color = ("🟡 MODERATE", "#f59e0b")
-    elif avg < 2:
-        status, color = ("🟢 STABLE", "#10b981")
-    else:
-        status, color = ("✨ POSITIVE", "#06b6d4")
-
-    st.markdown(f'''
-        <div style="background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:0.75rem;text-align:center;margin-bottom:0.5rem;">
-            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;margin-bottom:0.25rem;">Weekly Sentiment</div>
-            <div style="font-size:1.25rem;font-weight:700;color:{color};">{status}</div>
-            <div style="font-size:0.7rem;color:#94a3b8;">Avg: <span style="color:{color}">{avg:.2f}</span></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;">
-            <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.5rem;text-align:center;">
-                <div style="font-size:1rem;font-weight:700;color:#ef4444;">{neg:,}</div>
-                <div style="font-size:0.6rem;color:#64748b;">Negative</div>
-            </div>
-            <div style="background:rgba(107,114,128,0.1);border:1px solid rgba(107,114,128,0.2);border-radius:8px;padding:0.5rem;text-align:center;">
-                <div style="font-size:1rem;font-weight:700;color:#9ca3af;">{total:,}</div>
-                <div style="font-size:0.6rem;color:#64748b;">Total</div>
-            </div>
-            <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:0.5rem;text-align:center;">
-                <div style="font-size:1rem;font-weight:700;color:#10b981;">{pos:,}</div>
-                <div style="font-size:0.6rem;color:#64748b;">Positive</div>
-            </div>
-        </div>
-    ''', unsafe_allow_html=True)
+    row = df.iloc[0]
+    avg = row['avg'] or 0
+    status, color = next((s, c) for limit, s, c in ((-2, "Elevated", "#ef4444"), (0, "Moderate", "#f59e0b"),
+                                                     (2, "Stable", "#10b981"), (float('inf'), "Positive", "#06b6d4"))
+                         if avg < limit)
+    counts = [("Negative", int(row['neg'] or 0), "neg"), ("Total", int(row['total'] or 1), "total"),
+              ("Positive", int(row['pos'] or 0), "pos")]
+    boxes = "".join(f'<div class="sent-box sent-{cls}"><div class="sent-num">{n:,}</div>'
+                    f'<div class="sent-label">{label}</div></div>' for label, n, cls in counts)
+    st.markdown(f'''<div class="sent-card">
+        <div class="sent-status" style="color:{color};">{status}</div>
+        <div class="sent-avg">Average impact <span style="color:{color}">{avg:.2f}</span></div></div>
+        <div class="sent-grid">{boxes}</div>''', unsafe_allow_html=True)
 
 
 def render_actors(t):
     df = get_actors(t)
     if df.empty:
-        st.info("🎯 Loading...")
+        st.info("No actor data for this week.")
         return
-
-    labels = []
-    for _, r in df.iterrows():
-        actor = r['MAIN_ACTOR'][:25]
-        country = get_country(r.get('ACTOR_COUNTRY_CODE', ''))
-        labels.append(f"{actor} ({country[:10]})" if country else actor)
-
-    colors = ['#ef4444' if x and x < -3 else ('#f59e0b' if x and x < 0 else ('#10b981' if x and x > 3 else '#06b6d4')) for x in df['avg_impact']]
-
-    fig = go.Figure(go.Bar(
-        x=df['events'], y=labels, orientation='h', marker_color=colors,
-        text=df['events'].apply(lambda x: f'{x:,}'), textposition='outside',
-        textfont=dict(color='#94a3b8', size=10)
-    ))
-    fig.update_layout(
-        height=350, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=50, t=10, b=0),
-        xaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')),
-        yaxis=dict(showgrid=False, tickfont=dict(color='#e2e8f0', size=11), autorange='reversed'),
-        bargap=0.3
-    )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='actors_chart')
+    labels = [f"{a[:25]} ({c[:10]})" if (c := get_country(code)) else a[:25]
+              for a, code in zip(df['MAIN_ACTOR'], df['ACTOR_COUNTRY_CODE'])]
+    colors = ['#ef4444' if x < -3 else '#f59e0b' if x < 0 else '#10b981' if x > 3 else '#06b6d4'
+              for x in df['avg_impact'].fillna(0)]
+    fig = go.Figure(go.Bar(x=df['events'], y=labels, orientation='h', marker_color=colors,
+                           text=df['events'].map('{:,}'.format), textposition='outside',
+                           textfont=dict(color=TEXT, size=10)))
+    show_chart(fig, 'actors_chart', 350, margin=dict(l=0, r=70, t=10, b=0), bargap=0.3,
+               xaxis=dict(showgrid=True, gridcolor=GRID, tickfont=dict(color=MUTED)),
+               yaxis=dict(showgrid=False, tickfont=dict(color='#e2e8f0', size=11), autorange='reversed'))
 
 
 def render_distribution(t, chart_key='distribution'):
     df = get_distribution(t)
     if df.empty:
-        st.info("📊 Loading...")
+        st.info("No tone data for this week.")
         return
-
-    colors = {'Crisis': '#ef4444', 'Negative': '#f59e0b', 'Neutral': '#64748b', 'Positive': '#10b981', 'Very Positive': '#06b6d4'}
-    fig = go.Figure(data=[go.Pie(
-        labels=df['cat'], values=df['cnt'], hole=0.6,
-        marker_colors=[colors.get(c, '#64748b') for c in df['cat']],
-        textinfo='percent', textfont=dict(size=11, color='#e2e8f0')
-    )])
-    fig.update_layout(
-        height=200, paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=10, r=10, t=10, b=10),
-        showlegend=True, legend=dict(orientation='h', y=-0.2, x=0.5, xanchor='center', font=dict(size=10, color='#94a3b8'))
-    )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key=chart_key)
+    colors = {'Crisis': '#ef4444', 'Negative': '#f59e0b', 'Neutral': MUTED, 'Positive': '#10b981', 'Very Positive': '#06b6d4'}
+    fig = go.Figure(go.Pie(labels=df['cat'], values=df['cnt'], hole=0.6, textinfo='percent',
+                           marker_colors=[colors.get(c, MUTED) for c in df['cat']],
+                           textfont=dict(size=11, color='#e2e8f0')))
+    show_chart(fig, chart_key, 200, margin=dict(l=10, r=10, t=10, b=10), showlegend=True,
+               legend=dict(orientation='h', y=-0.2, x=0.5, xanchor='center', font=dict(size=10, color=TEXT)))
 
 
 def render_countries(t):
     df = get_countries(t)
     if df.empty:
-        st.info("🏆 Loading...")
+        st.info("No country data for the last 30 days.")
         return
-
     df = df.head(8)
-    df['name'] = df['country'].apply(lambda x: get_country(x) or x or 'Unknown')
-    fmt = lambda n: f"{n/1000:.1f}K" if n >= 1000 else str(int(n))
+    names = [get_country(c) or c or 'Unknown' for c in df['country']]
+    fig = go.Figure(go.Bar(x=names, y=df['events'], marker_color='#06b6d4', textposition='outside',
+                           text=[f"{n / 1000:.1f}K" if n >= 1000 else str(int(n)) for n in df['events']],
+                           textfont=dict(color=TEXT, size=10)))
+    show_chart(fig, 'countries_chart', 300, margin=dict(l=0, r=0, t=10, b=0), bargap=0.35,
+               xaxis=dict(showgrid=False, tickfont=dict(color=TEXT, size=10), tickangle=-45),
+               yaxis=dict(showgrid=True, gridcolor=GRID, showticklabels=False))
 
-    fig = go.Figure(go.Bar(
-        x=df['name'], y=df['events'], marker_color='#06b6d4',
-        text=df['events'].apply(fmt), textposition='outside', textfont=dict(color='#94a3b8', size=10)
-    ))
-    fig.update_layout(
-        height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(showgrid=False, tickfont=dict(color='#94a3b8', size=10), tickangle=-45),
-        yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', showticklabels=False),
-        bargap=0.35
-    )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='countries_chart')
+
+def _stories(df, rows, empty, height, extra_cols=(), headline_label="Story"):
+    df = process_df(df).head(rows) if not df.empty else df
+    if df.empty:
+        st.info(empty)
+        return
+    cols = ['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', *extra_cols, 'NEWS_LINK']
+    st.dataframe(df[cols], hide_index=True, height=height, width='stretch', column_config={
+        "DATE_FMT": st.column_config.TextColumn("Date", width=60),
+        "INTENSITY": st.column_config.TextColumn("Intensity", width=140),
+        "HEADLINE": st.column_config.TextColumn(headline_label, width=None),
+        "REGION": st.column_config.TextColumn("Region", width=100),
+        "ARTICLE_COUNT": st.column_config.NumberColumn("Articles", width=60),
+        "NEWS_LINK": st.column_config.LinkColumn("Link", width=50, display_text="open"),
+    })
 
 
 def render_trending(t):
-    df = get_trending(t)
-    if df.empty:
-        st.info("🔥 Loading...")
-        return
-    df = process_df(df).head(20)
-    if df.empty:
-        st.info("🔥 No stories")
-        return
-
-    st.dataframe(
-        df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'ARTICLE_COUNT', 'NEWS_LINK']],
-        hide_index=True, height=400, width='stretch',
-        column_config={
-            "DATE_FMT": st.column_config.TextColumn("Date", width=60),
-            "INTENSITY": st.column_config.TextColumn("Intensity", width=140),
-            "HEADLINE": st.column_config.TextColumn("Story", width=None),
-            "REGION": st.column_config.TextColumn("Region", width=100),
-            "ARTICLE_COUNT": st.column_config.NumberColumn("📰", width=50),
-            "NEWS_LINK": st.column_config.LinkColumn("🔗", width=40)
-        }
-    )
+    _stories(get_trending(t), 20, "No stories this week.", 400, extra_cols=('ARTICLE_COUNT',))
 
 
 def render_feed(t):
-    df = get_feed(t)
-    if df.empty:
-        st.info("📋 Loading...")
-        return
-    df = process_df(df).head(50)
-    if df.empty:
-        st.info("📋 No events")
-        return
-
-    st.dataframe(
-        df[['DATE_FMT', 'INTENSITY', 'HEADLINE', 'REGION', 'NEWS_LINK']],
-        hide_index=True, height=600, width='stretch',
-        column_config={
-            "DATE_FMT": st.column_config.TextColumn("Date", width=60),
-            "INTENSITY": st.column_config.TextColumn("Intensity Level", width=140),
-            "HEADLINE": st.column_config.TextColumn("Event", width=None),
-            "REGION": st.column_config.TextColumn("Region", width=100),
-            "NEWS_LINK": st.column_config.LinkColumn("🔗", width=40)
-        }
-    )
+    _stories(get_feed(t), 50, "No events this week.", 600, headline_label="Event")
 
 
 def render_timeseries(t):
     df = get_timeseries(t)
     if df.empty:
-        st.info("📈 Loading...")
+        st.info("No data for the last 30 days.")
         return
-
-    df['date'] = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
+    dates = pd.to_datetime(df['DATE'].astype(str), format='%Y%m%d')
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    fig.add_trace(go.Scatter(x=df['date'], y=df['events'], fill='tozeroy', fillcolor='rgba(6,182,212,0.15)', line=dict(color='#06b6d4', width=2), name='Total'), secondary_y=False)
-    fig.add_trace(go.Scatter(x=df['date'], y=df['negative'], line=dict(color='#ef4444', width=2), name='Negative'), secondary_y=True)
-    fig.add_trace(go.Scatter(x=df['date'], y=df['positive'], line=dict(color='#10b981', width=2), name='Positive'), secondary_y=True)
-
-    fig.update_layout(
-        height=300, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=30, b=0), showlegend=True,
-        legend=dict(orientation='h', y=1.02, font=dict(size=11, color='#94a3b8')),
-        xaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')),
-        yaxis=dict(showgrid=True, gridcolor='rgba(30,58,95,0.3)', tickfont=dict(color='#64748b')),
-        hovermode='x unified'
-    )
-    st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key='timeseries_chart')
+    fig.add_trace(go.Scatter(x=dates, y=df['events'], fill='tozeroy', fillcolor='rgba(6,182,212,0.15)',
+                             line=dict(color='#06b6d4', width=2), name='Total'), secondary_y=False)
+    for col, color, name in (('negative', '#ef4444', 'Negative'), ('positive', '#10b981', 'Positive')):
+        fig.add_trace(go.Scatter(x=dates, y=df[col], line=dict(color=color, width=2), name=name), secondary_y=True)
+    show_chart(fig, 'timeseries_chart', 300, margin=dict(l=0, r=0, t=30, b=0), showlegend=True,
+               legend=dict(orientation='h', y=1.02, font=dict(size=11, color=TEXT)), hovermode='x unified',
+               xaxis=dict(showgrid=True, gridcolor=GRID, tickfont=dict(color=MUTED)),
+               yaxis=dict(showgrid=True, gridcolor=GRID, tickfont=dict(color=MUTED)))

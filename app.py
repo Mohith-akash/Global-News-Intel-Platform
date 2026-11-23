@@ -1,6 +1,6 @@
 """
-GDELT News Intelligence Dashboard
-Global news analytics powered by AI, updated hourly.
+Global News Intelligence: a Streamlit dashboard over GDELT news events,
+with an AI chat (SQL templates and RAG). Data is ingested hourly.
 """
 
 import faulthandler
@@ -9,140 +9,112 @@ import faulthandler
 # executing to stderr - it lands in the cloud log and names the culprit.
 faulthandler.enable()
 
-import streamlit as st
-import os
-from dotenv import load_dotenv
-import logging
+import logging  # noqa: E402
+import os  # noqa: E402
 
-from src.config import REQUIRED_ENVS, get_secret
-from src.styles import inject_css
-from src.database import detect_table, WarehouseUnavailable
-from components import (
-    render_header,
-    render_metrics,
-    render_ticker,
-    render_sentiment,
-    render_actors,
-    render_distribution,
-    render_countries,
-    render_trending,
-    render_feed,
-    render_timeseries,
-    render_ai_chat,
-    render_about,
-    render_emotions_tab
-)
+import streamlit as st  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
-# Page config
-st.set_page_config(
-    page_title="Global News Intelligence",
-    page_icon="🌐",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+from components import (render_about, render_actors, render_ai_chat, render_countries,  # noqa: E402
+                        render_distribution, render_emotions_tab, render_feed, render_header,
+                        render_metrics, render_sentiment, render_ticker, render_timeseries,
+                        render_trending)
+from components.ui import card_header  # noqa: E402
+from src.config import REQUIRED_ENVS, get_secret  # noqa: E402
+from src.database import WarehouseUnavailable, detect_table  # noqa: E402
+from src.styles import inject_css  # noqa: E402
+from src.utils import INTENSITY_SCALE  # noqa: E402
 
+st.set_page_config(page_title="Global News Intelligence", page_icon="🌐", layout="wide",
+                   initial_sidebar_state="collapsed")
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("gdelt")
-
 
 missing = [k for k in REQUIRED_ENVS if not get_secret(k)]
 if missing:
-    st.error(f"❌ Missing required API keys: {', '.join(missing)}")
+    st.error(f"Missing required API keys: {', '.join(missing)}")
     st.stop()
-
+# Streamlit secrets aren't visible to the query worker subprocess; env vars are.
 for key in REQUIRED_ENVS:
-    val = get_secret(key)
-    if val:
-        os.environ[key] = val
+    os.environ[key] = get_secret(key)
 
-# =============================================================================
-# MAIN APPLICATION
-# =============================================================================
+
+def render_intensity_guide():
+    rows = "".join(
+        f'<div class="intensity-item"><div class="intensity-title">{label}</div>'
+        f'<div class="intensity-score">Score {low} to {high}</div></div>'
+        for label, low, high, _ in INTENSITY_SCALE)
+    st.markdown(f'<div class="card">{rows}</div>', unsafe_allow_html=True)
+
+
+HOW_IT_WORKS = """<div class="card"><h4 class="title-cyan">How it works</h4>
+    <p class="text-muted"><b>SQL mode:</b> the question picks a tested query template, the
+    warehouse runs it, and the LLM writes the answer from the returned rows.</p>
+    <p class="text-muted"><b>RAG mode:</b> the question is embedded with Voyage AI, similar
+    headlines are found by vector search, and the LLM answers from those headlines.</p>
+    <p class="text-xs text-muted">Impact scores run from -10 (conflict) to +10 (cooperation).
+    Answers are cached for an hour.</p></div>"""
+
 
 def main():
     inject_css()
     tbl = detect_table()
-
-    # Auto-refresh hourly to match the ingest cadence - JS reload works in all
-    # browsers unlike <meta> in body. Was 5 minutes, which re-ran every session
-    # 12x/hour for data that only changes once an hour.
-    st.markdown('<script>setTimeout(()=>location.reload(),3600000)</script>', unsafe_allow_html=True)
-
-    # The Cerebras LLM is loaded lazily inside the AI tab (via get_cerebras_llm)
-    # to keep it off the startup path and reduce Streamlit Cloud memory pressure.
-
     render_header()
-    tabs = st.tabs(["📊 HOME", "📋 FEED", "🧠 EMOTIONS", "🤖 AI", "👤 ABOUT"])
-    
-    with tabs[0]:
+    home, feed, emotions, chat, about = st.tabs(["Overview", "Feed", "Emotions", "Ask AI", "About"])
+
+    with home:
         render_metrics(tbl)
         render_ticker(tbl)
         st.markdown("---")
         c1, c2 = st.columns([6, 4])
         with c1:
-            st.markdown('<div class="card-hdr"><span>🔥</span><span class="card-title">Trending News</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
+            card_header("Trending news", "this week")
             render_trending(tbl)
         with c2:
-            st.markdown('<div class="card-hdr"><span>⚡</span><span class="card-title">Weekly Sentiment</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(7 Days)</span></div>', unsafe_allow_html=True)
+            card_header("Weekly sentiment", "7 days")
             render_sentiment(tbl)
-            st.markdown('<div class="card-hdr" style="margin-top:1rem;"><span>📊</span><span class="card-title">Tone Breakdown</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
+            card_header("Tone breakdown", "this week")
             render_distribution(tbl, 'home_dist')
         st.markdown("---")
         c1, c2 = st.columns([6, 4])
         with c1:
-            st.markdown('<div class="card-hdr"><span>🎯</span><span class="card-title">Most Mentioned</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
+            card_header("Most mentioned", "this week")
             render_actors(tbl)
         with c2:
-            st.markdown('<div class="card-hdr"><span>🏆</span><span class="card-title">Top Countries</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(30 Days)</span></div>', unsafe_allow_html=True)
+            card_header("Top countries", "30 days")
             render_countries(tbl)
-    
-    with tabs[1]:
+
+    with feed:
         c1, c2 = st.columns([7, 3])
         with c1:
-            st.markdown('<div class="card-hdr"><span>📋</span><span class="card-title">Recent Events Feed</span><span style="color:#64748b;font-size:0.75rem;margin-left:0.5rem;">(This Week)</span></div>', unsafe_allow_html=True)
+            card_header("Recent events", "this week")
             render_feed(tbl)
         with c2:
-            st.markdown('<div class="card-hdr"><span>📊</span><span class="card-title">Intensity Guide</span></div>', unsafe_allow_html=True)
-            st.markdown('''<div class="card">
-                <h4 class="title-cyan">🎯 EVENT INTENSITY LEVELS</h4>
-                <div class="intensity-item intensity-red"><div class="intensity-title">⚔️ Armed Conflict</div><div class="intensity-score">Score: -10 to -8</div></div>
-                <div class="intensity-item intensity-red"><div class="intensity-title">🔴 Major Crisis</div><div class="intensity-score">Score: -7 to -6</div></div>
-                <div class="intensity-item intensity-amber"><div class="intensity-title">🟠 Serious Tension</div><div class="intensity-score">Score: -5 to -4</div></div>
-                <div class="intensity-item intensity-yellow"><div class="intensity-title">🟡 Verbal Dispute</div><div class="intensity-score">Score: -3 to -2</div></div>
-                <div class="intensity-item intensity-gray"><div class="intensity-title">⚪ Neutral Event</div><div class="intensity-score">Score: -2 to 2</div></div>
-                <div class="intensity-item intensity-green"><div class="intensity-title">🟢 Diplomatic Talk</div><div class="intensity-score">Score: 2 to 4</div></div>
-                <div class="intensity-item intensity-green"><div class="intensity-title">🤝 Partnership</div><div class="intensity-score">Score: 4 to 6</div></div>
-                <div class="intensity-item intensity-cyan"><div class="intensity-title">✨ Peace Agreement</div><div class="intensity-score">Score: 6+</div></div>
-            </div>''', unsafe_allow_html=True)
+            card_header("Intensity guide")
+            render_intensity_guide()
         st.markdown("---")
-        st.markdown('<div class="card-hdr"><span>📈</span><span class="card-title">30-Day Trend Analysis</span></div>', unsafe_allow_html=True)
+        card_header("30-day trend")
         render_timeseries(tbl)
-    
-    with tabs[2]:
+
+    with emotions:
         render_emotions_tab()
-    
-    with tabs[3]:
+
+    with chat:
         c1, c2 = st.columns([7, 3])
         with c1:
-            st.markdown('<div class="card-hdr"><span>🤖</span><span class="card-title">Ask in Plain English</span></div>', unsafe_allow_html=True)
+            card_header("Ask in plain English")
             render_ai_chat(tbl)
         with c2:
-            st.markdown('''<div class="card">
-                <h4 class="title-cyan">ℹ️ HOW IT WORKS</h4>
-                <p class="text-muted" style="margin-bottom:0.5rem;"><b>🔍 SQL Mode:</b><br>Question → Cerebras AI → SQL query → Results</p>
-                <p class="text-muted" style="margin-bottom:0.5rem;"><b>🧠 RAG Mode:</b><br>Question → Voyage AI → Vector search → AI synthesis</p>
-                <hr style="border-color:#1e3a5f;margin:1rem 0;">
-                <p class="text-xs text-muted">📅 Dates: YYYYMMDD<br>👤 Actors: People/Orgs<br>📊 Impact: -10 to +10<br>🔗 Links: News sources</p>
-            </div>''', unsafe_allow_html=True)
-    
-    with tabs[4]:
+            st.markdown(HOW_IT_WORKS, unsafe_allow_html=True)
+
+    with about:
         render_about()
-    
+
     st.markdown('''<div class="footer">
-        <p class="footer-main"><b>GDELT</b> publishes new events every 15 minutes • about 100K events a day</p>
+        <p class="footer-main">Data: <b>GDELT</b>, which publishes new events every 15 minutes (about 100K a day). This app ingests them hourly.</p>
         <p class="footer-sub">Built by <a href="https://www.linkedin.com/in/mohith-akash/" class="footer-link">Mohith Akash</a></p>
     </div>''', unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     try:

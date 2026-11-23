@@ -10,8 +10,7 @@
   "ARTICLE_COUNT": 25,
   "REGION": "Germany",
   "DATE_FMT": "22/11",
-  "TONE": "🔴",
-  "INTENSITY": "🟠 Serious Tension"
+  "INTENSITY": "🟠 Serious tension"
  },
  {
   "DATE": "20261121",
@@ -24,8 +23,7 @@
   "ARTICLE_COUNT": 30,
   "REGION": "United States",
   "DATE_FMT": "21/11",
-  "TONE": "⚪",
-  "INTENSITY": "🟢 Diplomatic Talk"
+  "INTENSITY": "🟢 Diplomatic talks"
  },
  {
   "DATE": "20261119",
@@ -38,8 +36,7 @@
   "ARTICLE_COUNT": 22,
   "REGION": "France",
   "DATE_FMT": "19/11",
-  "TONE": "🟡",
-  "INTENSITY": "🟡 Verbal Dispute"
+  "INTENSITY": "🟡 Verbal dispute"
  },
  {
   "DATE": "20261118",
@@ -52,8 +49,7 @@
   "ARTICLE_COUNT": 12,
   "REGION": "France",
   "DATE_FMT": "18/11",
-  "TONE": "🟡",
-  "INTENSITY": "🟡 Verbal Dispute"
+  "INTENSITY": "🟡 Verbal dispute"
  },
  {
   "DATE": "20261117",
@@ -66,7 +62,6 @@
   "ARTICLE_COUNT": 50,
   "REGION": "China",
   "DATE_FMT": "17/11",
-  "TONE": "🟢",
-  "INTENSITY": "🟢 Diplomatic Talk"
+  "INTENSITY": "🟢 Diplomatic talks"
  }
 ]

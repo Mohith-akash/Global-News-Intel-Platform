@@ -90,9 +90,7 @@ def test_labels():
     from src import utils
     scores = [None, -9, -8, -7, -6, -5, -4.5, -4, -3, -2, -1.5, -1, 0, 0.5, 1, 2, 3, 4, 5, 6, 8]
     out = {}
-    for name in ("get_impact_label", "get_intensity_label"):
-        fn = getattr(utils, name)
-        out[name] = [fn(s) for s in scores]
+    out["get_intensity_label"] = [utils.get_intensity_label(s) for s in scores]
     out["country"] = [utils.get_country(c) for c in ["DEU", "US", "AFR", "XX", "", None, "usa", "ZZZ"]]
     out["code"] = [utils.get_country_code(w) for w in ["germany", "uk", "the", "korea", "india", "12", "us", "may", "fra"]]
     check("labels", out)

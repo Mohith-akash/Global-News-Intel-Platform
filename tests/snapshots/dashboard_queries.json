@@ -3,23 +3,21 @@
   "total": 21,
   "recent": 16,
   "critical": 2,
-  "hotspot": "FRA"
+  "hotspot": "FRA",
+  "fetched_at": "2026-11-23T10:00:00"
  },
  "alerts": [
   {
    "MAIN_ACTOR": "GERMANY",
    "ACTOR_COUNTRY_CODE": "DEU",
-   "IMPACT_SCORE": -5.0
-  },
-  {
-   "MAIN_ACTOR": "GERMANY",
-   "ACTOR_COUNTRY_CODE": "DEU",
-   "IMPACT_SCORE": -5.0
+   "IMPACT_SCORE": -5.0,
+   "ARTICLES": 50.0
   },
   {
    "MAIN_ACTOR": "UKRAINE",
    "ACTOR_COUNTRY_CODE": "UKR",
-   "IMPACT_SCORE": -7.0
+   "IMPACT_SCORE": -7.0,
+   "ARTICLES": 10.0
   }
  ],
  "trending": [

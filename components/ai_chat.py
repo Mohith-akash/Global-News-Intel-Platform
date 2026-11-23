@@ -20,7 +20,7 @@ from src.database import WarehouseUnavailable, safe_query
 from src.headline_utils import clean_headline
 from src.rag_engine import get_voyage_api_key, rag_query
 from src.sql_templates import build_sql, date_bounds
-from src.utils import detect_query_type, get_country, get_dates, get_impact_label
+from src.utils import detect_query_type, get_country, get_dates, get_intensity_label
 
 logger = logging.getLogger("gdelt")
 
@@ -59,7 +59,7 @@ def _say(text):
 
 
 def _show_sql(sql):
-    with st.expander("🔍 SQL"):
+    with st.expander("Show the SQL"):
         st.code(sql, language='sql')
 
 
@@ -96,18 +96,18 @@ def render_ai_chat(tbl="events_dagster"):
     _render_history()
 
     rag_available = get_voyage_api_key() is not None
-    modes = ["🔍 SQL Mode", "🧠 RAG Mode" if rag_available else "🧠 RAG Mode (requires API key)"]
+    modes = ["SQL mode", "RAG mode" if rag_available else "RAG mode (needs a Voyage API key)"]
     mode = st.radio("Select Mode", modes, horizontal=True, label_visibility="collapsed", key="mode_selector")
 
     if "SQL" in mode:
-        _examples("💡 SQL MODE - Precise Queries:", SQL_EXAMPLES)
+        _examples("SQL mode: precise counts and lists. Try:", SQL_EXAMPLES)
         prompt = st.chat_input("Ask about global events (SQL)...", key="sql_chat")
         if prompt:
             _chat_turn(prompt, lambda: _render_sql_answer(prompt, tbl))
     elif not rag_available:
-        st.warning("⚠️ RAG Mode requires VOYAGE_API_KEY in the environment or Streamlit secrets.")
+        st.warning("RAG mode needs VOYAGE_API_KEY in the environment or Streamlit secrets.")
     else:
-        _examples("💡 RAG MODE - Semantic Search:", RAG_EXAMPLES)
+        _examples("RAG mode: semantic search over headlines. Try:", RAG_EXAMPLES)
         prompt = st.chat_input("Ask about events semantically...", key="rag_chat")
         if prompt:
             _chat_turn(prompt, lambda: _render_rag_answer(prompt, tbl))
@@ -117,19 +117,19 @@ def _render_history():
     past = st.session_state.qa_history[-5:]
     if not past:
         return
-    with st.expander("🕒 Previous Conversations", expanded=False):
+    with st.expander("Previous questions", expanded=False):
         idx = st.selectbox("Select", range(len(past)), key="prev_select",
                            format_func=lambda i: past[i]["question"][:70] + ("…" if len(past[i]["question"]) > 70 else ""))
         sel = past[idx]
-        badge = "🔍 SQL" if sel.get("mode") == "sql" else "🧠 RAG"
+        badge = "SQL" if sel.get("mode") == "sql" else "RAG"
         # escaped: these are visitor-typed questions and model output
         st.markdown(f'''<div class="prev-convo-card">
-            <div class="prev-convo-label">💬 Previous Conversation ({badge})</div>
+            <div class="prev-convo-label">{badge} mode</div>
             <div class="prev-convo-q"><b>Q:</b></div><div class="prev-convo-text">{html.escape(sel['question'])}</div>
             <div class="prev-convo-q" style="margin-top:0.5rem;"><b>A:</b></div><div class="prev-convo-text">{html.escape(sel['answer'])}</div>
         </div>''', unsafe_allow_html=True)
         if sel.get("sql"):
-            with st.expander("🔍 Query Details"):
+            with st.expander("Query details"):
                 st.code(sel["sql"], language="sql")
 
 
@@ -150,8 +150,8 @@ def _rag_result(prompt, tbl, min_date, max_date):
 def _render_rag_answer(prompt, tbl):
     qi = detect_query_type(prompt)
     min_date, max_date = date_bounds(qi, get_dates())  # same reading of "this week" as SQL mode
-    st.caption(f"🗓️ Searching {qi['period_label']}")
-    with st.spinner("🧠 Searching semantically..."):
+    st.caption(f"Searching {qi['period_label']}")
+    with st.spinner("Searching..."):
         result = _rag_result(prompt, tbl, min_date, max_date)
     _say(result["answer"])
 
@@ -160,20 +160,20 @@ def _render_rag_answer(prompt, tbl):
         if 'ACTOR_COUNTRY_CODE' in df.columns:
             df['COUNTRY'] = _country_names(df['ACTOR_COUNTRY_CODE'])
         if 'IMPACT_SCORE' in df.columns:
-            df['SEVERITY'] = df['IMPACT_SCORE'].apply(get_impact_label)
+            df['SEVERITY'] = df['IMPACT_SCORE'].apply(get_intensity_label)
         if 'DATE' in df.columns:
             df['DATE'] = _short_dates(df['DATE'])
         if 'similarity' in df.columns:
             df['RELEVANCE'] = (df['similarity'] * 100).round(1).astype(str) + '%'
         cols = [c for c in ['DATE', 'HEADLINE', 'COUNTRY', 'SEVERITY', 'RELEVANCE', 'NEWS_LINK'] if c in df.columns]
-        with st.expander("📋 Retrieved Headlines", expanded=True):
+        with st.expander("Retrieved headlines", expanded=True):
             st.dataframe(df[cols], hide_index=True, column_config={
                 "DATE": st.column_config.TextColumn("Date", width=70),
                 "HEADLINE": st.column_config.TextColumn("Event", width=None),
                 "COUNTRY": st.column_config.TextColumn("Country", width=90),
                 "SEVERITY": st.column_config.TextColumn("Severity", width=100),
                 "RELEVANCE": st.column_config.TextColumn("Match", width=55),
-                "NEWS_LINK": st.column_config.LinkColumn("Link", width=50, display_text="🔗"),
+                "NEWS_LINK": st.column_config.LinkColumn("Link", width=50, display_text="open"),
             })
     _remember(prompt, result["answer"], result.get("sql"), "rag")
 
@@ -191,7 +191,7 @@ def _event_rows(dd):
     # "Snowfall Expected Across Much Uk" share words 2-6
     dd = dd.loc[~dd['HEADLINE'].map(lambda h: ' '.join(h.lower().split()[1:6]) if len(h.split()) > 1
                                     else h.lower()).duplicated()]
-    dd['SEVERITY'] = dd['IMPACT_SCORE'].apply(get_impact_label)
+    dd['SEVERITY'] = dd['IMPACT_SCORE'].apply(get_intensity_label)
     dd['DATE'] = _short_dates(dd['DATE'])
     return dd
 
@@ -251,15 +251,15 @@ Write a concise analytical answer (3-5 sentences) that directly answers the ques
 
 
 def _render_sql_answer(prompt, tbl):
-    with st.spinner("🔍 Querying..."):
+    with st.spinner("Querying..."):
         res = _sql_result(prompt, tbl, get_dates()['today'])
     kind = res["kind"]
     if kind == "none":
-        st.warning("📭 No results found for this query")
-        st.caption('💡 Try a country name or a time period, e.g. "events in Germany this week". '
+        st.warning("No results for this question.")
+        st.caption('Try a country name or a time period, e.g. "events in Germany this week". '
                    'Data starts in October 2025.')
     elif kind == "no_events":
-        st.warning("📭 No events found for this query")
+        st.warning("No events found for this question.")
     else:
         _say(res["answer"])
     if kind == "count":
@@ -277,6 +277,6 @@ def _render_sql_answer(prompt, tbl):
             "HEADLINE": st.column_config.TextColumn("Event", width=None),
             "COUNTRY": st.column_config.TextColumn("Country", width=100),
             "SEVERITY": st.column_config.TextColumn("Severity", width=120),
-            "NEWS_LINK": st.column_config.LinkColumn("🔗", width=40)})
+            "NEWS_LINK": st.column_config.LinkColumn("Link", width=50, display_text="open")})
     _show_sql(res["sql"])
     _remember(prompt, res["answer"], res["sql"], "sql")

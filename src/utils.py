@@ -236,35 +236,29 @@ def get_country(code):
         return None
 
 
-def get_impact_label(score):
-    """Convert impact score to readable label."""
-    if score is None:
-        return "Neutral"
-
-    score = float(score)
-
-    if score <= -8: return "🔴 Severe Crisis"
-    if score <= -5: return "🔴 Major Conflict"
-    if score <= -3: return "🟠 Rising Tensions"
-    if score <= -1: return "🟡 Minor Dispute"
-    if score < 1: return "⚪ Neutral"
-    if score < 3: return "🟢 Cooperation"
-    if score < 5: return "🟢 Partnership"
-    return "✨ Major Agreement"
+# One severity scale for the feed, the chat and the guide on the Feed tab:
+# (label, lowest score, highest score, upper bound is inclusive)
+INTENSITY_SCALE = [
+    ("🔴 Armed conflict", -10, -8, True),
+    ("🔴 Major crisis", -8, -6, True),
+    ("🟠 Serious tension", -6, -4, True),
+    ("🟡 Verbal dispute", -4, -2, True),
+    ("⚪ Neutral", -2, 2, False),
+    ("🟢 Diplomatic talks", 2, 4, False),
+    ("🟢 Partnership", 4, 6, False),
+    ("🟢 Peace agreement", 6, 10, True),
+]
 
 
 def get_intensity_label(score):
-    """Get intensity description for events."""
-    if score is None:
-        return "⚪ Neutral Event"
-
-    score = float(score)
-
-    if score <= -8: return "⚔️ Armed Conflict"
-    if score <= -6: return "🔴 Major Crisis"
-    if score <= -4: return "🟠 Serious Tension"
-    if score <= -2: return "🟡 Verbal Dispute"
-    if score < 2: return "⚪ Neutral Event"
-    if score < 4: return "🟢 Diplomatic Talk"
-    if score < 6: return "🤝 Active Partnership"
-    return "✨ Peace Agreement"
+    """Severity label for an impact score (-10 conflict .. +10 cooperation)."""
+    try:
+        s = float(score)
+    except (TypeError, ValueError):
+        return "⚪ Neutral"
+    if s != s:  # NaN
+        return "⚪ Neutral"
+    for label, _, high, inclusive in INTENSITY_SCALE[:-1]:
+        if s < high or (inclusive and s == high):
+            return label
+    return INTENSITY_SCALE[-1][0]

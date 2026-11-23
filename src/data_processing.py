@@ -68,7 +68,7 @@ def process_df(df):
         date_range = (dates.max() - date_min).days or 1
         recency = (dates - date_min).dt.days / date_range
         df['_SCORE'] = 0.6 * recency + 0.4 * df['_QUALITY']
-    except Exception:
+    except (ValueError, TypeError):
         df['_SCORE'] = df['_QUALITY']
 
     df = df.sort_values('_SCORE', ascending=False)
@@ -87,17 +87,8 @@ def process_df(df):
         df['DATE_FMT'] = pd.to_datetime(
             df['DATE'].astype(str), format='%Y%m%d'
         ).dt.strftime('%d/%m')
-    except Exception:
+    except (ValueError, TypeError):
         df['DATE_FMT'] = df['DATE']
-
-    # Add tone indicator
-    df['TONE'] = df['IMPACT_SCORE'].apply(
-        lambda x: "🔴" if x and x < -4 else (
-            "🟡" if x and x < -1 else (
-                "🟢" if x and x > 2 else "⚪"
-            )
-        )
-    )
 
     # Add intensity label
     df['INTENSITY'] = df['IMPACT_SCORE'].apply(get_intensity_label)

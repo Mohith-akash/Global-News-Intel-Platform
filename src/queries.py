@@ -26,7 +26,7 @@ def _dashboard_bundle(t):
     dates = get_dates()
     three_days = (datetime.datetime.now() - datetime.timedelta(days=3)).strftime('%Y%m%d')
 
-    return safe_query_batch({
+    bundle = safe_query_batch({
         # A real COUNT(*), not duckdb_tables().estimated_size. The estimate was
         # meant to dodge a slow full scan, but it is a lazily-refreshed catalog
         # statistic: it sat frozen for a day at a time (so the headline number
@@ -46,10 +46,13 @@ def _dashboard_bundle(t):
             WHERE DATE >= '{dates['week_ago']}' AND ACTOR_COUNTRY_CODE IS NOT NULL
             GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1
         """, None),
+        # one line per actor, most-covered first: thousands of events tie at -10
         'alerts': (f"""
-            SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE FROM {t}
+            SELECT MAIN_ACTOR, ACTOR_COUNTRY_CODE, MIN(IMPACT_SCORE) AS IMPACT_SCORE,
+                   SUM(ARTICLE_COUNT) AS ARTICLES
+            FROM {t}
             WHERE DATE >= '{three_days}' AND IMPACT_SCORE < -4 AND MAIN_ACTOR IS NOT NULL
-            ORDER BY IMPACT_SCORE, MAIN_ACTOR LIMIT 15
+            GROUP BY 1, 2 ORDER BY IMPACT_SCORE, ARTICLES DESC, 1 LIMIT 15
         """, None),
         'trending': (f"""
             SELECT DATE, NEWS_LINK, HEADLINE, HEADLINE_AI, MAIN_ACTOR, ACTOR_COUNTRY_CODE, IMPACT_SCORE, ARTICLE_COUNT
@@ -107,6 +110,8 @@ def _dashboard_bundle(t):
             FROM {t} WHERE DATE >= '{dates['week_ago']}' AND IMPACT_SCORE IS NOT NULL GROUP BY 1
         """, None),
     })
+    bundle['fetched_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()  # "Data as of"
+    return bundle
 
 
 def get_metrics(t):
@@ -120,6 +125,7 @@ def get_metrics(t):
         'recent': int(weekly.iloc[0]['recent'] or 0) if not weekly.empty else 0,
         'critical': int(weekly.iloc[0]['critical'] or 0) if not weekly.empty else 0,
         'hotspot': hs.iloc[0]['ACTOR_COUNTRY_CODE'] if not hs.empty else None,
+        'fetched_at': b['fetched_at'],
     }
 
 
