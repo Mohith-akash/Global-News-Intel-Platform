@@ -128,7 +128,7 @@ def _vec(seed):
 def warehouse(tmp_path_factory):
     db = tmp_path_factory.mktemp("wh") / "gdelt.duckdb"
     c = duckdb.connect(str(db))
-    c.execute(f"""CREATE TABLE events_dagster (EVENT_ID VARCHAR, DATE VARCHAR, MAIN_ACTOR VARCHAR,
+    c.execute("""CREATE TABLE events_dagster (EVENT_ID VARCHAR, DATE VARCHAR, MAIN_ACTOR VARCHAR,
         ACTOR_COUNTRY_CODE VARCHAR, EVENT_CATEGORY_CODE VARCHAR, IMPACT_SCORE DOUBLE, ARTICLE_COUNT BIGINT,
         SENTIMENT_SCORE DOUBLE, NEWS_LINK VARCHAR, HEADLINE VARCHAR, HEADLINE_AI VARCHAR, EMBEDDING DOUBLE[])""")
     for i, (d, link, h, hai, actor, cc, imp, n) in enumerate(FEED_ROWS * 3):
