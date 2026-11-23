@@ -18,7 +18,7 @@ WITH daily_emotions AS (
         AVG(anger) as avg_anger,
         AVG(sadness) as avg_sadness,
         AVG(joy) as avg_joy,
-        AVG(trust) as avg_trust,
+        AVG(confidence) as avg_confidence,
         AVG(anticipation) as avg_anticipation,
         -- Additional emotions
         AVG(anxiety) as avg_anxiety,
@@ -40,7 +40,7 @@ SELECT
     ROUND(avg_anger, 2) as avg_anger,
     ROUND(avg_sadness, 2) as avg_sadness,
     ROUND(avg_joy, 2) as avg_joy,
-    ROUND(avg_trust, 2) as avg_trust,
+    ROUND(avg_confidence, 2) as avg_confidence,
     ROUND(avg_anticipation, 2) as avg_anticipation,
     ROUND(avg_anxiety, 2) as avg_anxiety,
     ROUND(avg_hostility, 2) as avg_hostility,

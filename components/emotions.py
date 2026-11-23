@@ -1,6 +1,7 @@
 """
 Emotions tab: mood, emotion mix and trending themes from GDELT's GKG feed
-(the gkg_emotions table), over the last 24 hours.
+(the gkg_emotions table), over the last 24 hours. Emotion values are words
+per 1,000 from the WordNet Affect dictionary in GCAM.
 """
 
 import datetime
@@ -11,7 +12,7 @@ import streamlit as st
 from components.ui import card_header, metric_row, show_chart
 from src.database import WarehouseUnavailable, retry_cache_race, safe_query_batch
 
-EMOTIONS = ['fear', 'anger', 'sadness', 'joy', 'trust', 'anxiety', 'anticipation']
+EMOTIONS = ['fear', 'anger', 'sadness', 'joy', 'confidence', 'anxiety', 'anticipation']
 EMOTION_COLORS = ['#ef4444', '#f97316', '#3b82f6', '#22c55e', '#06b6d4', '#eab308', '#8b5cf6']
 MOOD_BANDS = [(-3, "Very negative", "#ef4444"), (-1, "Negative", "#f97316"), (1, "Neutral", "#eab308"),
               (3, "Positive", "#84cc16"), (float('inf'), "Very positive", "#22c55e")]
@@ -83,8 +84,8 @@ def render_emotion_stats(row):
         ("Articles", f"{int(row['articles']):,}", "GKG articles, last 24 h"),
         ("Positive", f"{_num(row, 'positive'):.1f}%", "Share of positive words"),
         ("Negative", f"{_num(row, 'negative'):.1f}%", "Share of negative words"),
-        ("Fear", f"{_num(row, 'fear'):.1f}", "Average fear score"),
-        ("Joy", f"{_num(row, 'joy'):.1f}", "Average joy score"),
+        ("Fear", f"{_num(row, 'fear'):.2f}", "Fear words per 1,000"),
+        ("Joy", f"{_num(row, 'joy'):.2f}", "Joy words per 1,000"),
     ])
 
 
@@ -153,19 +154,19 @@ def render_emotion_breakdown(row):
     fig = go.Figure([
         go.Scatterpolar(r=values + values[:1], theta=names + names[:1], fill='toself',
                         fillcolor='rgba(0, 212, 255, 0.15)', line=dict(color='#00d4ff', width=2),
-                        hovertemplate='%{theta}: %{r:.1f}<extra></extra>'),
+                        hovertemplate='%{theta}: %{r:.2f} per 1,000 words<extra></extra>'),
         go.Scatterpolar(r=values, theta=names, mode='markers',
                         marker=dict(size=10, color=EMOTION_COLORS, line=dict(color='#0a192f', width=2)),
-                        hovertemplate='%{theta}: %{r:.1f}<extra></extra>'),
+                        hovertemplate='%{theta}: %{r:.2f} per 1,000 words<extra></extra>'),
     ])
     axis = dict(gridcolor='#1e3a5f', linecolor='#1e3a5f')
     show_chart(fig, 'emotion_radar', 300, showlegend=False, margin=dict(l=50, r=50, t=20, b=20),
                polar=dict(bgcolor='rgba(0,0,0,0)',
-                          radialaxis=dict(visible=True, range=[0, max(values) * 1.3 or 20],
+                          radialaxis=dict(visible=True, range=[0, max(values) * 1.3 or 1],
                                           tickfont=dict(color='#64748b', size=9), **axis),
                           angularaxis=dict(tickfont=dict(color='#e2e8f0', size=11), **axis)))
     top = max(range(len(values)), key=values.__getitem__)
-    st.markdown(f'<div class="dominant">Dominant: <b>{names[top]}</b> ({values[top]:.1f})</div>',
+    st.markdown(f'<div class="dominant">Dominant: <b>{names[top]}</b> ({values[top]:.2f} per 1,000 words)</div>',
                 unsafe_allow_html=True)
 
 

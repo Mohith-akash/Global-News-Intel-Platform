@@ -53,27 +53,27 @@ sources:
           - name: NEGATIVE_SCORE
             description: "Negative sentiment score"
           - name: EMOTION_FEAR
-            description: "Fear emotion score"
+            description: "Fear words per 1,000 (WordNet Affect)"
           - name: EMOTION_ANGER
-            description: "Anger emotion score"
+            description: "Anger words per 1,000 (WordNet Affect)"
           - name: EMOTION_SADNESS
-            description: "Sadness emotion score"
+            description: "Sadness words per 1,000 (WordNet Affect)"
           - name: EMOTION_JOY
-            description: "Joy emotion score"
+            description: "Joy words per 1,000 (WordNet Affect)"
           - name: EMOTION_DISGUST
-            description: "Disgust emotion score"
+            description: "Disgust words per 1,000 (WordNet Affect)"
           - name: EMOTION_SURPRISE
-            description: "Surprise emotion score"
-          - name: EMOTION_TRUST
-            description: "Trust emotion score"
+            description: "Surprise words per 1,000 (WordNet Affect)"
+          - name: EMOTION_CONFIDENCE
+            description: "Confidence words per 1,000 (WordNet Affect)"
           - name: EMOTION_ANTICIPATION
-            description: "Anticipation emotion score"
+            description: "Anticipation words per 1,000 (WordNet Affect)"
           - name: EMOTION_ANXIETY
-            description: "Anxiety emotion score"
+            description: "Anxiety words per 1,000 (WordNet Affect)"
           - name: EMOTION_HOSTILITY
-            description: "Hostility emotion score"
+            description: "Hostility words per 1,000 (WordNet Affect)"
           - name: EMOTION_DEPRESSION
-            description: "Depression emotion score"
+            description: "Depression words per 1,000 (WordNet Affect)"
 
 models:
   - name: stg_events
@@ -118,7 +118,7 @@ models:
           - accepted_values:
               values: ["negative", "neutral", "positive"]
       - name: dominant_emotion
-        description: "Strongest Plutchik emotion for the article"
+        description: "Strongest of eight WordNet Affect emotions, NULL if none"
         tests:
           - accepted_values:
-              values: ["fear", "anger", "sadness", "joy", "disgust", "surprise", "trust", "anticipation"]
+              values: ["fear", "anger", "sadness", "joy", "disgust", "surprise", "confidence", "anticipation"]

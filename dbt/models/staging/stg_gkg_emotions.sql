@@ -23,7 +23,7 @@ SELECT
     EMOTION_JOY as joy,
     EMOTION_DISGUST as disgust,
     EMOTION_SURPRISE as surprise,
-    EMOTION_TRUST as trust,
+    EMOTION_CONFIDENCE as confidence,
     EMOTION_ANTICIPATION as anticipation,
     EMOTION_ANXIETY as anxiety,
     EMOTION_HOSTILITY as hostility,
@@ -36,18 +36,20 @@ SELECT
         ELSE 'neutral'
     END AS sentiment_category,
 
-    -- Derived: dominant basic emotion (Plutchik 8) per article
+    -- Derived: strongest of eight WordNet Affect emotions per article, NULL when
+    -- the article has none of their words (checked first, or it would read as fear)
     CASE GREATEST(
             EMOTION_FEAR, EMOTION_ANGER, EMOTION_SADNESS, EMOTION_JOY,
-            EMOTION_DISGUST, EMOTION_SURPRISE, EMOTION_TRUST, EMOTION_ANTICIPATION
+            EMOTION_DISGUST, EMOTION_SURPRISE, EMOTION_CONFIDENCE, EMOTION_ANTICIPATION
         )
+        WHEN 0 THEN NULL
         WHEN EMOTION_FEAR         THEN 'fear'
         WHEN EMOTION_ANGER        THEN 'anger'
         WHEN EMOTION_SADNESS      THEN 'sadness'
         WHEN EMOTION_JOY          THEN 'joy'
         WHEN EMOTION_DISGUST      THEN 'disgust'
         WHEN EMOTION_SURPRISE     THEN 'surprise'
-        WHEN EMOTION_TRUST        THEN 'trust'
+        WHEN EMOTION_CONFIDENCE   THEN 'confidence'
         WHEN EMOTION_ANTICIPATION THEN 'anticipation'
         ELSE NULL
     END AS dominant_emotion
