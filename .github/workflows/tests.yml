@@ -5,6 +5,9 @@ on:
     branches: [master]
     paths:
       - "src/**"
+      - "components/**"
+      - "etl/**"
+      - "md_worker.py"
       - "tests/**"
       - ".github/workflows/tests.yml"
   pull_request:

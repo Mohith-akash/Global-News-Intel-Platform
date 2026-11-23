@@ -42,13 +42,13 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  STORAGE & AI                                                            │
 │  MotherDuck (DWH) ← Voyage AI (embeddings) → Cerebras LLM (RAG/SQL)      │
-│  └── gkg_emotions: fear, joy, tone, topics                               │
+│  └── gkg_emotions: tone, WordNet Affect emotions, topics                 │
 └─────────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  PRESENTATION                                                            │
-│  Streamlit: Home | Feed | Emotions | AI Chat | About                     │
+│  Streamlit: Overview | Feed | Emotions | Ask AI | About                  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -56,9 +56,9 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 
 1. **Extract:** GDELT Events API + GKG feed, parsed with Polars
 2. **Validate:** Great Expectations suite (required columns, null keys, value ranges, batch size) before anything is written
-3. **Load:** deduplicated inserts into MotherDuck (serverless DuckDB)
+3. **Load:** inserts into MotherDuck (serverless DuckDB) that skip rows already stored; the check runs inside the warehouse, and a failed load fails the run
 4. **Transform:** dbt builds staging views (deduplicated events, cleaned GKG) and five mart tables, then runs 30+ tests and a source freshness check, weekly in GitHub Actions
-5. **Emotions:** GKG tone/fear/joy/topics extracted on a rolling 24h window
+5. **Emotions:** GKG tone, topics and 11 emotions from GCAM's WordNet Affect dictionary (words per 1,000), shown for a rolling 24h window
 6. **Embed:** Voyage AI generates 1024-dim vectors every 12 hours
 7. **Serve:** Streamlit dashboard with dual-mode AI chat (SQL + RAG)
 
@@ -68,13 +68,15 @@ The pipeline started on a Snowflake trial. When the trial ended, the warehouse m
 
 Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (fast inference, pay-as-you-go credits; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens. The SQL chat also started with the LLM writing the query (LlamaIndex `NLSQLTableQueryEngine`). It got GDELT's conventions wrong (dates as `YYYY-MM-DD` instead of `YYYYMMDD`, the wrong year, 2-letter instead of 3-letter country codes), so questions are now routed to tested query templates and the LLM only writes the answer from the results.
 
+The emotions tab had its own correction: the first GCAM mapping read Roget's Thesaurus categories (c9.*) and GKG theme counts (c18.*) as emotions, so "fear" dominated every day. Checked against GDELT's GCAM codebook, it now reads the WordNet Affect dictionary (c15.*) and divides by each article's word count.
+
 ## Features
 
 | Feature | Description |
 |---------|-------------|
-| Live dashboard (updated hourly) | Live metrics, trending news, sentiment, geographic distribution |
-| Emotion analytics | GKG-powered tracking: fear, joy, positive/negative, global mood index |
-| AI chat | Two modes: RAG (keyword pre-filter plus vector search) and a SQL mode that routes questions to tested query templates; Cerebras writes the answer |
+| Dashboard (updated hourly) | Metrics, trending news, sentiment, geographic distribution |
+| Emotion analytics | GKG tone, WordNet Affect emotions per 1,000 words, trending topics, mood index |
+| AI chat | Two modes: RAG (keyword and vector search in one query batch) and a SQL mode that routes questions to tested query templates; Cerebras writes the answer, cached for an hour |
 | LLM headline repair | Cerebras batch job fixes slug-derived headlines (casing, keyword stuffing) with hallucination guards |
 | Hourly updates | GitHub Actions cron → Dagster job |
 | Data quality gates | Great Expectations suite on every ingestion run, before load |
@@ -160,13 +162,14 @@ gdelt_project/
 ├── app.py                    # Streamlit dashboard entry point
 ├── src/
 │   ├── config.py             # Configuration constants
-│   ├── database.py           # Database connection
-│   ├── queries.py            # SQL query functions
+│   ├── database.py           # Query worker calls, circuit breaker
+│   ├── queries.py            # Dashboard queries (one cached batch)
+│   ├── sql_templates.py      # SQL chat templates (bound parameters)
 │   ├── ai_engine.py          # Cerebras client (direct API, capped output)
 │   ├── rag_engine.py         # RAG engine (Voyage AI + vector search)
 │   ├── data_processing.py    # Headline extraction
-│   ├── utils.py              # Utility functions
-│   └── styles.py             # CSS styling
+│   ├── utils.py              # Question parsing, country names, severity scale
+│   └── styles.py             # Loads assets/style.css
 ├── etl/
 │   ├── pipeline_polars.py    # Polars ingestion + validation (Dagster)
 │   ├── embedding_job.py      # 12-hour embedding generation
@@ -177,7 +180,10 @@ gdelt_project/
 │   └── models/
 │       ├── staging/          # stg_events, stg_gkg_emotions
 │       └── marts/            # fct_daily_events, dim_actors, dim_countries, ...
-├── components/               # Streamlit UI components
+├── components/               # Streamlit tabs; ui.py holds the shared card/metric/chart helpers
+├── md_worker.py              # Subprocess that runs MotherDuck queries
+├── scripts/                  # One-off maintenance (fix_gkg_emotions.py)
+├── tests/                    # pytest: snapshots, chat SQL, worker errors, ingest
 └── .github/workflows/
     ├── gdelt_ingest.yml          # hourly ingestion
     ├── gdelt_embeddings_12hr.yml # 12-hour embedding job
