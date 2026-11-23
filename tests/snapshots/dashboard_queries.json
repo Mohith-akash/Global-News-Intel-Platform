@@ -1,0 +1,429 @@
+{
+ "metrics": {
+  "total": 21,
+  "recent": 16,
+  "critical": 2,
+  "hotspot": "FRA"
+ },
+ "alerts": [
+  {
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0
+  },
+  {
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0
+  },
+  {
+   "MAIN_ACTOR": "UKRAINE",
+   "ACTOR_COUNTRY_CODE": "UKR",
+   "IMPACT_SCORE": -7.0
+  }
+ ],
+ "trending": [
+  {
+   "DATE": "20261116",
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+   "HEADLINE": "Trade figures released for October",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 50
+  },
+  {
+   "DATE": "20261116",
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+   "HEADLINE": "Berlin talks on energy prices continue",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 25
+  },
+  {
+   "DATE": "20261117",
+   "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today",
+   "HEADLINE": "Rail strikes spread across France today",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -2.0,
+   "ARTICLE_COUNT": 12
+  },
+  {
+   "DATE": "20261118",
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+   "HEADLINE": "Trade figures released for October",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 50
+  },
+  {
+   "DATE": "20261118",
+   "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france",
+   "HEADLINE": "Rail strike spreads across France",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -3.0,
+   "ARTICLE_COUNT": 22
+  },
+  {
+   "DATE": "20261119",
+   "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today",
+   "HEADLINE": "Rail strikes spread across France today",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -2.0,
+   "ARTICLE_COUNT": 12
+  },
+  {
+   "DATE": "20261120",
+   "NEWS_LINK": "https://example.org/senate-passes-budget-bill-after-long-debate",
+   "HEADLINE": "senate passes budget bill after long debate",
+   "HEADLINE_AI": "Senate Passes Budget Bill After Long Debate",
+   "MAIN_ACTOR": "CONGRESS",
+   "ACTOR_COUNTRY_CODE": "USA",
+   "IMPACT_SCORE": 2.0,
+   "ARTICLE_COUNT": 30
+  },
+  {
+   "DATE": "20261120",
+   "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france",
+   "HEADLINE": "Rail strike spreads across France",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -3.0,
+   "ARTICLE_COUNT": 22
+  },
+  {
+   "DATE": "20261121",
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+   "HEADLINE": "Berlin talks on energy prices continue",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 25
+  },
+  {
+   "DATE": "20261122",
+   "NEWS_LINK": "https://example.org/senate-passes-budget-bill-after-long-debate",
+   "HEADLINE": "senate passes budget bill after long debate",
+   "HEADLINE_AI": "Senate Passes Budget Bill After Long Debate",
+   "MAIN_ACTOR": "CONGRESS",
+   "ACTOR_COUNTRY_CODE": "USA",
+   "IMPACT_SCORE": 2.0,
+   "ARTICLE_COUNT": 30
+  },
+  {
+   "DATE": "20261123",
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+   "HEADLINE": "Trade figures released for October",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 50
+  },
+  {
+   "DATE": "20261123",
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+   "HEADLINE": "Berlin talks on energy prices continue",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 25
+  }
+ ],
+ "feed": [
+  {
+   "DATE": "20261116",
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+   "HEADLINE": "Trade figures released for October",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 50
+  },
+  {
+   "DATE": "20261116",
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+   "HEADLINE": "Berlin talks on energy prices continue",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 25
+  },
+  {
+   "DATE": "20261117",
+   "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today",
+   "HEADLINE": "Rail strikes spread across France today",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -2.0,
+   "ARTICLE_COUNT": 12
+  },
+  {
+   "DATE": "20261118",
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+   "HEADLINE": "Trade figures released for October",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 50
+  },
+  {
+   "DATE": "20261118",
+   "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france",
+   "HEADLINE": "Rail strike spreads across France",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -3.0,
+   "ARTICLE_COUNT": 22
+  },
+  {
+   "DATE": "20261119",
+   "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today",
+   "HEADLINE": "Rail strikes spread across France today",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -2.0,
+   "ARTICLE_COUNT": 12
+  },
+  {
+   "DATE": "20261120",
+   "NEWS_LINK": "https://example.org/senate-passes-budget-bill-after-long-debate",
+   "HEADLINE": "senate passes budget bill after long debate",
+   "HEADLINE_AI": "Senate Passes Budget Bill After Long Debate",
+   "MAIN_ACTOR": "CONGRESS",
+   "ACTOR_COUNTRY_CODE": "USA",
+   "IMPACT_SCORE": 2.0,
+   "ARTICLE_COUNT": 30
+  },
+  {
+   "DATE": "20261120",
+   "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france",
+   "HEADLINE": "Rail strike spreads across France",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "IMPACT_SCORE": -3.0,
+   "ARTICLE_COUNT": 22
+  },
+  {
+   "DATE": "20261121",
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+   "HEADLINE": "Berlin talks on energy prices continue",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 25
+  },
+  {
+   "DATE": "20261122",
+   "NEWS_LINK": "https://example.org/senate-passes-budget-bill-after-long-debate",
+   "HEADLINE": "senate passes budget bill after long debate",
+   "HEADLINE_AI": "Senate Passes Budget Bill After Long Debate",
+   "MAIN_ACTOR": "CONGRESS",
+   "ACTOR_COUNTRY_CODE": "USA",
+   "IMPACT_SCORE": 2.0,
+   "ARTICLE_COUNT": 30
+  },
+  {
+   "DATE": "20261123",
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+   "HEADLINE": "Trade figures released for October",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 50
+  },
+  {
+   "DATE": "20261123",
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+   "HEADLINE": "Berlin talks on energy prices continue",
+   "HEADLINE_AI": null,
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 25
+  }
+ ],
+ "countries": [
+  {
+   "country": "CHN",
+   "events": 3
+  },
+  {
+   "country": "DEU",
+   "events": 3
+  },
+  {
+   "country": "FRA",
+   "events": 6
+  },
+  {
+   "country": "UKR",
+   "events": 3
+  },
+  {
+   "country": "USA",
+   "events": 3
+  }
+ ],
+ "timeseries": [
+  {
+   "DATE": "20261112",
+   "events": 1,
+   "negative": 0.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261113",
+   "events": 1,
+   "negative": 1.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261114",
+   "events": 1,
+   "negative": 1.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261115",
+   "events": 2,
+   "negative": 0.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261116",
+   "events": 2,
+   "negative": 1.0,
+   "positive": 1.0
+  },
+  {
+   "DATE": "20261117",
+   "events": 2,
+   "negative": 0.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261118",
+   "events": 2,
+   "negative": 1.0,
+   "positive": 1.0
+  },
+  {
+   "DATE": "20261119",
+   "events": 2,
+   "negative": 1.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261120",
+   "events": 2,
+   "negative": 1.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261121",
+   "events": 2,
+   "negative": 2.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261122",
+   "events": 2,
+   "negative": 0.0,
+   "positive": 0.0
+  },
+  {
+   "DATE": "20261123",
+   "events": 2,
+   "negative": 1.0,
+   "positive": 1.0
+  }
+ ],
+ "sentiment": [
+  {
+   "avg": -1.53125,
+   "neg": 5.0,
+   "pos": 3.0,
+   "total": 16
+  }
+ ],
+ "actors": [
+  {
+   "MAIN_ACTOR": "CHINA",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "events": 3,
+   "avg_impact": 3.5
+  },
+  {
+   "MAIN_ACTOR": "CONGRESS",
+   "ACTOR_COUNTRY_CODE": "USA",
+   "events": 2,
+   "avg_impact": 2.0
+  },
+  {
+   "MAIN_ACTOR": "GERMANY",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "events": 3,
+   "avg_impact": -5.0
+  },
+  {
+   "MAIN_ACTOR": "NOBODY",
+   "ACTOR_COUNTRY_CODE": null,
+   "events": 2,
+   "avg_impact": 0.0
+  },
+  {
+   "MAIN_ACTOR": "UKRAINE",
+   "ACTOR_COUNTRY_CODE": "UKR",
+   "events": 2,
+   "avg_impact": -7.0
+  },
+  {
+   "MAIN_ACTOR": "UNION",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "events": 4,
+   "avg_impact": -2.5
+  }
+ ],
+ "distribution": [
+  {
+   "cat": "Crisis",
+   "cnt": 2
+  },
+  {
+   "cat": "Negative",
+   "cnt": 5
+  },
+  {
+   "cat": "Neutral",
+   "cnt": 4
+  },
+  {
+   "cat": "Positive",
+   "cnt": 5
+  }
+ ]
+}

@@ -1,0 +1,47 @@
+[
+ {
+  "DATE": "20261120",
+  "HEADLINE": "Rail strike spreads across France",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "MAIN_ACTOR": "UNION",
+  "IMPACT_SCORE": -3.0,
+  "ARTICLE_COUNT": 22,
+  "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france"
+ },
+ {
+  "DATE": "20261113",
+  "HEADLINE": "Rail strike spreads across France",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "MAIN_ACTOR": "UNION",
+  "IMPACT_SCORE": -3.0,
+  "ARTICLE_COUNT": 22,
+  "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france"
+ },
+ {
+  "DATE": "20261118",
+  "HEADLINE": "Rail strike spreads across France",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "MAIN_ACTOR": "UNION",
+  "IMPACT_SCORE": -3.0,
+  "ARTICLE_COUNT": 22,
+  "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france"
+ },
+ {
+  "DATE": "20261119",
+  "HEADLINE": "Rail strikes spread across France today",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "MAIN_ACTOR": "UNION",
+  "IMPACT_SCORE": -2.0,
+  "ARTICLE_COUNT": 12,
+  "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today"
+ },
+ {
+  "DATE": "20261112",
+  "HEADLINE": "Rail strikes spread across France today",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "MAIN_ACTOR": "UNION",
+  "IMPACT_SCORE": -2.0,
+  "ARTICLE_COUNT": 12,
+  "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today"
+ }
+]

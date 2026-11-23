@@ -1,0 +1,72 @@
+[
+ {
+  "DATE": "20261122",
+  "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue",
+  "HEADLINE": "Berlin Talks on Energy Prices Continue",
+  "HEADLINE_AI": null,
+  "MAIN_ACTOR": "GERMANY",
+  "ACTOR_COUNTRY_CODE": "DEU",
+  "IMPACT_SCORE": -5.0,
+  "ARTICLE_COUNT": 25,
+  "REGION": "Germany",
+  "DATE_FMT": "22/11",
+  "TONE": "🔴",
+  "INTENSITY": "🟠 Serious Tension"
+ },
+ {
+  "DATE": "20261121",
+  "NEWS_LINK": "https://example.org/senate-passes-budget-bill-after-long-debate",
+  "HEADLINE": "Senate Passes Budget Bill After Long Debate",
+  "HEADLINE_AI": "Senate Passes Budget Bill After Long Debate",
+  "MAIN_ACTOR": "CONGRESS",
+  "ACTOR_COUNTRY_CODE": "USA",
+  "IMPACT_SCORE": 2.0,
+  "ARTICLE_COUNT": 30,
+  "REGION": "United States",
+  "DATE_FMT": "21/11",
+  "TONE": "⚪",
+  "INTENSITY": "🟢 Diplomatic Talk"
+ },
+ {
+  "DATE": "20261119",
+  "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france",
+  "HEADLINE": "Rail Strike Spreads Across France",
+  "HEADLINE_AI": null,
+  "MAIN_ACTOR": "UNION",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "IMPACT_SCORE": -3.0,
+  "ARTICLE_COUNT": 22,
+  "REGION": "France",
+  "DATE_FMT": "19/11",
+  "TONE": "🟡",
+  "INTENSITY": "🟡 Verbal Dispute"
+ },
+ {
+  "DATE": "20261118",
+  "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today",
+  "HEADLINE": "Rail Strikes Spread Across France Today",
+  "HEADLINE_AI": null,
+  "MAIN_ACTOR": "UNION",
+  "ACTOR_COUNTRY_CODE": "FRA",
+  "IMPACT_SCORE": -2.0,
+  "ARTICLE_COUNT": 12,
+  "REGION": "France",
+  "DATE_FMT": "18/11",
+  "TONE": "🟡",
+  "INTENSITY": "🟡 Verbal Dispute"
+ },
+ {
+  "DATE": "20261117",
+  "NEWS_LINK": "https://cn.example/trade-figures-released-for-october",
+  "HEADLINE": "Trade Figures Released for October",
+  "HEADLINE_AI": null,
+  "MAIN_ACTOR": "CHINA",
+  "ACTOR_COUNTRY_CODE": "CHN",
+  "IMPACT_SCORE": 3.5,
+  "ARTICLE_COUNT": 50,
+  "REGION": "China",
+  "DATE_FMT": "17/11",
+  "TONE": "🟢",
+  "INTENSITY": "🟢 Diplomatic Talk"
+ }
+]

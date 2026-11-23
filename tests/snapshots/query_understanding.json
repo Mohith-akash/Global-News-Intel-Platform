@@ -1,0 +1,714 @@
+{
+ "What happened in Germany today?": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "today",
+   "specific_date": null,
+   "time_period": "day"
+  },
+  "bounds": [
+   "20261123",
+   "20261123"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = ? AND ARTICLE_COUNT > 3 AND DATE = ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250",
+  "params": [
+   "DEU",
+   "20261123"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = 'DEU' AND ARTICLE_COUNT > 3 AND DATE = '20261123' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250"
+ },
+ "crisis in Ukraine and Russia": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE IN (?, ?) AND ARTICLE_COUNT >= 3 AND IMPACT_SCORE < -3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT 250",
+  "params": [
+   "UKR",
+   "RUS",
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE IN ('UKR', 'RUS') AND ARTICLE_COUNT >= 3 AND IMPACT_SCORE < -3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT 250"
+ },
+ "which countries have a crisis this week": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "is_week_range": true,
+   "period_label": "this week (Nov 23 - Nov 29)",
+   "specific_date": null,
+   "time_period": "this_week",
+   "week_end": "20261129",
+   "week_start": "20261123"
+  },
+  "bounds": [
+   "20261123",
+   "20261129"
+  ],
+  "sql": "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= ? AND DATE <= ? GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT 5",
+  "params": [
+   "20261123",
+   "20261129"
+  ],
+  "limit": 5,
+  "country_agg": true,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '20261123' AND DATE <= '20261129' GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT 5"
+ },
+ "top 7 countries by events": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "all available data",
+   "specific_date": null,
+   "time_period": "all"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= ? GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT 7",
+  "params": [
+   "20260825"
+  ],
+  "limit": 7,
+  "country_agg": true,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '20260825' GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT 7"
+ },
+ "how many events this month": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "the past month",
+   "specific_date": null,
+   "time_period": "month"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= ? LIMIT 5",
+  "params": [
+   "20260825"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": true,
+  "country_name": null,
+  "display": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '20260825' LIMIT 5"
+ },
+ "major events this month": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past month",
+   "specific_date": null,
+   "time_period": "month"
+  },
+  "bounds": [
+   "20261024",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261024"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND DATE >= '20261024' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "news from France and Germany": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE IN (?, ?) AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250",
+  "params": [
+   "FRA",
+   "DEU",
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE IN ('FRA', 'DEU') AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250"
+ },
+ "severe events": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 3 AND IMPACT_SCORE < -3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT 250",
+  "params": [
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT >= 3 AND IMPACT_SCORE < -3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC, IMPACT_SCORE ASC LIMIT 250"
+ },
+ "total events in Germany": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "all available data",
+   "specific_date": null,
+   "time_period": "all"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = ? AND DATE >= ? LIMIT 5",
+  "params": [
+   "DEU",
+   "20260825"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": true,
+  "country_name": "Germany",
+  "display": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = 'DEU' AND DATE >= '20260825' LIMIT 5"
+ },
+ "latest news": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "events last week": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "is_week_range": true,
+   "period_label": "last week (Nov 16 - Nov 22)",
+   "specific_date": null,
+   "time_period": "last_week",
+   "week_end": "20261122",
+   "week_start": "20261116"
+  },
+  "bounds": [
+   "20261116",
+   "20261122"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? AND DATE <= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261116",
+   "20261122"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20261116' AND DATE <= '20261122' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "what happened this week in India": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "is_week_range": true,
+   "period_label": "this week (Nov 23 - Nov 29)",
+   "specific_date": null,
+   "time_period": "this_week",
+   "week_end": "20261129",
+   "week_start": "20261123"
+  },
+  "bounds": [
+   "20261123",
+   "20261129"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = ? AND ARTICLE_COUNT > 3 AND DATE >= ? AND DATE <= ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250",
+  "params": [
+   "IND",
+   "20261123",
+   "20261129"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = 'IND' AND ARTICLE_COUNT > 3 AND DATE >= '20261123' AND DATE <= '20261129' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250"
+ },
+ "events on oct 30": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": true,
+   "period_label": "October 30, 2026",
+   "specific_date": "20261030",
+   "time_period": "specific"
+  },
+  "bounds": [
+   "20261030",
+   "20261030"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE = ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261030"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE = '20261030' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "news 15 november": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": true,
+   "period_label": "November 15, 2026",
+   "specific_date": "20261115",
+   "time_period": "specific"
+  },
+  "bounds": [
+   "20261115",
+   "20261115"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE = ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261115"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE = '20261115' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "events in october": {
+  "qi": {
+   "is_aggregate": false,
+   "is_month_range": true,
+   "is_specific_date": false,
+   "month_end": "20261031",
+   "month_start": "20261001",
+   "period_label": "October 2026",
+   "specific_date": null,
+   "time_period": "month_range"
+  },
+  "bounds": [
+   "20261001",
+   "20261031"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? AND DATE <= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261001",
+   "20261031"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20261001' AND DATE <= '20261031' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "summarize the news": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "all available data",
+   "specific_date": null,
+   "time_period": "all"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= ? LIMIT 5",
+  "params": [
+   "20260825"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": true,
+  "country_name": null,
+  "display": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '20260825' LIMIT 5"
+ },
+ "show me 3 events from Japan": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = ? AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 150",
+  "params": [
+   "JPN",
+   "20261116"
+  ],
+  "limit": 3,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = 'JPN' AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 150"
+ },
+ "how many events this year": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "all available data",
+   "specific_date": null,
+   "time_period": "all"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= ? LIMIT 5",
+  "params": [
+   "20260825"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": true,
+  "country_name": null,
+  "display": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '20260825' LIMIT 5"
+ },
+ "all time total": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "all available data",
+   "specific_date": null,
+   "time_period": "all"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= ? LIMIT 5",
+  "params": [
+   "20260825"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": true,
+  "country_name": null,
+  "display": "SELECT COUNT(*) as TOTAL_EVENTS FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND DATE >= '20260825' LIMIT 5"
+ },
+ "conflicts in the middle east": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250",
+  "params": [
+   "ISR",
+   "SAU",
+   "IRN",
+   "IRQ",
+   "SYR",
+   "JOR",
+   "LBN",
+   "ARE",
+   "KWT",
+   "QAT",
+   "BHR",
+   "OMN",
+   "YEM",
+   "PSE",
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE IN ('ISR', 'SAU', 'IRN', 'IRQ', 'SYR', 'JOR', 'LBN', 'ARE', 'KWT', 'QAT', 'BHR', 'OMN', 'YEM', 'PSE') AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250"
+ },
+ "trending stories in the united states": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "what is happening in south korea": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = ? AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250",
+  "params": [
+   "KOR",
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = 'KOR' AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250"
+ },
+ "march events": {
+  "qi": {
+   "is_aggregate": false,
+   "is_month_range": true,
+   "is_specific_date": false,
+   "month_end": "20260331",
+   "month_start": "20260301",
+   "period_label": "March 2026",
+   "specific_date": null,
+   "time_period": "month_range"
+  },
+  "bounds": [
+   "20260301",
+   "20260331"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? AND DATE <= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20260301",
+   "20260331"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20260301' AND DATE <= '20260331' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "top 20 events": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC LIMIT 500",
+  "params": [
+   "20261116"
+  ],
+  "limit": 10,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC LIMIT 500"
+ },
+ "may 5 news": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": true,
+   "period_label": "May 05, 2026",
+   "specific_date": "20260505",
+   "time_period": "specific"
+  },
+  "bounds": [
+   "20260505",
+   "20260505"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE = ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20260505"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE = '20260505' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "events in december": {
+  "qi": {
+   "is_aggregate": false,
+   "is_month_range": true,
+   "is_specific_date": false,
+   "month_end": "20251231",
+   "month_start": "20251201",
+   "period_label": "December 2025",
+   "specific_date": null,
+   "time_period": "month_range"
+  },
+  "bounds": [
+   "20251201",
+   "20251231"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? AND DATE <= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20251201",
+   "20251231"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20251201' AND DATE <= '20251231' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "biggest stories last week": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "is_week_range": true,
+   "period_label": "last week (Nov 16 - Nov 22)",
+   "specific_date": null,
+   "time_period": "last_week",
+   "week_end": "20261122",
+   "week_start": "20261116"
+  },
+  "bounds": [
+   "20261116",
+   "20261122"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND DATE >= ? AND DATE <= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261116",
+   "20261122"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 20 AND DATE >= '20261116' AND DATE <= '20261122' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ },
+ "crisis countries this month": {
+  "qi": {
+   "is_aggregate": true,
+   "is_specific_date": false,
+   "period_label": "the past month",
+   "specific_date": null,
+   "time_period": "month"
+  },
+  "bounds": [
+   "20260825",
+   null
+  ],
+  "sql": "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= ? GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT 5",
+  "params": [
+   "20260825"
+  ],
+  "limit": 5,
+  "country_agg": true,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT ACTOR_COUNTRY_CODE, COUNT(*) as EVENT_COUNT FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND IMPACT_SCORE < -3 AND DATE >= '20260825' GROUP BY ACTOR_COUNTRY_CODE ORDER BY EVENT_COUNT DESC LIMIT 5"
+ },
+ "news today in Brazil": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "today",
+   "specific_date": null,
+   "time_period": "day"
+  },
+  "bounds": [
+   "20261123",
+   "20261123"
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = ? AND ARTICLE_COUNT > 3 AND DATE = ? ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250",
+  "params": [
+   "BRA",
+   "20261123"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ACTOR_COUNTRY_CODE = 'BRA' AND ARTICLE_COUNT > 3 AND DATE = '20261123' ORDER BY ARTICLE_COUNT DESC, DATE DESC LIMIT 250"
+ },
+ "tell me about the war": {
+  "qi": {
+   "is_aggregate": false,
+   "is_specific_date": false,
+   "period_label": "the past week",
+   "specific_date": null,
+   "time_period": "week"
+  },
+  "bounds": [
+   "20261116",
+   null
+  ],
+  "sql": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= ? ORDER BY ARTICLE_COUNT DESC LIMIT 250",
+  "params": [
+   "20261116"
+  ],
+  "limit": 5,
+  "country_agg": false,
+  "count_agg": false,
+  "country_name": null,
+  "display": "SELECT DATE, ACTOR_COUNTRY_CODE, HEADLINE, MAIN_ACTOR, IMPACT_SCORE, ARTICLE_COUNT, NEWS_LINK FROM events_dagster WHERE MAIN_ACTOR IS NOT NULL AND ACTOR_COUNTRY_CODE IS NOT NULL AND ARTICLE_COUNT > 3 AND DATE >= '20261116' ORDER BY ARTICLE_COUNT DESC LIMIT 250"
+ }
+}

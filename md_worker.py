@@ -42,10 +42,9 @@ def main():
     out_path = sys.argv[1]
     req = json.loads(sys.stdin.read())
 
-    c = duckdb.connect(
-        f'md:gdelt_db?motherduck_token={os.getenv("MOTHERDUCK_TOKEN")}',
-        read_only=True,
-    )
+    # GDELT_DB points the worker at a local duckdb file (tests, local runs)
+    db = os.getenv("GDELT_DB") or f'md:gdelt_db?motherduck_token={os.getenv("MOTHERDUCK_TOKEN")}'
+    c = duckdb.connect(db, read_only=True)
     try:
         if "queries" in req:
             manifest = {}

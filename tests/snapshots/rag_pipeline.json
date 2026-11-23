@@ -1,0 +1,53 @@
+{
+ "answer": "ANSWER",
+ "prompt": [
+  "You are a geopolitical news analyst. Below are 5 recent events from the GDELT global news database that are relevant to the question.\n\n[Nov 19] Rail Strikes Spread Across France Today — France [negative]\n[Nov 22] Senate Passes Budget Bill After Long Debate — United States\n[Nov 23] Trade Figures Released for October — China\n[Nov 23] Berlin Talks on Energy Prices Continue — Germany [crisis]\n[Nov 20] Rail Strike Spreads Across France — France [negative]\n\nQuestion: energy prices and strikes in europe\n\nWrite a concise analytical answer (3-5 sentences) that:\n- Directly answers the question based on the events above\n- Groups related events by country or theme where relevant\n- Uses the dates and severity labels from the data to ground your points\n- Does not simply repeat each headline one by one\n\nAfter the paragraph, list the key events using this EXACT markdown format (one per line, with a blank line before the list):\n\n**Key events:**\n- [Date] Headline — Country [severity if any]\n- [Date] Headline — Country [severity if any]\n\nStart with the analytical paragraph:"
+ ],
+ "headlines": [
+  {
+   "DATE": "20261119",
+   "HEADLINE": "Rail Strikes Spread Across France Today",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "MAIN_ACTOR": "UNION",
+   "IMPACT_SCORE": -2.0,
+   "ARTICLE_COUNT": 36.0,
+   "NEWS_LINK": "https://site.fr/rail-strikes-spread-across-france-today"
+  },
+  {
+   "DATE": "20261122",
+   "HEADLINE": "Senate Passes Budget Bill After Long Debate",
+   "ACTOR_COUNTRY_CODE": "USA",
+   "MAIN_ACTOR": "CONGRESS",
+   "IMPACT_SCORE": 2.0,
+   "ARTICLE_COUNT": 90.0,
+   "NEWS_LINK": "https://example.org/senate-passes-budget-bill-after-long-debate"
+  },
+  {
+   "DATE": "20261123",
+   "HEADLINE": "Trade Figures Released for October",
+   "ACTOR_COUNTRY_CODE": "CHN",
+   "MAIN_ACTOR": "CHINA",
+   "IMPACT_SCORE": 3.5,
+   "ARTICLE_COUNT": 150.0,
+   "NEWS_LINK": "https://cn.example/trade-figures-released-for-october"
+  },
+  {
+   "DATE": "20261123",
+   "HEADLINE": "Berlin Talks on Energy Prices Continue",
+   "ACTOR_COUNTRY_CODE": "DEU",
+   "MAIN_ACTOR": "GERMANY",
+   "IMPACT_SCORE": -5.0,
+   "ARTICLE_COUNT": 75.0,
+   "NEWS_LINK": "https://news.example.com/world/2026/11/22/berlin-talks-on-energy-prices-continue"
+  },
+  {
+   "DATE": "20261120",
+   "HEADLINE": "Rail Strike Spreads Across France",
+   "ACTOR_COUNTRY_CODE": "FRA",
+   "MAIN_ACTOR": "UNION",
+   "IMPACT_SCORE": -3.0,
+   "ARTICLE_COUNT": 66.0,
+   "NEWS_LINK": "https://site.fr/rail-strike-spreads-across-france"
+  }
+ ]
+}
