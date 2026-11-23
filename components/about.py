@@ -127,7 +127,7 @@ def render_about():
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>OpenAI GPT-4 API</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
                 <td style="padding:0.4rem;color:#e2e8f0;"><b>Cerebras</b></td>
-                <td style="padding:0.4rem;color:#64748b;">GPT-OSS 120B free tier, RAG + SQL chat</td>
+                <td style="padding:0.4rem;color:#64748b;">GPT-OSS 120B (pay-as-you-go), RAG + SQL chat</td>
             </tr>
             <tr style="border-bottom:1px solid #1e3a5f22;">
                 <td style="padding:0.4rem;color:#94a3b8;"><b>dbt Cloud</b> <span style="color:#ef4444;font-size:0.7rem;">~$100/mo</span></td>
@@ -146,8 +146,8 @@ def render_about():
                 <div style="color:#64748b;font-size:0.8rem;">Enterprise monthly</div>
             </div>
             <div style="text-align:center;">
-                <div style="color:#10b981;font-size:1.75rem;font-weight:700;">$0</div>
-                <div style="color:#64748b;font-size:0.8rem;">My monthly cost</div>
+                <div style="color:#10b981;font-size:1.75rem;font-weight:700;">~$3</div>
+                <div style="color:#64748b;font-size:0.8rem;">My monthly cost (LLM credits)</div>
             </div>
         </div>
     </div>
@@ -211,7 +211,7 @@ def render_about():
                     <div style="font-size:0.65rem;color:#64748b;">Events</div>
                 </div>
                 <div style="text-align:center;">
-                    <div style="font-size:1.25rem;font-weight:700;color:#10b981;">$0</div>
+                    <div style="font-size:1.25rem;font-weight:700;color:#10b981;">~$3/mo</div>
                     <div style="font-size:0.65rem;color:#64748b;">Cost</div>
                 </div>
                 <div style="text-align:center;">
