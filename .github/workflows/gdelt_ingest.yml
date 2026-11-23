@@ -111,7 +111,7 @@ jobs:
                             await page.wait_for_timeout(30000)  # Wait 30s for app to wake
                             print("Wake request sent!")
                         except Exception as e:
-                            print(f" Could not click wake button: {e}")
+                            print(f"Could not click wake button: {e}")
                     else:
                         # App is awake - wait a bit to establish WebSocket connection
                         print("App is awake! Establishing connection...")
@@ -119,7 +119,7 @@ jobs:
                         print("Keep-alive complete - WebSocket connection established")
                     
                 except Exception as e:
-                    print(f" Error: {e}")
+                    print(f"Error: {e}")
                 finally:
                     await browser.close()
 
