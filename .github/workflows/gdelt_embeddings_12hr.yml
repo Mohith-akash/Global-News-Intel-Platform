@@ -40,9 +40,9 @@ jobs:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
       run: |
-        echo "🧠 Starting Embedding Generation..."
+        echo "Starting Embedding Generation..."
         python -m dagster job execute -f etl/embedding_job.py -j gdelt_embedding_job
-        echo "✅ Embedding Generation Complete."
+        echo "Embedding Generation Complete."
 
     # 5. Run Headline Polish Job (runs even if embeddings failed)
     - name: Polish Headlines (Cerebras)
@@ -51,9 +51,9 @@ jobs:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       run: |
-        echo "📰 Starting Headline Polish..."
+        echo "Starting Headline Polish..."
         python -m dagster job execute -f etl/headline_polish_job.py -j gdelt_headline_polish_job
-        echo "✅ Headline Polish Complete."
+        echo "Headline Polish Complete."
 
     - name: Notify on failure
       if: failure()

@@ -14,7 +14,7 @@ Serverless ELT pipeline that ingests, processes, and visualizes about 100,000 gl
 | Unique visitors | 9,000+ since launch (Streamlit Cloud analytics), no promotion |
 | Coverage | 200+ countries, 100+ languages |
 | Typical query latency | < 1 second |
-| Monthly infrastructure cost | $0 |
+| Monthly cost | $0 infrastructure, a few dollars of LLM credits |
 
 GDELT monitors news media from nearly every country in 100+ languages, identifying the people, locations, themes, and emotions driving global society.
 
@@ -64,9 +64,9 @@ GDELT monitors news media from nearly every country in 100+ languages, identifyi
 
 ### Cost engineering
 
-The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (91s down to 6s on 116K rows), bringing the total monthly cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database.
+The pipeline started on a Snowflake trial. When the trial ended, the warehouse moved to MotherDuck and the slowest processing stage was rewritten from Pandas to Polars (91s down to 6s on 116K rows), bringing the infrastructure cost to $0 on free tiers, without giving up SQL compatibility, orchestration, testing, or vector search. MotherDuck's native `array_cosine_similarity()` also removed the need for a separate vector database. The one running cost is LLM credits: the headline job and the AI chat use a few dollars of Cerebras credits a month.
 
-Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (reliable free tier, fast inference; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens. The SQL chat also started with the LLM writing the query (LlamaIndex `NLSQLTableQueryEngine`). It got GDELT's conventions wrong (dates as `YYYY-MM-DD` instead of `YYYYMMDD`, the wrong year, 2-letter instead of 3-letter country codes), so questions are now routed to tested query templates and the LLM only writes the answer from the results.
+Other decisions that changed along the way: the LLM provider went from Gemini to Groq to Cerebras (fast inference, pay-as-you-go credits; currently GPT-OSS 120B after Cerebras archived Llama 3.1). LLM calls first went through LlamaIndex. They now go straight to the API, because the wrapper sent no output limit and a reasoning model bills its hidden reasoning as output tokens. The SQL chat also started with the LLM writing the query (LlamaIndex `NLSQLTableQueryEngine`). It got GDELT's conventions wrong (dates as `YYYY-MM-DD` instead of `YYYYMMDD`, the wrong year, 2-letter instead of 3-letter country codes), so questions are now routed to tested query templates and the LLM only writes the answer from the results.
 
 ## Features
 

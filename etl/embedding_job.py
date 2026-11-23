@@ -154,7 +154,7 @@ def gdelt_embeddings_job(context: AssetExecutionContext) -> Output:
                 context.log.info("No events need embedding")
                 return Output("No events to embed", metadata={"status": "Complete", "embedded": 0})
             
-            logger.info(f"🔢 Computing embeddings for {len(events)} events...")
+            logger.info(f"Computing embeddings for {len(events)} events...")
             
             # Create embedding texts
             embedding_texts = []
@@ -183,14 +183,14 @@ def gdelt_embeddings_job(context: AssetExecutionContext) -> Output:
                 SELECT COUNT(*) FROM {TARGET_TABLE} WHERE EMBEDDING IS NOT NULL
             """).fetchone()[0]
             
-            context.log.info(f"✅ Updated {updated} embeddings. Total embedded: {total_embedded}")
+            context.log.info(f"Updated {updated} embeddings. Total embedded: {total_embedded}")
             return Output(
                 f"Embedded {updated} events",
                 metadata={"embedded_this_run": updated, "total_embedded": total_embedded}
             )
             
     except Exception as e:
-        context.log.error(f"❌ Embedding error: {e}")
+        context.log.error(f"Embedding error: {e}")
         return Output(None, metadata={"status": "Error", "message": str(e)})
 
 

@@ -57,9 +57,9 @@ jobs:
       env:
         MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
       run: |
-        echo "🚀 Starting GDELT Ingestion (Polars + Great Expectations)..."
+        echo "Starting GDELT Ingestion (Polars + Great Expectations)..."
         python -m dagster job execute -f etl/pipeline_polars.py -j gdelt_ingestion_job
-        echo "✅ Data Refresh Complete."
+        echo "Data Refresh Complete."
 
     # 5. Keep Streamlit app awake (Playwright browser automation)
     # Best effort: the data is already loaded by now, so a browser problem
@@ -86,14 +86,14 @@ jobs:
 
         async def keep_alive():
             app_url = os.environ.get("STREAMLIT_APP_URL", "https://global-news-intel-platform.streamlit.app/")
-            print("🔄 Starting Playwright browser...")
+            print("Starting Playwright browser...")
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 page = await browser.new_page()
 
                 try:
                     # Navigate to the app
-                    print(f"📡 Connecting to Streamlit app: {app_url}")
+                    print(f"Connecting to Streamlit app: {app_url}")
                     await page.goto(app_url,
                                     wait_until="domcontentloaded", timeout=60000)
                     
@@ -102,24 +102,24 @@ jobs:
                     content = await page.content()
                     
                     if "Zzzz" in content or "gone to sleep" in content:
-                        print("😴 App is sleeping! Attempting to wake...")
+                        print("App is sleeping! Attempting to wake...")
                         # Try to click the wake button
                         try:
                             wake_btn = page.get_by_text("Yes, get this app back up!")
                             await wake_btn.click(timeout=5000)
-                            print("🔘 Clicked wake button, waiting for app to start...")
+                            print("Clicked wake button, waiting for app to start...")
                             await page.wait_for_timeout(30000)  # Wait 30s for app to wake
-                            print("✅ Wake request sent!")
+                            print("Wake request sent!")
                         except Exception as e:
-                            print(f"⚠️  Could not click wake button: {e}")
+                            print(f" Could not click wake button: {e}")
                     else:
                         # App is awake - wait a bit to establish WebSocket connection
-                        print("✅ App is awake! Establishing connection...")
+                        print("App is awake! Establishing connection...")
                         await page.wait_for_timeout(10000)  # Stay connected for 10s
-                        print("✅ Keep-alive complete - WebSocket connection established")
+                        print("Keep-alive complete - WebSocket connection established")
                     
                 except Exception as e:
-                    print(f"⚠️  Error: {e}")
+                    print(f" Error: {e}")
                 finally:
                     await browser.close()
 

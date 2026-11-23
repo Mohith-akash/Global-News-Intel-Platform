@@ -254,7 +254,7 @@ def select_best_headline_per_event_polars(df: pl.DataFrame) -> pl.DataFrame:
     article_counts = df.group_by("EVENT_ID").len().rename({"len": "OUR_ARTICLE_COUNT"})
 
     # Group by EVENT_ID and keep row with best headline
-    # Use Polars' powerful groupby + agg
+    # Polars groupby + agg
     df = df.with_columns(
         pl.col("HEADLINE").is_not_null().alias("has_headline"),
         pl.col("HEADLINE").str.len_chars().fill_null(0).alias("headline_len")
@@ -297,7 +297,7 @@ def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
     (20 = five hours) so a skipped cron run does not leave a hole.
     Embeddings are computed by a separate job every 12 hours.
     """
-    logger.info("🚀 Starting GDELT extraction (Polars-powered)")
+    logger.info("Starting GDELT extraction")
 
     parts = []
     for url in get_gdelt_urls():
@@ -316,17 +316,17 @@ def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
     try:
         # Process with Polars (10x faster than Pandas)
         df = pl.concat(parts, how="vertical_relaxed")
-        logger.info(f"📊 Loaded {len(df):,} rows from {len(parts)} batches with Polars")
+        logger.info(f"Loaded {len(df):,} rows from {len(parts)} batches with Polars")
         
         # Data Quality Validation
-        logger.info("🔍 Running data quality validation...")
+        logger.info("Running data quality validation...")
         validation_result = validate_gdelt_data(df, batches=len(parts))
         
         if not validation_result["success"]:
-            context.log.warning(f"⚠️ Data quality issues: {validation_result['results']}")
+            context.log.warning(f"Data quality issues: {validation_result['results']}")
             # Log but don't fail - we'll filter bad data
         else:
-            context.log.info(f"✅ Data quality passed: {validation_result['statistics']}")
+            context.log.info(f"Data quality passed: {validation_result['statistics']}")
         
         # Filter out rows with null EVENT_ID
         df = df.filter(pl.col("EVENT_ID").is_not_null())
@@ -337,11 +337,11 @@ def gdelt_raw_data_polars(context: AssetExecutionContext) -> pl.DataFrame:
         # Add EMBEDDING column as null (will be populated by separate job)
         df = df.with_columns(pl.lit(None).cast(pl.List(pl.Float64)).alias("EMBEDDING"))
         
-        logger.info(f"✅ Processed {len(df):,} unique events")
+        logger.info(f"Processed {len(df):,} unique events")
         return df
         
     except Exception as e:
-        logger.error(f"❌ Error processing GDELT data: {e}")
+        logger.error(f"Error processing GDELT data: {e}")
         context.log.error(f"Processing error: {e}")
         return pl.DataFrame()
 
@@ -396,7 +396,7 @@ def gdelt_motherduck_table_polars(context: AssetExecutionContext, gdelt_raw_data
                 total = con.execute(f"SELECT COUNT(*) FROM {TARGET_TABLE}").fetchone()[0]
                 embedded = con.execute(f"SELECT COUNT(*) FROM {TARGET_TABLE} WHERE EMBEDDING IS NOT NULL").fetchone()[0]
                 
-                context.log.info(f"✅ Inserted {len(pdf):,} rows. Total: {total:,}, Embedded: {embedded:,}")
+                context.log.info(f"Inserted {len(pdf):,} rows. Total: {total:,}, Embedded: {embedded:,}")
                 return Output(
                     f"Inserted {len(pdf):,}", 
                     metadata={"rows": len(pdf), "total": total, "embedded": embedded}
@@ -411,7 +411,7 @@ def gdelt_motherduck_table_polars(context: AssetExecutionContext, gdelt_raw_data
                     raise e
                 
     except Exception as e:
-        context.log.error(f"❌ MotherDuck error: {e}")
+        context.log.error(f"MotherDuck error: {e}")
         return Output(None, metadata={"status": "Error", "message": str(e)})
 
 
@@ -570,7 +570,7 @@ def process_gkg_batch_polars(content: bytes) -> pl.DataFrame:
     # rows with no DATE; a real GKG_ID looks like 20261006073000-123
     df = df.filter(pl.col("GKG_ID").str.contains(r"^\d{14}-T?\d+$").fill_null(False))
     
-    logger.info(f"📊 Processed {len(df):,} GKG records")
+    logger.info(f"Processed {len(df):,} GKG records")
     return df
 
 
@@ -580,7 +580,7 @@ def gdelt_gkg_data(context: AssetExecutionContext) -> pl.DataFrame:
     Extract GKG data with emotions and themes.
     Runs alongside event ingestion, hourly, covering the past hour of batches.
     """
-    logger.info("🧠 Starting GDELT GKG extraction (emotions & themes)")
+    logger.info("Starting GDELT GKG extraction (emotions & themes)")
 
     parts = []
     for url in get_gdelt_gkg_urls():
@@ -601,7 +601,7 @@ def gdelt_gkg_data(context: AssetExecutionContext) -> pl.DataFrame:
         return pl.DataFrame()
 
     df = pl.concat(parts, how="vertical_relaxed")
-    logger.info(f"✅ Extracted {len(df):,} GKG records with emotions from {len(parts)} batches")
+    logger.info(f"Extracted {len(df):,} GKG records with emotions from {len(parts)} batches")
     return df
 
 
@@ -644,20 +644,20 @@ def gdelt_gkg_motherduck(context: AssetExecutionContext, gdelt_gkg_data: pl.Data
                 con.execute(f"DELETE FROM {GKG_TABLE} WHERE DATE < {cutoff}")
 
                 total = con.execute(f"SELECT COUNT(*) FROM {GKG_TABLE}").fetchone()[0]
-                context.log.info(f"✅ Inserted {len(pdf):,} GKG rows. Total after retention: {total:,}")
+                context.log.info(f"Inserted {len(pdf):,} GKG rows. Total after retention: {total:,}")
                 return Output(f"Inserted {len(pdf):,}", metadata={"rows": len(pdf), "total": total})
                 
             except Exception as e:
                 if "does not exist" in str(e).lower():
                     con.register('gkg_data', pdf)
                     con.execute(f"CREATE TABLE {GKG_TABLE} AS SELECT * FROM gkg_data")
-                    context.log.info(f"✅ Created {GKG_TABLE} with {len(pdf):,} rows")
+                    context.log.info(f"Created {GKG_TABLE} with {len(pdf):,} rows")
                     return Output(f"Created table with {len(pdf):,} rows", metadata={"rows": len(pdf)})
                 else:
                     raise e
                 
     except Exception as e:
-        context.log.error(f"❌ GKG MotherDuck error: {e}")
+        context.log.error(f"GKG MotherDuck error: {e}")
         return Output(None, metadata={"status": "Error", "message": str(e)})
 
 
