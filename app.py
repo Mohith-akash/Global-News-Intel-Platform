@@ -19,7 +19,7 @@ from components import (render_about, render_actors, render_ai_chat, render_coun
                         render_distribution, render_emotions_tab, render_feed, render_header,
                         render_metrics, render_sentiment, render_ticker, render_timeseries,
                         render_trending)
-from components.ui import card_header  # noqa: E402
+from components.ui import card_header, section  # noqa: E402
 from src.config import REQUIRED_ENVS, get_secret  # noqa: E402
 from src.database import WarehouseUnavailable, detect_table  # noqa: E402
 from src.styles import inject_css  # noqa: E402
@@ -56,6 +56,51 @@ HOW_IT_WORKS = """<div class="card"><h4 class="title-cyan">How it works</h4>
     Answers are cached for an hour.</p></div>"""
 
 
+def overview(tbl):
+    render_metrics(tbl)
+    render_ticker(tbl)
+    st.markdown("---")
+    c1, c2 = st.columns([6, 4])
+    with c1:
+        card_header("Trending news", "this week")
+        render_trending(tbl)
+    with c2:
+        card_header("Weekly sentiment", "7 days")
+        render_sentiment(tbl)
+        card_header("Tone breakdown", "this week")
+        render_distribution(tbl, 'home_dist')
+    st.markdown("---")
+    c1, c2 = st.columns([6, 4])
+    with c1:
+        card_header("Most mentioned", "this week")
+        render_actors(tbl)
+    with c2:
+        card_header("Top countries", "30 days")
+        render_countries(tbl)
+
+
+def feed_tab(tbl):
+    c1, c2 = st.columns([7, 3])
+    with c1:
+        card_header("Recent events", "this week")
+        render_feed(tbl)
+    with c2:
+        card_header("Intensity guide")
+        render_intensity_guide()
+    st.markdown("---")
+    card_header("30-day trend")
+    render_timeseries(tbl)
+
+
+def chat_tab(tbl):
+    c1, c2 = st.columns([7, 3])
+    with c1:
+        card_header("Ask in plain English")
+        render_ai_chat(tbl)
+    with c2:
+        st.markdown(HOW_IT_WORKS, unsafe_allow_html=True)
+
+
 def main():
     inject_css()
     tbl = detect_table()
@@ -63,52 +108,15 @@ def main():
     home, feed, emotions, chat, about = st.tabs(["Overview", "Feed", "Emotions", "Ask AI", "About"])
 
     with home:
-        render_metrics(tbl)
-        render_ticker(tbl)
-        st.markdown("---")
-        c1, c2 = st.columns([6, 4])
-        with c1:
-            card_header("Trending news", "this week")
-            render_trending(tbl)
-        with c2:
-            card_header("Weekly sentiment", "7 days")
-            render_sentiment(tbl)
-            card_header("Tone breakdown", "this week")
-            render_distribution(tbl, 'home_dist')
-        st.markdown("---")
-        c1, c2 = st.columns([6, 4])
-        with c1:
-            card_header("Most mentioned", "this week")
-            render_actors(tbl)
-        with c2:
-            card_header("Top countries", "30 days")
-            render_countries(tbl)
-
+        section(overview, tbl)
     with feed:
-        c1, c2 = st.columns([7, 3])
-        with c1:
-            card_header("Recent events", "this week")
-            render_feed(tbl)
-        with c2:
-            card_header("Intensity guide")
-            render_intensity_guide()
-        st.markdown("---")
-        card_header("30-day trend")
-        render_timeseries(tbl)
-
+        section(feed_tab, tbl)
     with emotions:
-        render_emotions_tab()
-
+        section(render_emotions_tab)
     with chat:
-        c1, c2 = st.columns([7, 3])
-        with c1:
-            card_header("Ask in plain English")
-            render_ai_chat(tbl)
-        with c2:
-            st.markdown(HOW_IT_WORKS, unsafe_allow_html=True)
-
+        section(chat_tab, tbl)
     with about:
-        render_about()
+        section(render_about)
 
     st.markdown('''<div class="footer">
         <p class="footer-main">Data: <b>GDELT</b>, which publishes new events every 15 minutes (about 100K a day). This app ingests them hourly.</p>

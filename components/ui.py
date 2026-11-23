@@ -1,6 +1,10 @@
 """Small building blocks shared by the tabs: card headers, metrics, charts."""
 
+import logging
+
 import streamlit as st
+
+from src.database import WarehouseUnavailable
 
 GRID = 'rgba(30,58,95,0.3)'
 MUTED = '#64748b'
@@ -28,3 +32,14 @@ def metric_row(cards):
 def show_chart(fig, key, height, **layout):
     fig.update_layout(height=height, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", **layout)
     st.plotly_chart(fig, config={'displayModeBar': False}, width='stretch', key=key)
+
+
+def section(render, *args):
+    """Render one tab; if it fails, say so there and let the other tabs load."""
+    try:
+        render(*args)
+    except WarehouseUnavailable:
+        st.warning("The data warehouse is not reachable right now. Try again in a few minutes.")
+    except Exception:
+        logging.getLogger("gdelt").exception("%s failed", getattr(render, "__name__", "section"))
+        st.error("This section couldn't load. The other tabs still work.")

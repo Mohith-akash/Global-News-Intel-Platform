@@ -39,9 +39,12 @@ def _cutoff_24h():
 
 @retry_cache_race
 @st.cache_data(ttl=14400, show_spinner=False)
-def _emotions_bundle(cutoff):
-    """Both emotion queries in one worker call, cached 4h."""
-    averages = ", ".join(f"AVG(EMOTION_{e.upper()}) AS {e}" for e in EMOTIONS)
+def _emotions_bundle(cutoff, emotions):
+    """Both emotion queries in one worker call, cached 4h.
+
+    `emotions` is an argument so the cache key changes when the column list does.
+    """
+    averages = ", ".join(f"AVG(EMOTION_{e.upper()}) AS {e}" for e in emotions)
     return safe_query_batch({
         'summary': (f"""
             SELECT COUNT(*) AS articles, AVG(AVG_TONE) AS tone,
@@ -75,7 +78,7 @@ def humanize_theme(theme):
 
 
 def _num(row, col):
-    v = row[col]
+    v = row.get(col)
     return 0 if v is None or v != v else v
 
 
@@ -172,7 +175,7 @@ def render_emotion_breakdown(row):
 
 def render_emotions_tab():
     try:
-        data = _emotions_bundle(_cutoff_24h())
+        data = _emotions_bundle(_cutoff_24h(), tuple(EMOTIONS))
     except WarehouseUnavailable:
         st.warning("The data warehouse is not reachable right now. Try again in a few minutes.")
         return
